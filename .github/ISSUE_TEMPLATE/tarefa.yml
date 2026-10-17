@@ -1,0 +1,49 @@
+name: Tarefa técnica
+description: docs, refactor, test, chore ou style
+title: "[chore] "
+labels: ["tarefa"]
+body:
+  - type: dropdown
+    id: tipo
+    attributes:
+      label: Tipo
+      options:
+        - docs
+        - refactor
+        - test
+        - chore
+        - style
+    validations:
+      required: true
+  - type: dropdown
+    id: modulo
+    attributes:
+      label: Módulo
+      options:
+        - data-engineering
+        - backend
+        - frontend
+        - ai-agent
+        - docs
+        - repositório / CI
+    validations:
+      required: true
+  - type: textarea
+    id: descricao
+    attributes:
+      label: O que precisa ser feito e por quê?
+    validations:
+      required: true
+  - type: textarea
+    id: criterios
+    attributes:
+      label: Critérios de conclusão
+      value: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: |
+        **Branch sugerida:** `<tipo>/<número-da-issue>-<descricao-curta>` a partir da `dev`.

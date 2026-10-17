@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Dúvidas sobre o fluxo de trabalho
+    url: https://github.com/OWNER/REPO/blob/main/docs/fluxo-git.md
+    about: Leia o fluxo-git antes de abrir uma issue ou branch.

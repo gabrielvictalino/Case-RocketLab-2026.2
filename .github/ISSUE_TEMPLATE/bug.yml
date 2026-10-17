@@ -1,0 +1,65 @@
+name: Bug
+description: Algo não funciona como esperado (branch fix/*)
+title: "[fix] "
+labels: ["fix"]
+body:
+  - type: dropdown
+    id: modulo
+    attributes:
+      label: Módulo
+      options:
+        - data-engineering
+        - backend
+        - frontend
+        - ai-agent
+        - docs
+    validations:
+      required: true
+  - type: textarea
+    id: descricao
+    attributes:
+      label: O que está acontecendo?
+    validations:
+      required: true
+  - type: textarea
+    id: esperado
+    attributes:
+      label: Comportamento esperado
+    validations:
+      required: true
+  - type: textarea
+    id: reproducao
+    attributes:
+      label: Passos para reproduzir
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: evidencias
+    attributes:
+      label: Evidências
+      description: Logs, stack trace, prints, query ou resposta da IA que exemplifica o erro.
+      render: shell
+  - type: input
+    id: ambiente
+    attributes:
+      label: Ambiente
+      placeholder: "Local / Databricks / branch ou commit"
+  - type: dropdown
+    id: severidade
+    attributes:
+      label: Severidade
+      options:
+        - Bloqueia o time (dev quebrada, CI vermelha)
+        - Dado incorreto exibido ou retornado pela IA
+        - Funcionalidade quebrada, com contorno
+        - Cosmético
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: |
+        **Branch sugerida:** `fix/<número-da-issue>-<descricao-curta>` a partir da `dev`.

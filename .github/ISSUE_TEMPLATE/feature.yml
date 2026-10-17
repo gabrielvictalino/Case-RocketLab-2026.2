@@ -1,0 +1,61 @@
+name: Feature
+description: Nova feature ou capacidade (branch feat/*)
+title: "[feat] "
+labels: ["feat"]
+body:
+  - type: dropdown
+    id: modulo
+    attributes:
+      label: Módulo
+      options:
+        - data-engineering
+        - backend
+        - frontend
+        - ai-agent
+        - docs
+    validations:
+      required: true
+  - type: textarea
+    id: user-story
+    attributes:
+      label: User story
+      description: Use o formato dos requisitos do case.
+      placeholder: "Como <perfil>, quero <capacidade>, para <benefício>."
+    validations:
+      required: true
+  - type: textarea
+    id: criterios
+    attributes:
+      label: Critérios de aceite
+      description: Como saberemos que está pronto? Seja verificável.
+      value: |
+        - [ ]
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+  - type: textarea
+    id: contexto
+    attributes:
+      label: Contexto e decisões
+      description: Dados/tabelas envolvidos, suposições, links úteis, impacto em documentação.
+  - type: textarea
+    id: dependencias
+    attributes:
+      label: Dependências
+      description: Issues ou PRs que precisam ser concluídos antes.
+      placeholder: "Depende de #"
+  - type: dropdown
+    id: prioridade
+    attributes:
+      label: Prioridade
+      options:
+        - Obrigatório (requisito do case)
+        - Diferencial
+        - Melhoria extra
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: |
+        **Branch sugerida:** `feat/<número-da-issue>-<descricao-curta>` a partir da `dev`.
