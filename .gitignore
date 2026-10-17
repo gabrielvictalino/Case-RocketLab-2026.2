@@ -1,0 +1,13 @@
+.maestri/
+.venv/
+venv/
+.env*
+!.env.example
+__pycache__/
+dist/
+*.egg-info/
+build/
+*.pyc
+.vscode/
+.idea/
+*.log
