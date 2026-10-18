@@ -16,7 +16,9 @@
 | **Chave / registros** | Duplicatas exatas (mesma linha repetida, incluindo `id_leitura`) | 21.523 | 0,99% | **Alta** |
 | **`id_leitura` / `id_medidor`** | Leituras clonadas `LTX…` com medidor inexistente (`MD9…`) copiando uma leitura legítima | 8.609 | 0,39% | **Alta** |
 | **`leitura_anterior`** | 4 representações de ausência: vazio, `N/A`, `NULL` e sentinela `-1` | 32.735 | 1,50% | **Alta** |
-| **`consumo_kwh`** | Sinal invertido (consumo = −(atual − anterior)) | 1.739 | 0,08% | **Alta** |
+| **`consumo_kwh`** | Consumo negativo sem leitura anterior (causa não verificável na própria linha) | 115 | 0,01% | **Alta** |
+| **`consumo_kwh`** | Sinal invertido (consumo = −(atual − anterior)) | 1.349 | 0,06% | **Alta** |
+| **`consumo_kwh`** | Consumo negativo com módulo diferente de `atual − anterior` em ±1 kWh | 359 | 0,02% | **Média** |
 | **`consumo_kwh`** | Formato numérico inconsistente: valores negativos com sufixo decimal (`-297.0`) | 1.739 | 0,08% | **Média** |
 | **`consumo_kwh`** | Diferença de exatamente 1 kWh em relação a `leitura_atual − leitura_anterior` | 526.697 | 24,1% | **Baixa / Aceitável** |
 | **Tipagem Geral** | Datas e números chegam como texto e só podem ser tipados após o saneamento acima | 2.182.468 | 100,0% | **Alta** |
@@ -115,9 +117,9 @@ A ausência da leitura anterior aparece de **4 formas diferentes**:
    | Outro: sinal invertido com diferença de ±1 kWh | 359 | `LT000000016` : 12670 → 12968, `-297.0` |
    | Sem leitura anterior | 115 | `LT000035655` : `N/A` → 82, `-43086` |
 
-   As 115 linhas "sem leitura anterior" se dividem em **84 trocas de medidor** cuja leitura anterior está ausente (a UC tem medidor retirado no mesmo mês) e **31 sinais invertidos** (mesmo padrão `-N.0` do item 2). Na prática são **6.411 trocas** e **1.739 sinais invertidos**.
+   As 115 linhas "sem leitura anterior" se dividem em **84 trocas de medidor** cuja leitura anterior está ausente (a UC tem medidor retirado no mesmo mês) e **31** com o mesmo padrão `-N.0` do item 2. Como a leitura anterior está ausente, a causa não pode ser confirmada pela própria linha, então essas 115 linhas não entram na correção de sinal (ver plano de saneamento).
 
-2. **Formato numérico inconsistente:** 1.739 valores trazem sufixo decimal (`-297.0`, `-148.0`). São **exatamente os 1.739 sinais invertidos**: nenhum valor positivo nem de troca tem decimal. O padrão indica que esses registros passaram por uma conversão diferente na origem. A parte decimal é sempre `.0`, então a conversão para inteiro não perde informação.
+2. **Formato numérico inconsistente:** 1.739 valores trazem sufixo decimal (`-297.0`, `-148.0`). Correspondem exatamente às 1.349 linhas de sinal invertido, às 359 da categoria "outro" e a 31 das 115 "sem leitura anterior". Nenhum valor positivo nem de troca tem decimal. O padrão indica que esses registros passaram por uma conversão diferente na origem. A parte decimal é sempre `.0`, então a conversão para inteiro não perde informação.
 
 3. **Diferença em relação a `leitura_atual − leitura_anterior`** (linhas com leitura anterior numérica e não negativa):
    * **Exata:** 1.616.562 positivas + 4.766 trocas.
@@ -167,10 +169,12 @@ No mês em que o medidor é trocado, a leitura é registrada no **medidor novo**
 * A fatura do mês da troca **não reflete** o valor negativo: o `valor_energia` desse mês fica entre 0,43× e 1,64× a mediana da própria UC (p1 a p99), sem nenhum caso acima de 3×.
 * Das 6.327 linhas de troca, 78 são duplicatas exatas e 34 são clones `LTX`. Restam **6.215 trocas legítimas**, além das 84 com leitura anterior ausente.
 
-> **Alerta: não usar `abs()` no consumo negativo.** O valor absoluto de uma troca é a leitura acumulada do medidor antigo (mediana de 55.831 kWh, máximo de 2.098.259 kWh), e não o consumo do mês. Nos últimos 12 meses (2025-07 a 2026-06), depois de remover duplicatas e clones, o volume correto é de **216,4 milhões de kWh** (positivos + sinais invertidos corrigidos, sem os meses de troca). Com `abs()` ele passa a **599,3 milhões de kWh**, uma inflação de **≈ +177%** (o volume quase triplica).
+> **Alerta: não usar `abs()` no consumo negativo.** O valor absoluto de uma troca é a leitura acumulada do medidor antigo (mediana de 55.831 kWh, máximo de 2.098.259 kWh), e não o consumo do mês. Nos últimos 12 meses (2025-07 a 2026-06), depois de remover duplicatas e clones, o volume correto é de **216,4 milhões de kWh** (positivos + negativos de leitura crescente com o sinal corrigido, sem os meses de troca). Com `abs()` ele passa a **599,3 milhões de kWh**, uma inflação de **≈ +177%** (o volume quase triplica).
 
 ### 4.2. Sinal Invertido
-1.739 leituras têm `consumo_kwh` com o mesmo valor absoluto de `atual − anterior` (exato ou ±1), mas com sinal negativo. Neste caso as leituras do medidor são crescentes, então só o sinal está errado e o consumo correto é `-consumo_kwh`.
+1.349 leituras têm `consumo_kwh` exatamente igual a `−(atual − anterior)`, com leituras do medidor crescentes. Só o sinal está errado, e o consumo correto é `-consumo_kwh`.
+
+Outras 359 leituras têm o mesmo padrão, mas o módulo difere de `atual − anterior` em ±1 kWh. Como a regra de correção não confirma essas linhas, elas não recebem inversão automática.
 
 ---
 
@@ -188,8 +192,10 @@ Recomenda-se aplicar o seguinte pipeline sobre `venergy.bronze.leituras`, em ord
    * `^\d{2}-\d{2}-\d{4}$` → **obrigatoriamente** `MM-dd-yyyy`
 
    Como validação, o mês da data convertida deve coincidir com `mes_referencia` em 100% das linhas.
-5. **Tipar `consumo_kwh`:** converter `-N.0` para inteiro. Consumo negativo com leitura crescente (`leitura_anterior ≤ leitura_atual`, ou leitura anterior ausente sem troca no mês) → **inverter o sinal**.
-6. **Mês da troca de medidor:** não usar o valor registrado. Marcar com `flag_troca_medidor` (consumo negativo e `leitura_anterior > leitura_atual`, ou UC com `data_retirada` no mês) e **decidir com o time** entre:
+5. **Tipar `consumo_kwh` e corrigir o sinal:** converter `-N.0` para inteiro. **Só a categoria "sinal invertido"** (1.349 linhas: `leitura_anterior` numérica, `leitura_anterior ≤ leitura_atual` e `consumo_kwh = −(atual − anterior)`) recebe **inversão de sinal**.
+   * As **115 leituras "sem leitura anterior"** com consumo negativo **não** têm o sinal invertido. Elas são marcadas com `flag_sem_leitura_anterior` e recebem o mesmo tratamento das trocas de medidor (passo 6).
+   * As **359 da categoria "outro"** (módulo com ±1 kWh de diferença) também não são invertidas automaticamente. Ficam marcadas para decisão do time.
+6. **Mês da troca de medidor:** não usar o valor registrado. Marcar com `flag_troca_medidor` (consumo negativo e `leitura_anterior > leitura_atual`) e, junto com as 115 do passo 5, **decidir com o time** entre:
    * estimar o kWh a partir do `valor_energia` da fatura do mês (que foi cobrada normalmente); ou
    * imputar pela média de consumo da própria UC.
 
@@ -206,4 +212,4 @@ Recomenda-se aplicar o seguinte pipeline sobre `venergy.bronze.leituras`, em ord
   * `data_instalacao` mistura formatos (ex.: `2011-12-20` e `12/01/2019`).
 * **`faturas`:** não há coluna de kWh, só valores em R$. A tarifa implícita (`valor_energia / consumo_kwh`) é estável por classe (mediana de R$ 0,57/kWh para residencial, R$ 0,51/kWh para industrial e R$ 0,60/kWh para as demais), o que permite estimar o kWh dos meses de troca. Todas as leituras têm fatura correspondente, mas há 22 pares (UC, mês) com mais de uma fatura, que precisam ser tratados antes desse cruzamento.
 * **`unidades_consumidoras`:** as 45.000 UCs das leituras existem no cadastro. Para qualquer análise por classe, a coluna `classe` tem variação de caixa e acento (`Residencial`, `RESIDENCIAL`, `residencial`, `Poder Publico`, `Poder Público`) e uma linha com o valor literal `classe` (cabeçalho repetido).
-* **Consumos extremos:** nenhuma leitura positiva passa de 10× a mediana da própria UC, e nenhuma tem tarifa implícita abaixo de 10% da mediana da classe. O levantamento prévio do grupo apontava 17 leituras com consumo absurdo (até 117 mil kWh) não cobradas na fatura, mas esse achado **não foi reproduzido** sobre o bruto: o maior consumo positivo é de 64.009 kWh, numa UC industrial, e o maior em UC residencial é de 1.601 kWh. Fica pendente confirmar com quem fez o levantamento qual critério foi usado.
+* **Consumos extremos:** nenhuma leitura positiva passa de 10× a mediana da própria UC, e nenhuma tem tarifa implícita abaixo de 10% da mediana da classe. O maior consumo positivo é de 64.009 kWh, numa UC industrial, e o maior em UC residencial é de 1.601 kWh.
