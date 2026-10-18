@@ -10,15 +10,13 @@ adicione ?template=modulo_para_main.md na URL de criação do PR.
 ## Por quê
 <!-- Qual problema ou item de checklist isso endereça? -->
 
-Closes #
-
 ## Como foi testado?
 <!-- Marque o que se aplica e descreva brevemente. -->
 - [ ] Testes unitários
 - [ ] Testes de integração
 - [ ] Passos manuais:
-  1.
-  2.
+1. 
+2. 
 - [ ] Não se aplica (ex.: apenas documentação)
 
 ## Toca alguma decisão registrada na documentação?
@@ -41,6 +39,7 @@ Closes #
 - [ ] frontend
 - [ ] ai-agent
 - [ ] docs
+- [ ] Outro: 
 
 ## Evidências (opcional)
 <!-- Prints, GIFs, saída de queries, print do Workflow no Databricks, etc. -->
