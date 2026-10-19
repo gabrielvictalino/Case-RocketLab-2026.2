@@ -123,7 +123,7 @@ A ausência da leitura anterior aparece de **4 formas diferentes**:
 
 3. **Diferença em relação a `leitura_atual − leitura_anterior`** (linhas com leitura anterior numérica e não negativa):
    * **Exata:** 1.616.562 positivas + 4.766 trocas.
-   * **Diferença de exatamente 1 kWh:** 526.697 linhas (525.136 positivas + 1.561 trocas), distribuídas de forma proporcional entre `REAL` (429.657) e `ESTIMADA` (95.479).
+   * **Diferença de exatamente 1 kWh:** 526.697 linhas (525.136 positivas + 1.561 trocas), distribuídas de forma proporcional entre `REAL` (431.210) e `ESTIMADA` (95.487). Considerando só as 525.136 positivas, são 429.657 `REAL` e 95.479 `ESTIMADA`.
    * **Diferença maior que 1 kWh:** nenhuma.
 
    A diferença de ±1 kWh é compatível com arredondamento de leituras fracionárias e é considerada aceitável.
@@ -131,7 +131,7 @@ A ausência da leitura anterior aparece de **4 formas diferentes**:
 4. **Sem consumo zero.** O consumo positivo tem mediana de 169 kWh, p99 de 5.756 kWh e máximo de 64.009 kWh (UC industrial).
 
 ### 3.4. Atributo `id_medidor`
-* 59.868 medidores distintos. Os 8.609 `MD9…` (um por clone `LTX`) não existem no cadastro.
+* 59.868 medidores distintos: 51.299 `MD5…` e 8.569 `MD9…`. Os `MD9…` aparecem só nas 8.609 linhas `LTX` (40 deles em 2 clones) e não existem no cadastro.
 * Todo `id_medidor` com prefixo `MD5…` existe em `medidores.csv` e pertence à mesma UC da leitura.
 
 ### 3.5. Atributo `tipo_leitura`
@@ -164,7 +164,7 @@ No mês em que o medidor é trocado, a leitura é registrada no **medidor novo**
 
 **Evidências:**
 * As trocas se concentram entre **2025-09 e 2026-03** (de 875 a 924 por mês) e não ocorrem fora desse intervalo.
-* As **6.367** retiradas de medidor registradas em `medidores.csv` (status `RETIRADO`, `data_retirada` de 2025-09-05 a 2026-03-25) têm, **todas**, uma leitura de consumo negativo na mesma UC e no mesmo mês, e todas as trocas caem no mês da retirada.
+* Os **6.299** medidores retirados registrados em `medidores.csv` (6.367 linhas com status `RETIRADO`, incluindo 68 duplicatas exatas; `data_retirada` de 2025-09-05 a 2026-03-25) têm, **todos**, uma leitura de consumo negativo na mesma UC e no mesmo mês, e todas as trocas caem no mês da retirada.
 * Em 100% dos casos a leitura do mês da troca já está associada ao medidor novo (`ATIVO`).
 * A fatura do mês da troca **não reflete** o valor negativo: o `valor_energia` desse mês fica entre 0,43× e 1,64× a mediana da própria UC (p1 a p99), sem nenhum caso acima de 3×.
 * Das 6.327 linhas de troca, 78 são duplicatas exatas e 34 são clones `LTX`. Restam **6.215 trocas legítimas**, além das 84 com leitura anterior ausente.
