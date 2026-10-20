@@ -123,7 +123,7 @@ As retiradas não estão espalhadas pelo histórico: **todas** as 6.299 retirada
 * Em **100%** das retiradas, o medidor substituto da mesma UC foi instalado **no mesmo dia** da retirada. Não há UC sem medidor em nenhum momento.
 * Toda troca resulta em medidor **`SMART`**: 5.661 eletromecânicos → smart, 601 eletrônicos → smart e 37 smart → smart.
 * Nenhuma UC tem mais de uma troca (38.701 UCs com 1 medidor e 6.299 com 2).
-* As trocas são majoritariamente residenciais (5.395 de 6.299, somando as variações de caixa de `classe` no cadastro).
+* As trocas são majoritariamente residenciais (5.395 de 6.299, somando as variações de caixa de `classe` no cadastro deduplicado; ver seção 6).
 * Cada troca coincide com a leitura de consumo negativo do mês da troca descrita em `auditoria_leituras.md` (seção 4.1).
 
 Do ponto de vista de qualidade, a campanha é coerente (datas, status e leituras batem). Ela fica registrada aqui porque **muda o parque no meio do período de análise**: os últimos 12 meses do case (2025-07 a 2026-06) incluem 6.299 UCs que trocaram de tecnologia de medição.
@@ -155,10 +155,11 @@ Recomenda-se aplicar o seguinte pipeline sobre `venergy.bronze.medidores`, em or
 
 * **`leituras`:** é a principal consumidora desta tabela.
   * Todo `id_medidor` `MD5…` das leituras existe aqui e pertence à mesma UC da leitura. Nenhuma leitura cai fora da vida útil do medidor (antes da instalação ou depois da retirada).
-  * Os 8.609 medidores `MD9…` das leituras clonadas `LTX` **não existem** aqui, e essa é a regra para descartar os clones.
+  * As 8.609 leituras clonadas `LTX` apontam para **8.569** medidores `MD9…` distintos (40 deles aparecem em 2 clones), e **nenhum** existe aqui. Essa é a regra para descartar os clones.
   * Todos os 51.299 medidores únicos têm ao menos uma leitura.
   * A regra de troca da leitura (consumo negativo no mês da troca) deve usar `data_retirada` **depois** do passo 5, para não confundir com a sentinela.
 * **`unidades_consumidoras`:**
+  * **Os números desta seção e da 4.1 usam o cadastro tratado:** sem a linha com o cabeçalho repetido (`id_uc` = `"id_uc"`) e deduplicado por `id_uc`. O arquivo tem 46.461 linhas para 45.200 UCs (1.256 UCs repetidas, 1.260 linhas a mais). Entre as repetições, só `cpf_cnpj` muda (em 40 UCs), então `classe`, `alimentador` e `data_ligacao` não dependem de qual linha é mantida. Sem esse tratamento, a conta dá 201 UCs sem medidor (a linha de cabeçalho entra) e 5.543 trocas residenciais em vez de 5.395.
   * Todos os `id_uc` existem no cadastro.
   * **200 UCs do cadastro não têm medidor**: todas têm `id_uc` no formato `TESTE0000`…`TESTE0199`, o que indica registros de teste no cadastro. Tratar na auditoria do cadastro.
   * Em 44.910 das 45.000 UCs, o primeiro medidor foi instalado exatamente na `data_ligacao`. As **90** exceções têm `data_ligacao` implausível no cadastro (ex.: `UC100016` com `1903-01-01`, `UC100329` com `1921-01-01`), não erro em `medidores`.
