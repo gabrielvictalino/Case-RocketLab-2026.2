@@ -15,8 +15,8 @@ adicione ?template=modulo_para_main.md na URL de criação do PR.
 - [ ] Testes unitários
 - [ ] Testes de integração
 - [ ] Passos manuais:
-1. 
-2. 
+1.
+2.
 - [ ] Não se aplica (ex.: apenas documentação)
 
 ## Toca alguma decisão registrada na documentação?
@@ -39,7 +39,7 @@ adicione ?template=modulo_para_main.md na URL de criação do PR.
 - [ ] frontend
 - [ ] ai-agent
 - [ ] docs
-- [ ] Outro: 
+- [ ] Outro:
 
 ## Evidências (opcional)
 <!-- Prints, GIFs, saída de queries, print do Workflow no Databricks, etc. -->
