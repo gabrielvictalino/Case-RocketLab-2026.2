@@ -14,10 +14,10 @@
 | **Volume mensal** | Pico de 2025-07: 17.844 ocorrências (5,3× a média), 97% climáticas e concentradas em 3 alimentadores | 17.844 | 9,91% | **Crítica** |
 | **`duracao_min`** | Formato numérico inconsistente: sufixo `" min"` em parte dos valores | 16.200 | 9,00% | **Alta** |
 | **`causa`** | 4 representações de ausência: `-`, vazio, `N/A` e `NULL` | 5.400 | 3,00% | **Alta** |
-| **Intervalos por UC** | Interrupções sobrepostas na mesma UC (contam tempo em dobro no DEC se somadas direto) | 329 | 0,18% | **Alta** |
+| **Intervalos por UC** | Interrupções sobrepostas na mesma UC (contam tempo em dobro no DEC se somadas direto) | 331 | 0,18% | **Alta** |
 | **Datas x cadastro** | Ocorrência aberta antes da `data_ligacao` da UC | 595 (219 UCs) | 0,33% | **Média** |
 | **`duracao_min`** | Interrupções de 24 h ou mais (máximo de 48 h) | 275 | 0,15% | **Média** |
-| **Volume mensal** | Meses 2025-11 e 2026-02 com ~1.950 ocorrências acima da média, sem concentração | 10.619 | 5,90% | **Baixa / A investigar** |
+| **Volume mensal** | Excesso de ocorrências em 2025-11 (+1.950) e 2026-02 (+1.935) em relação à média, sem concentração (os dois meses somam 10.619) | ≈ 3.885 (excesso) | 2,16% | **Baixa / A investigar** |
 | **Tipagem Geral** | Datas e duração chegam como texto e só podem ser tipadas após o saneamento acima | 180.000 | 100,0% | **Alta** |
 
 **Atributos íntegros:** `id_ocorrencia` (180.000 IDs únicos, padrão `OC` + 8 dígitos, sem duplicatas exatas nem registros iguais com ID diferente), `alimentador` (122 códigos no padrão `ALM-<município>-<nnn>`), `tipo` (5 valores, sem variação de caixa), `data_abertura` e `data_encerramento` (100% no formato `AAAA-MM-DD HH:MM:SS`, sem vazios e nenhum encerramento anterior à abertura) e `duracao_min`, que, sem o sufixo, é **igual** a `data_encerramento − data_abertura` em 100% das linhas.
@@ -93,7 +93,7 @@ O volume mensal é muito estável: **média de 3.367 ocorrências/mês** (de 3.2
 | :--- | :---: | :---: |
 | Ocorrências | ~3.367 | **17.844** |
 | Causa `CLIMATICA` | 16,2% | **97,2%** |
-| Interrupções sobrepostas na mesma UC | ~1 por mês | **266** |
+| Interrupções sobrepostas na mesma UC | ~1 por mês | **268** |
 | Interrupções ≥ 24 h | ~1 por mês | **226** |
 
 **Concentração:** 12.836 das 17.844 ocorrências (72%) estão em 3 alimentadores, `ALM-REC-008` (6.887), `ALM-SAO-004` (3.351) e `ALM-JAB-004` (2.598), 12.471 delas com causa `CLIMATICA`. O evento cobre o mês inteiro (todos os 31 dias, de 541 a 628 ocorrências por dia), e não um único dia de tempestade.
@@ -103,20 +103,30 @@ O volume mensal é muito estável: **média de 3.367 ocorrências/mês** (de 3.2
 Não há sinal de erro de carga (IDs únicos, datas e durações coerentes, nenhuma duplicata). O evento é tratado aqui como **dado real e atípico**, e a decisão de como ele entra no DEC/FEC é do time (ver plano de saneamento).
 
 ### 4.2. Interrupções Sobrepostas na Mesma UC
-329 ocorrências começam antes do fim da ocorrência anterior **da mesma UC**. Em vários casos uma está inteiramente contida na outra:
+331 ocorrências começam antes do **maior encerramento anterior da mesma UC**, ou seja, enquanto alguma interrupção anterior daquela UC ainda estava em aberto. Em vários casos uma está inteiramente contida na outra:
 
 | UC | Ocorrência 1 | Ocorrência 2 |
 | :--- | :--- | :--- |
 | `UC141273` | `OC00164034`: 2026-02-17 11:38 → 14:37 | `OC00162909`: 2026-02-17 13:11 → 13:45 |
 | `UC110456` | `OC00166500`: 2026-03-27 22:28 → 2026-03-28 15:22 | `OC00167456`: 2026-03-28 10:36 → 11:05 |
 
-Somando `duracao_min` direto, esses intervalos contam o mesmo tempo sem energia duas vezes: são **43.144 minutos** sobrepostos (0,2% do total de 21,4 milhões de minutos). 266 dos 329 casos estão em 2025-07.
+Comparar só com a ocorrência **imediatamente anterior** encontra 329 desses casos e perde 2, ambos em 2025-07. Neles, uma interrupção longa contém uma curta, e a terceira começa depois do fim da curta, mas antes do fim da longa:
+
+| Ocorrência | Início | Fim |
+| :--- | :--- | :--- |
+| `OC00121286` (`UC107537`) | 2025-07-21 08:10 | 2025-07-22 01:26 |
+| `OC00125971` (`UC107537`) | 2025-07-21 14:21 | 2025-07-21 15:53 |
+| `OC00122507` (`UC107537`) | 2025-07-21 22:10 | 2025-07-22 02:46 |
+
+O outro caso é na `UC117815` (`OC00122779` / `OC00125375` / `OC00131977`).
+
+**Tempo contado em dobro:** somando `duracao_min` direto são **21.392.087 minutos**, mas a união dos intervalos de cada UC (o tempo em que a UC de fato ficou sem energia) dá **21.348.526 minutos**. A diferença, **43.561 minutos** (0,2%), é o que uma soma direta conta duas vezes no DEC. 268 dos 331 casos estão em 2025-07.
 
 ### 4.3. Ocorrência Anterior à Ligação da UC
 595 ocorrências (219 UCs) foram abertas **antes** da `data_ligacao` da UC no cadastro (ex.: `OC00000117` em 2022-07-10 para `UC122093`, ligada em 2024-07-06). Uma UC não pode ser interrompida antes de existir: ou a data de ligação do cadastro está errada, ou a ocorrência foi associada à UC errada. Como o alimentador da ocorrência bate com o do cadastro em 100% dos casos, a primeira hipótese é mais provável.
 
 ### 4.4. Meses 2025-11 e 2026-02
-Os dois meses têm ~5.300 ocorrências, cerca de 1.950 acima da média. Diferente de 2025-07, o excesso está **espalhado** por todos os alimentadores e causas, sem concentração (o maior acréscimo em um único alimentador é de ~40). Fica registrado como ponto a investigar, sem tratamento proposto.
+Os dois meses têm ~5.300 ocorrências (5.317 e 5.302, somando 10.619). O que é anômalo é o **excesso**: 1.950 em 2025-11 e 1.935 em 2026-02 acima da média dos meses normais (3.367), ≈ 3.885 ocorrências no total (2,16% da base). Diferente de 2025-07, o excesso está **espalhado** por todos os alimentadores e causas, sem concentração (o maior acréscimo em um único alimentador é de ~40). Fica registrado como ponto a investigar, sem tratamento proposto.
 
 ---
 
@@ -128,7 +138,12 @@ Recomenda-se aplicar o seguinte pipeline sobre `venergy.bronze.ocorrencias_rede`
 2. **Tipar `duracao_min`:** remover o sufixo `" min"` (`regexp_replace(duracao_min, ' min$', '')`) **antes** de converter para inteiro. Validar que nenhum valor fica nulo e que a duração é igual a `data_encerramento − data_abertura` em 100% das linhas.
 3. **Normalizar ausências em `causa`:** `''`, `-`, `N/A` e `NULL` → `null` (ou para a categoria explícita `NAO INFORMADA`, a decidir com o time). Manter `NAO IDENTIFICADA` como valor próprio.
 4. **Marcar o evento de 2025-07:** `flag_evento_climatico_2025_07` para as ocorrências do mês nos 3 alimentadores afetados, permitindo calcular DEC/FEC com e sem o evento.
-5. **Unir intervalos sobrepostos por UC** (ou marcá-los com `flag_sobreposicao`) antes de somar tempo de interrupção, para não contar o mesmo período duas vezes no DEC.
+5. **Unir intervalos sobrepostos por UC** (ou marcá-los com `flag_sobreposicao`) antes de somar tempo de interrupção, para não contar o mesmo período duas vezes no DEC. A comparação deve ser com o **maior encerramento acumulado** da UC, e não só com a ocorrência anterior:
+   ```sql
+   max(data_encerramento) OVER (PARTITION BY id_uc ORDER BY data_abertura, data_encerramento
+                                ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS maior_fim_anterior
+   ```
+   Uma nova "ilha" começa quando `data_abertura >= maior_fim_anterior`, e cada ilha vira um único intervalo (`MIN` da abertura, `MAX` do encerramento). Comparando só com a anterior imediata, a sobreposição medida cai para 43.144 minutos (417 a menos), e uma união de intervalos feita desse jeito ainda deixa 349 minutos duplicados. Validar: a soma das ilhas deve dar 21.348.526 minutos (consulta 6 do notebook).
 6. **Marcar ocorrências anteriores à ligação** (`flag_antes_da_ligacao`) depois do cruzamento com o cadastro saneado, sem descartá-las até a auditoria do cadastro confirmar a causa.
 7. **Tipagem final:** `duracao_min` como inteiro; `alimentador`, `tipo` e `causa` como texto normalizado; colunas derivadas `ano_mes` e `municipio` (pelo prefixo do alimentador ou pelo cadastro) para facilitar a Gold.
 
