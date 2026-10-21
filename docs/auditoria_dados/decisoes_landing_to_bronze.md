@@ -40,7 +40,7 @@ A vírgula dentro de um valor não entra nessa escolha, porque a função não l
 
 Com o separador errado, o Spark lia o cabeçalho inteiro como uma coluna só e o Delta rejeitava o nome.
 
-`multiLine` e `escape` ficam ligados em todo CSV. As quatro combinações (sem proteção, só `multiLine`, só `escape`, as duas) deram a mesma contagem, e essa contagem fecha com a Bronze. Não houve perda nem inflação de linhas. Aspas no meio do campo, como a potência `"5,03"`, não podem virar coluna extra.
+`multiLine` e `escape` ficam ligados em todo CSV. As quatro combinações (sem proteção, só `multiLine`, só `escape`, as duas) deram a mesma contagem de linhas na leitura bruta e nas tabelas geradas na Bronze. Não houve perda nem inflação de linhas. Aspas no meio do campo, como a potência `"5,03"`, não podem virar coluna extra.
 
 `sanitize_column_name()` troca ` ,;{}()\n\t=` por `_`. É rede de segurança depois do separador certo. Nesta carga os nomes já eram válidos.
 
@@ -134,14 +134,13 @@ Não entrou o Excel da equipe: ele lia qualquer aba e usava `append`, então uma
 
 Os relatórios de auditoria da equipe estão nesta mesma pasta. As consultas de evidência continuam nesses arquivos. Não foram coladas no notebook de carga.
 
-## 12. Testes que fecharam na carga anterior
+## 12. Testes que fecharam nesta carga
 
-- Teste 1: nos 10 CSVs, as quatro opções de leitura deram a mesma contagem, e a contagem do texto puro fecha com a Bronze.
-- Teste 2: schema e nulos. O output gravado no notebook ainda lista 12 tabelas, porque foi a execução com uma tabela de leitura por ano. A versão atual grava 8: as sete de nome fixo e `tb_leituras`.
-- `historico` conferido como array.
-- Contagem por `sheet`: 511, 495 e 383.
+A célula unificada foi executada no Databricks. A Bronze ficou com 8 tabelas.
 
-A célula de ingestão unificada ainda precisa ser executada de novo no Databricks.
+- Teste 1: nos 10 CSVs, as quatro opções de leitura deram a mesma contagem, e a contagem do texto puro fecha com a Bronze. As leituras fecham por arquivo: 271.744, 544.546, 545.652, 546.908 e 273.618.
+- Teste 2: as 8 tabelas têm as colunas de negócio, `source_file` e `ingestion_datetime`. `tb_leituras` ficou com 2.182.468 linhas. `historico` está como array. Nulos acima de 10%: `tb_medidores.data_retirada` 61,4%, `tb_medidores.data_ultima_manutencao` 100%, `tb_inspecoes.tipo_irregularidade` 31,7%.
+- Teste 3: `tb_inspecoes` com 1.389 linhas. Por `sheet`: `ago-set` 511, `out-nov` 495, `dez` 383. Nenhuma duplicata de `id_inspecao`.
 
 ## O que continua escrito no código
 
