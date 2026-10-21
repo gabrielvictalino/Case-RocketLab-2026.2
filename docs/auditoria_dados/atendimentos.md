@@ -241,4 +241,3 @@ Não foram encontrados protocolos duplicados, datas inválidas, campos ausentes 
 Os dois pontos que merecem mais atenção são as **9.566 notas de satisfação nulas** e o **aumento de atendimentos em julho de 2025**.
 
 Antes de fazer qualquer correção, seria importante entender melhor essas situações e confirmar as regras de negócio. Por enquanto, a recomendação é manter os dados originais preservados na camada Bronze e utilizar essa análise como referência para a próxima etapa do projeto.
-
