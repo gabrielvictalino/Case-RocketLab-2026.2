@@ -160,4 +160,3 @@ if spark.catalog.tableExists(TABELA_DESTINO):
         print("A quantidade de registros precisa ser investigada.")
 else:
     print("A tabela Bronze ainda não existe.")
-
