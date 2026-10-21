@@ -1,0 +1,24 @@
+name: Fluxo Git
+on:
+  pull_request:
+    branches: [dev, main]
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+  push:
+    branches: [dev, main]
+permissions:
+  contents: read
+jobs:
+  fluxo-git:
+    name: Fluxo Git
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Testar validador
+        run: python3 -m unittest discover -s tests -v
+      - name: Validar fluxo, commits e whitespace
+        run: python3 scripts/validar-fluxo-git.py
