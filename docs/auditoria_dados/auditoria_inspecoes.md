@@ -1,7 +1,7 @@
 # Relatório de Auditoria e Qualidade de Dados (`inspecoes.xlsx`)
 
-**Escopo da Análise:** Auditoria estrutural, tipológica, semântica e estatística da base de inspeções de consumo de energia.  
-**Volume Total:** $1.389$ registros distribuídos em $3$ abas (`ago-set`, `dez`, `out-nov`).  
+**Escopo da Análise:** Auditoria estrutural, tipológica, semântica e estatística da base de inspeções de consumo de energia.
+**Volume Total:** $1.389$ registros distribuídos em $3$ abas (`ago-set`, `dez`, `out-nov`).
 **Período Coberto nos Dados:** $01/08/2025$ a $31/12/2025$.
 
 ---
