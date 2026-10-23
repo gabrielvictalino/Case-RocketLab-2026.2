@@ -68,7 +68,7 @@ Exemplo real, a `UC107537`:
 Em toda a base, `SUM(duracao_min)` = 21.392.087 min e **`SUM(duracao_efetiva_min)` = 21.348.526 min**, que é exatamente a união dos intervalos de cada UC. São 43.561 min que uma soma direta contaria em dobro.
 
 ### 2.5. Meses atípicos por alimentador (achado 4.1)
-Para cada alimentador, o notebook conta as ocorrências de cada mês (meses sem ocorrência entram com zero) e calcula a **mediana mensal**. Um mês é atípico quando passa de **5× essa mediana** (`LIMIAR_MES_ATIPICO`).
+Para cada alimentador, o notebook conta as ocorrências de cada mês **entre o primeiro e o último mês em que ele aparece** (meses sem ocorrência nesse intervalo entram com zero) e calcula a **mediana mensal**. Um mês é atípico quando passa de **5× essa mediana** (`LIMIAR_MES_ATIPICO`).
 
 | Alimentador | Mês | Ocorrências | Mediana mensal | Razão |
 | :--- | :---: | :---: | :---: | :---: |
@@ -77,6 +77,8 @@ Para cada alimentador, o notebook conta as ocorrências de cada mês (meses sem 
 | `ALM-JAB-004` | 2025-07 | 2.598 | 27 | 96× |
 
 Fora esses 3, nenhum mês de nenhum alimentador passa de **2,3×** a própria mediana, nem os picos difusos de 2025-11 e 2026-02. O limite de 5× separa os dois grupos com folga.
+
+> **Por que limitar ao período do alimentador:** se um alimentador entrar ou sair no meio do período, os meses em que ele não existia entrariam com zero. A mediana iria a zero e todos os meses normais dele seriam marcados como atípicos. Hoje os 122 alimentadores aparecem nos 48 meses, então o resultado é o mesmo. O limite protege as próximas cargas (apontado na review do PR #23).
 
 > **Por que uma regra e não a data fixa:** `WHERE ano_mes = '2025-07'` resolveria hoje, mas o case prevê cargas mensais. A regra marca sozinha o próximo evento parecido. O flag **não remove nada**: a Gold decide se calcula DEC/FEC com ou sem esses meses (a regulação da ANEEL também expurga dias críticos dos indicadores).
 
@@ -143,7 +145,7 @@ As descrições também estão gravadas como comentários das colunas no Unity C
 | `NAO INFORMADA` explícita | `null` | Agrupamentos legíveis e SQL sem armadilhas de nulo; separada de `NAO IDENTIFICADA` |
 | Sobreposição por **maior encerramento acumulado** | Comparar com a ocorrência anterior imediata | A comparação simples perde 2 casos e deixa minutos em dobro (revisão do PR #9) |
 | `duracao_efetiva_min` por linha | Tabela separada de intervalos unidos | Mantém um grão só, e `SUM`/`COUNT_IF` resolvem DEC e FEC direto |
-| Flag de mês atípico por **regra** (5× a mediana) | Data fixa `2025-07` no código | Funciona nas próximas cargas mensais; nada é removido |
+| Flag de mês atípico por **regra** (5× a mediana do período do alimentador) | Data fixa `2025-07` no código | Funciona nas próximas cargas mensais, inclusive com alimentadores novos ou desativados; nada é removido |
 | Validação **antes** do `overwrite` | Validar depois de gravar | Uma carga reprovada nunca substitui a Silver boa |
 | Silver sem dependência do cadastro | Cruzar com `unidades_consumidoras` aqui | A Bronze do cadastro ainda está em revisão (PR #13). Os cruzamentos estão listados na seção 9 |
 
@@ -238,6 +240,7 @@ O notebook foi executado sem modificações num Spark 4.0.1 + Delta 4.0.0 local 
   * causa nova `RAIO`;
   * mesmo id com conteúdo diferente;
   * data impossível `2022-13-01`.
+* **Alimentador novo ou desativado:** simulando o `ALM-CAM-003` só a partir de 2026-01 e o `ALM-REC-014` só até 2022-12, só os 3 meses de 2025-07 continuam marcados. Sem o limite de período, 6 meses normais de cada um seriam marcados.
 
 **Databricks (Serverless):** o notebook também foi executado no Unity Catalog (`venergy.silver`), e a tabela de validação, os totais e as evidências deram os mesmos números do teste local.
 
