@@ -72,13 +72,15 @@ Os medidores de cada UC são ordenados por data de instalação, e cada um receb
 
 Em 100% das trocas, o novo medidor foi instalado no mesmo dia da retirada do anterior (regra de aviso "troca com lacuna" = 0).
 
+A validação também exige que o medidor anterior esteja `RETIRADO`. Se uma carga trouxer o `ATIVO` com data de instalação anterior à do retirado (datas trocadas na origem), a ordenação inverteria a troca, gravando o retirado como se tivesse substituído o ativo. Nesse caso a carga para.
+
 > **Por que na Silver:** é uma derivação dentro da própria tabela, sem depender de outra fonte, e deixa simples as perguntas da Gold sobre a campanha ("o consumo mudou depois da troca para smart?"), que importam para o diagnóstico de receita e para a fila de inspeção.
 
 ---
 
 ## 3. Validações (gate de qualidade)
 
-Antes de gravar, o notebook confere 13 regras numa única passada pelos dados:
+Antes de gravar, o notebook confere 14 regras numa única passada pelos dados:
 * **crítica:** qualquer violação **interrompe a carga antes do `overwrite`**. A Silver anterior continua intacta, e o notebook mostra até 20 linhas que violam a regra.
 * **aviso:** aparece na tabela de resultados, mas não bloqueia a carga.
 
@@ -96,6 +98,7 @@ Antes de gravar, o notebook confere 13 regras numa única passada pelos dados:
 | Retirada anterior à instalação | crítica | Datas trocadas | 0 |
 | Instalação no futuro | crítica | Erro de digitação de ano | 0 |
 | UC sem exatamente 1 medidor `ATIVO` | crítica | Regra do negócio confirmada na auditoria | 0 |
+| Medidor anterior não está `RETIRADO` (troca invertida) | crítica | O `ATIVO` precisa ser o último instalado da UC; senão `id_medidor_anterior` sai ao contrário | 0 |
 | Troca com lacuna (instalação ≠ retirada do anterior) | aviso | UC sem medidor entre uma troca e outra | 0 |
 
 ---
@@ -152,7 +155,7 @@ Se a tabela não existir, rode antes `data-engineering/landing_to_bronze/landing
 3. **Run all**. O schema `venergy.silver` é criado na primeira execução.
 
 ### 6.3. O que conferir
-* **Tabela de validação:** 13 regras com `violacoes = 0` e `status = OK`.
+* **Tabela de validação:** 14 regras com `violacoes = 0` e `status = OK`.
 * **Linha de resumo:** `Bronze: 51812 linhas | Silver: 51299 linhas | duplicatas removidas: 513`.
 * **Confirmação final:** `OK: 51299 medidores carregados em venergy.silver.medidores`.
 * **Evidências:** as grafias de `tipo` convergindo para 3 valores, um exemplo de cada formato de data convertido, a visão por status e tipo, e as trocas por mês.
@@ -168,6 +171,7 @@ A mensagem lista cada regra crítica violada e a quantidade de linhas, e logo ac
 | `id_medidor repetido` | Mesmo medidor com dados diferentes | Decidir com o negócio qual versão vale (não há escolha automática) |
 | UC sem exatamente 1 `ATIVO` | Troca registrada pela metade | Investigar a UC na Bronze |
 | `status incoerente com data_retirada` | Sentinela nova (ex.: `31/12/9999`) | Incluir a sentinela em `SENTINELAS_DATA` |
+| `medidor anterior não está RETIRADO` | `ATIVO` com instalação anterior à do retirado (datas trocadas na origem) | Corrigir a data na origem; a Silver não escolhe qual data vale |
 
 ### 6.5. No Workflow (Job)
 Esta tarefa depende apenas da Bronze de medidores:
@@ -206,12 +210,13 @@ JOIN venergy.silver.medidores m USING (id_medidor);
 O notebook foi executado sem modificações num Spark 4.0.1 + Delta 4.0.0 local (ANSI ligado), em cadeia com o notebook da Bronze. O resultado foi comparado com um cálculo independente feito em Python puro sobre o CSV:
 * contagens, distribuição de `tipo` e `status`, os 9 modelos, as datas mínima e máxima, as 6.299 trocas com o tipo anterior e as datas de exemplo (inclusive `04-07-1999` → 1999-04-07) bateram 100%;
 * a reexecução produz o mesmo resultado e só uma versão Delta nova;
-* **5 defeitos injetados na Bronze** foram barrados pela regra certa, com a Silver intacta:
+* **6 defeitos injetados na Bronze** foram barrados pela regra certa, com a Silver intacta:
   * data impossível `30/02/2020`;
   * tipo novo `DIGITAL`;
   * mesmo id com conteúdo diferente;
   * segundo medidor ativo na UC;
-  * sentinela no formato `31/12/9999`.
+  * sentinela no formato `31/12/9999`;
+  * medidor `ATIVO` com instalação anterior à do retirado (troca invertida, apontado na review do PR #22).
 
 **Databricks (Serverless):** o notebook também foi executado no Unity Catalog (`venergy.silver`), e a tabela de validação, os totais e as evidências deram os mesmos números do teste local.
 
