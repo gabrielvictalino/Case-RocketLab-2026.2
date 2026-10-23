@@ -66,7 +66,8 @@ Essas linhas mantêm o valor original de `consumo_kwh`, **sem** inversão, **sem
 | `flag_sinal_nao_confirmado` | negativo, leituras crescentes e módulo com ±1 kWh de diferença | 359 | 353 |
 
 * A diferença entre o bruto e a base limpa vem das duplicatas exatas e dos clones `LTX` dessas linhas. Nas trocas, são 78 duplicatas e 34 clones (6.327 − 112 = 6.215).
-* As 114 sem leitura anterior são **84 trocas de medidor** (a UC tem medidor retirado no mesmo mês) e **30** com o padrão `-N.0`. Somando, 6.215 + 84 = 6.299, exatamente o número de medidores retirados no cadastro.
+* As 114 sem leitura anterior são **84 trocas de medidor** (a UC tem medidor retirado no mesmo mês) e **30** com o padrão `-N.0`. Somando, 6.215 + 84 = 6.299, exatamente o número de medidores com `status = RETIRADO` no cadastro, e cada um deles cai na mesma UC e no mesmo mês de exatamente uma dessas leituras. Contar por `data_retirada` preenchida dá 19.799, porque os medidores `ATIVO` usam a sentinela `9999-12-31` (seção 6 da auditoria).
+* No mês da troca, o `id_medidor` da leitura já é o medidor **novo** (`ATIVO`). O medidor retirado é o anterior da UC, então o cruzamento da flag com o cadastro deve ser feito por (`id_uc`, mês da retirada), e não por `id_medidor`.
 * Cada linha tem no máximo uma flag, e **nenhum consumo negativo fica sem flag**. Depois da correção, as 6.682 leituras com consumo negativo são as 6.215 + 114 + 353 marcadas.
 
 ### 2.6. Tipagem final
@@ -91,6 +92,7 @@ Essas linhas mantêm o valor original de `consumo_kwh`, **sem** inversão, **sem
 * `mes_referencia` no formato `AAAA-MM` em todas as linhas;
 * nenhuma `leitura_anterior` não numérica depois da normalização, nenhuma `leitura_atual` nula e nenhum `consumo_kwh` fora do padrão `-?\d+(\.0)?`;
 * as linhas de `flag_sinal_nao_confirmado` diferem de `atual − anterior` em exatamente 1 kWh;
+* nenhum consumo positivo tem `leitura_anterior > leitura_atual` nem diferença maior que 1 kWh em relação a `atual − anterior` (premissas das flags, que só olham os consumos negativos);
 * contagens das flags iguais às da tabela 2.5, no máximo uma flag por linha e nenhum consumo negativo sem flag.
 
 **Depois de gravar:** colunas na ordem do contrato e 2.152.336 linhas.
