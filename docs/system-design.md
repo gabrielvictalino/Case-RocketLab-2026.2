@@ -476,11 +476,16 @@ das roles) ficam só no `.env`.
 
 ### Testes e CI
 
-| Workflow | Gatilho (`paths`) | Conteúdo |
+| Job | Roda quando o PR toca | Conteúdo |
 |---|---|---|
-| `backend.yml` | `backend/**`, `ai-agent/**`, `contracts/**`, `uv.lock` | `ruff`; pytest contra Postgres e Redis (services do job), carregando `contracts/samples/` |
-| `frontend.yml` | `frontend/**` | `eslint`, `tsc --noEmit`, Vitest, `vite build` |
-| `e2e.yml` | PR para `main` | Compose completo + um teste de fumaça com Playwright (login → abrir UC → gerar ordem) |
+| backend | `backend/**`, `ai-agent/**`, `importador/**`, `contracts/**`, `uv.lock` | `ruff`; pytest com Postgres via Testcontainers, carregando `contracts/samples/` |
+| frontend | `frontend/**` | `eslint`, `tsc --noEmit`, Vitest, `vite build` |
+| `CI` (agregador) | sempre | Falha se algum job acima falhou; é o único check obrigatório |
+| e2e | PR para `main` | Compose completo + um teste de fumaça com Playwright (login → abrir UC → gerar ordem) |
+
+Os jobs de módulo pulam o trabalho quando o PR não toca o módulo, mas o
+agregador sempre roda. O `fluxo-git.md` proíbe checks obrigatórios filtrados
+por caminho, que ficariam pendentes em PRs de documentação.
 
 Os testes do backend cobrem todas as transições de ordem, a regra de uma
 ordem ativa, a importação parcial, a permissão por cargo e a decomposição da
