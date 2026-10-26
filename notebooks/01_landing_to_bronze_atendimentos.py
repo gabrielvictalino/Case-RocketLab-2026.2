@@ -1,6 +1,10 @@
 
 # Databricks notebook source
 from pyspark.sql import functions as F
+from pyspark.sql import types as T
+from pyspark.errors import AnalysisException
+import json
+import hashlib
 
 catalog = "workspace"
 bronze_schema = "bronze"
@@ -8,15 +12,19 @@ bronze_schema = "bronze"
 CAMINHO_ARQUIVO = "/Volumes/workspace/venergy_bronze/landing_atendimentos/atendimentos.json"
 TABELA_DESTINO = f"{catalog}.{bronze_schema}.atendimentos"
 
+CONFIRMAR_GRAVACAO = False
+
 print("Arquivo de origem:", CAMINHO_ARQUIVO)
 print("Tabela de destino:", TABELA_DESTINO)
+print("Gravacao habilitada:", CONFIRMAR_GRAVACAO)
 
 
 # COMMAND ----------
 
-spark.sql(f"CREATE SCHEMA IF NOT EXISTS {catalog}.{bronze_schema}")
+if CONFIRMAR_GRAVACAO:
+    spark.sql(f"CREATE SCHEMA IF NOT EXISTS {catalog}.{bronze_schema}")
 
-print("Schema Bronze preparado.")
+print("Configuracao da Bronze preparada.")
 
 
 # COMMAND ----------
@@ -24,28 +32,95 @@ print("Schema Bronze preparado.")
 df_atendimentos = (
     spark.read
     .option("multiLine", "true")
-    .option("mode", "PERMISSIVE")
+    .option("mode", "FAILFAST")
     .json(CAMINHO_ARQUIVO)
 )
+
+if df_atendimentos.isEmpty():
+    raise ValueError("O arquivo de atendimentos esta vazio.")
+
+if "_corrupt_record" in df_atendimentos.columns:
+    raise ValueError("Foram identificados registros corrompidos no JSON.")
 
 print("Estrutura dos dados:")
 df_atendimentos.printSchema()
 
-print("Quantidade de registros:", df_atendimentos.count())
+total_registros = df_atendimentos.count()
+print("Quantidade de registros:", total_registros)
 
 display(df_atendimentos.limit(5))
 
 
 # COMMAND ----------
 
-if "_corrupt_record" in df_atendimentos.columns:
-    raise ValueError("Foram identificados possíveis registros corrompidos no JSON.")
+COLUNAS_OBRIGATORIAS = [
+    "protocolo",
+    "id_uc",
+    "canal",
+    "assunto",
+    "subassunto",
+    "data_abertura",
+    "data_fechamento",
+    "nota_satisfacao",
+    "historico"
+]
 
-if "ingestion_datetime" in df_atendimentos.columns:
-    raise ValueError("O JSON já contém a coluna ingestion_datetime.")
+colunas_ausentes = [
+    coluna
+    for coluna in COLUNAS_OBRIGATORIAS
+    if coluna not in df_atendimentos.columns
+]
 
-if "source_file" in df_atendimentos.columns:
-    raise ValueError("O JSON já contém a coluna source_file.")
+if colunas_ausentes:
+    raise ValueError(
+        f"Colunas obrigatorias ausentes: {colunas_ausentes}"
+    )
+
+colunas_reservadas = [
+    "source_file",
+    "ingestion_datetime"
+]
+
+colunas_reservadas_presentes = [
+    coluna
+    for coluna in colunas_reservadas
+    if coluna in df_atendimentos.columns
+]
+
+if colunas_reservadas_presentes:
+    raise ValueError(
+        f"O JSON possui colunas reservadas: {colunas_reservadas_presentes}"
+    )
+
+campo_historico = df_atendimentos.schema["historico"].dataType
+
+if not isinstance(campo_historico, T.ArrayType):
+    raise ValueError("A coluna historico deve ser um array.")
+
+if not isinstance(campo_historico.elementType, T.StructType):
+    raise ValueError("Os elementos de historico devem ser estruturas.")
+
+campos_historico = {
+    campo.name
+    for campo in campo_historico.elementType.fields
+}
+
+campos_historico_obrigatorios = {
+    "sequencia",
+    "data",
+    "acao",
+    "canal"
+}
+
+if not campos_historico_obrigatorios.issubset(campos_historico):
+    raise ValueError(
+        "A estrutura de historico nao possui todos os campos obrigatorios."
+    )
+
+print("Validacao estrutural concluida.")
+
+
+# COMMAND ----------
 
 df_bronze = (
     df_atendimentos
@@ -61,46 +136,99 @@ display(df_bronze.limit(5))
 
 # COMMAND ----------
 
-CONFIRMAR_GRAVACAO = True
+tabela_existe = spark.catalog.tableExists(TABELA_DESTINO)
 
-if CONFIRMAR_GRAVACAO:
-    if spark.catalog.tableExists(TABELA_DESTINO):
-        colunas_tabela = spark.table(TABELA_DESTINO).columns
+if tabela_existe:
+    df_existente = spark.table(TABELA_DESTINO)
 
-        if "source_file" not in colunas_tabela:
-            raise ValueError(
-                "A tabela existente não possui a coluna source_file."
-            )
-
-        arquivo_ja_ingerido = (
-            spark.table(TABELA_DESTINO)
-            .filter(F.col("source_file") == CAMINHO_ARQUIVO)
-            .limit(1)
-            .count() > 0
+    if "source_file" not in df_existente.columns:
+        raise ValueError(
+            "A tabela existente nao possui a coluna source_file."
         )
 
-        if arquivo_ja_ingerido:
-            raise ValueError(
-                "Este arquivo já foi ingerido na camada Bronze."
-            )
+    if "ingestion_datetime" not in df_existente.columns:
+        raise ValueError(
+            "A tabela existente nao possui a coluna ingestion_datetime."
+        )
 
-    (
-        df_bronze.write
-        .format("delta")
-        .mode("append")
-        .saveAsTable(TABELA_DESTINO)
-    )
+    schema_origem = {
+        campo.name: campo.dataType.simpleString()
+        for campo in df_bronze.schema.fields
+    }
 
-    print("Ingestão concluída:", TABELA_DESTINO)
+    schema_destino = {
+        campo.name: campo.dataType.simpleString()
+        for campo in df_existente.schema.fields
+    }
+
+    if schema_origem != schema_destino:
+        raise ValueError(
+            "O schema do JSON nao corresponde ao schema da Bronze existente. "
+            f"Origem: {schema_origem}. "
+            f"Destino: {schema_destino}."
+        )
+
+    print("Schema compativel com a tabela existente.")
 else:
-    print("Gravação desativada. Nenhum dado foi gravado.")
+    print("A tabela Bronze ainda nao existe.")
+    print("O schema sera definido na primeira gravacao.")
 
 
 # COMMAND ----------
 
-print("DIAGNÓSTICO DOS ATENDIMENTOS")
+ids_invalidos = df_atendimentos.filter(
+    F.col("protocolo").isNull() |
+    (F.trim(F.col("protocolo").cast("string")) == "")
+).count()
 
-total_registros = df_atendimentos.count()
+if ids_invalidos > 0:
+    raise ValueError(
+        f"Foram encontrados {ids_invalidos} protocolos invalidos."
+    )
+
+protocolos_distintos = df_atendimentos.select("protocolo").distinct().count()
+
+if protocolos_distintos != total_registros:
+    raise ValueError(
+        "Foram encontrados protocolos duplicados no arquivo de origem."
+    )
+
+print("Validacao de protocolos concluida.")
+
+
+# COMMAND ----------
+
+if CONFIRMAR_GRAVACAO:
+    if tabela_existe:
+        (
+            df_bronze.write
+            .format("delta")
+            .mode("overwrite")
+            .option(
+                "replaceWhere",
+                f"source_file = '{CAMINHO_ARQUIVO}'"
+            )
+            .saveAsTable(TABELA_DESTINO)
+        )
+
+        print("Registros do arquivo substituidos na Bronze.")
+    else:
+        (
+            df_bronze.write
+            .format("delta")
+            .mode("errorifexists")
+            .saveAsTable(TABELA_DESTINO)
+        )
+
+        print("Tabela Bronze criada com sucesso.")
+else:
+    print("Gravacao desativada. Nenhum dado foi gravado.")
+
+
+# COMMAND ----------
+
+print("DIAGNOSTICO DOS ATENDIMENTOS")
+
 print("Total de registros:", total_registros)
 
 print("\nColunas encontradas:")
@@ -128,19 +256,17 @@ if expressoes_nulos:
 else:
     print("Nenhuma coluna identificada.")
 
-print("\nVerificação de registros corrompidos:")
+print("\nVerificacao de registros corrompidos:")
 
 if "_corrupt_record" in df_atendimentos.columns:
     print("Coluna _corrupt_record identificada.")
-    print("É necessário investigar possíveis falhas de leitura.")
 else:
     print("Nenhuma coluna _corrupt_record identificada.")
-    print("Isso não garante ausência de inconsistências.")
 
 
 # COMMAND ----------
 
-print("VALIDAÇÃO DA INGESTÃO")
+print("VALIDACAO DA INGESTAO")
 
 if spark.catalog.tableExists(TABELA_DESTINO):
     df_tabela_bronze = spark.table(TABELA_DESTINO)
@@ -154,9 +280,17 @@ if spark.catalog.tableExists(TABELA_DESTINO):
     print("Registros do arquivo na Bronze:", total_bronze)
     print("Registros encontrados na origem:", total_registros)
 
-    if total_bronze == total_registros:
+    if CONFIRMAR_GRAVACAO:
+        if total_bronze != total_registros:
+            raise ValueError(
+                "A quantidade de registros gravados nao corresponde a origem."
+            )
+
         print("Quantidade de registros conferida.")
     else:
-        print("A quantidade de registros precisa ser investigada.")
+        print(
+            "Gravacao desativada: os dados existentes podem ser "
+            "de uma execucao anterior."
+        )
 else:
-    print("A tabela Bronze ainda não existe.")
+    print("A tabela Bronze ainda nao existe.")
