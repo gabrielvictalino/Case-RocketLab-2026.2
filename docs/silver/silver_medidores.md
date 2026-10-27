@@ -3,10 +3,10 @@
 | | |
 | :--- | :--- |
 | **Notebook** | `data-engineering/bronze_to_silver/bronze-to-silver-medidores.ipynb` |
-| **Entrada** | `venergy.bronze.medidores` (51.812 linhas, todas as colunas em texto) |
-| **Saída** | `venergy.silver.medidores` (51.299 linhas, tipada e padronizada) |
+| **Entrada** | `` `v-energy`.bronze.tb_medidores `` (51.812 linhas, todas as colunas em texto) |
+| **Saída** | `` `v-energy`.silver.tb_medidores `` (51.299 linhas, tipada e padronizada) |
 | **Grão** | Uma linha por medidor (`id_medidor` único), ativos e retirados |
-| **Depende de** | Bronze de medidores (PR #8) |
+| **Depende de** | Bronze unificada (`Landing_to_Bronze.ipynb`, PR #14) |
 | **Usada por** | Gold (visão 360 da UC, fila de inspeção, diagnóstico de receita) e cruzamentos com a Silver de leituras (tecnologia do medidor e datas de troca) |
 | **Auditoria de origem** | `docs/auditoria_dados/auditoria_medidores.md` |
 
@@ -103,7 +103,7 @@ Antes de gravar, o notebook confere 14 regras numa única passada pelos dados:
 
 ---
 
-## 4. Dicionário de dados: `venergy.silver.medidores`
+## 4. Dicionário de dados: `` `v-energy`.silver.tb_medidores ``
 
 | Coluna | Tipo | Nulo? | Descrição | Exemplo |
 | :--- | :--- | :---: | :--- | :--- |
@@ -145,21 +145,21 @@ As descrições também estão gravadas como comentários das colunas no Unity C
 ### 6.1. Pré-requisito
 A Bronze precisa estar carregada. Confira num SQL Editor ou numa célula `%sql`:
 ```sql
-SELECT COUNT(*) FROM venergy.bronze.medidores;  -- esperado: 51812
+SELECT COUNT(*) FROM `v-energy`.bronze.tb_medidores;  -- esperado: 51812
 ```
-Se a tabela não existir, rode antes `data-engineering/landing_to_bronze/landing-to-bronze-medidores.ipynb`.
+Se a tabela não existir, rode antes a Bronze unificada, `data-engineering/Landing_to_Bronze.ipynb` (PR #14).
 
 ### 6.2. Rodar o notebook
 1. **Workspace → (sua pasta) → ⋮ → Import → File** e escolha `bronze-to-silver-medidores.ipynb`. Se o repositório estiver conectado como *Git folder*, basta abrir o arquivo.
 2. No topo do notebook, **Connect → Serverless**.
-3. **Run all**. O schema `venergy.silver` é criado na primeira execução.
+3. **Run all**. O schema `` `v-energy`.silver `` é criado na primeira execução.
 
 ### 6.3. O que conferir
 * **Tabela de validação:** 14 regras com `violacoes = 0` e `status = OK`.
 * **Linha de resumo:** `Bronze: 51812 linhas | Silver: 51299 linhas | duplicatas removidas: 513`.
-* **Confirmação final:** `OK: 51299 medidores carregados em venergy.silver.medidores`.
+* **Confirmação final:** `` OK: 51299 medidores carregados em `v-energy`.silver.tb_medidores ``.
 * **Evidências:** as grafias de `tipo` convergindo para 3 valores, um exemplo de cada formato de data convertido, a visão por status e tipo, e as trocas por mês.
-* **No Catalog Explorer:** `venergy` → `silver` → `medidores`. As abas *Columns* (comentários), *Sample Data* e *History* (uma versão por carga).
+* **No Catalog Explorer:** `v-energy` → `silver` → `tb_medidores`. As abas *Columns* (comentários), *Sample Data* e *History* (uma versão por carga).
 
 ### 6.4. Se a validação falhar
 A mensagem lista cada regra crítica violada e a quantidade de linhas, e logo acima aparecem até 20 exemplos. A Silver anterior **não** foi alterada.
@@ -176,9 +176,9 @@ A mensagem lista cada regra crítica violada e a quantidade de linhas, e logo ac
 ### 6.5. No Workflow (Job)
 Esta tarefa depende apenas da Bronze de medidores:
 ```text
-landing_to_bronze_medidores ──► bronze_to_silver_medidores ──► (Gold)
+landing_to_bronze ──► bronze_to_silver_medidores ──► (Gold)
 ```
-A Silver de leituras (PR #18) lê `venergy.bronze.medidores`, então não há ordem obrigatória entre as duas Silvers.
+A Silver de leituras (PR #18) lê a Bronze de medidores, e não esta Silver, então não há ordem obrigatória entre as duas Silvers.
 
 No Databricks: **Jobs & Pipelines → Create → Job**. Adicione uma tarefa *Notebook* por notebook e marque **Depends on** conforme o desenho acima. O notebook não tem parâmetros. Se a validação falhar, a tarefa fica vermelha e as tarefas seguintes não rodam.
 
@@ -189,18 +189,18 @@ No Databricks: **Jobs & Pipelines → Create → Job**. Adicione uma tarefa *Not
 ```sql
 -- Medidor instalado hoje em cada UC (visão 360 do atendimento)
 SELECT id_uc, id_medidor, modelo, tipo, data_instalacao
-FROM venergy.silver.medidores
+FROM `v-energy`.silver.tb_medidores
 WHERE status = 'ATIVO';
 
 -- Campanha de troca: UCs que trocaram de tecnologia e quando
 SELECT id_uc, id_medidor_anterior, tipo_anterior, id_medidor, tipo, data_instalacao AS data_troca
-FROM venergy.silver.medidores
+FROM `v-energy`.silver.tb_medidores
 WHERE id_medidor_anterior IS NOT NULL;
 
 -- Leituras com a tecnologia do medidor que as registrou (ex.: consumo antes e depois da troca para smart)
 SELECT l.id_uc, l.mes_referencia, l.consumo_kwh, m.tipo AS tipo_medidor
-FROM venergy.silver.leituras l
-JOIN venergy.silver.medidores m USING (id_medidor);
+FROM `v-energy`.silver.tb_leituras l
+JOIN `v-energy`.silver.tb_medidores m USING (id_medidor);
 ```
 
 ---
@@ -218,11 +218,11 @@ O notebook foi executado sem modificações num Spark 4.0.1 + Delta 4.0.0 local 
   * sentinela no formato `31/12/9999`;
   * medidor `ATIVO` com instalação anterior à do retirado (troca invertida, apontado na review do PR #22).
 
-**Databricks (Serverless):** o notebook também foi executado no Unity Catalog (`venergy.silver`), e a tabela de validação, os totais e as evidências deram os mesmos números do teste local.
+**Databricks (Serverless):** o notebook também foi executado no Unity Catalog (na época em `venergy.silver`, antes da troca para os nomes da Bronze unificada), e a tabela de validação, os totais e as evidências deram os mesmos números do teste local.
 
 ---
 
 ## 9. Pendências e pontos que dependem de outras tabelas
 
 * **Cadastro (`unidades_consumidoras`, PR #13):** quando a Silver do cadastro existir, conferir que todo `id_uc` existe lá (hoje 100%, segundo a auditoria) e que nenhuma instalação é anterior à `data_ligacao`. As 90 UCs com `data_ligacao` implausível (ex.: `1903-01-01`) são problema do cadastro, não desta tabela.
-* **Leituras:** a Silver de leituras (PR #18) usa `venergy.bronze.medidores` para descartar os clones `LTX`. O resultado seria o mesmo com esta tabela, porque os `id_medidor` são idênticos. Para análises que comparam datas de leitura com datas de troca, prefira esta Silver, com as datas já convertidas.
+* **Leituras:** a Silver de leituras (PR #18) usa a Bronze de medidores para descartar os clones `LTX`. O resultado seria o mesmo com esta tabela, porque os `id_medidor` são idênticos. Para análises que comparam datas de leitura com datas de troca, prefira esta Silver, com as datas já convertidas.
