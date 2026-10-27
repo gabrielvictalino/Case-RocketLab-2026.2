@@ -30,23 +30,27 @@ terminar uma API.
 | **B — backend** | P02, P03, P06, P07, P10 | Perdas (P16–P19) |
 | **C — frontend** | P08, P09 | Unidade Consumidora (P13–P15) e Receita (P20, P21) |
 
-Caminho crítico: **P02 → P03 → P05**. Sem contrato e amostra carregada, nenhum
-endpoint de domínio pode ser testado. O P02 começa no primeiro dia, a partir do
+Caminho crítico: **P02 → P03 → P05 → P06**. Sem contrato e amostra carregada,
+nenhum endpoint de domínio pode ser testado, e a fixture de testes do backend
+(P06) roda o importador. O esqueleto do backend pode começar antes, mas só
+fecha com o importador pronto. O P02 começa no primeiro dia, a partir do
 contrato da análise de arquiteturas, e é refinado conforme o time de dados
 responde às pendências (seção 13 do system design).
 
 ```mermaid
 flowchart LR
-    P01 --> P06 & P08
+    P01 --> P05 & P06 & P08
     P02 --> P03 --> P05
     P04 --> P05 & P06
+    P05 --> P06 & P10
     P06 --> P07 & P10 & P11 & P12 & P16
     P08 --> P09 & P11 & P12
-    P05 --> P10
     P07 --> P09
     P10 --> P09
+    P09 --> P11
 
-    P05 --> P13 & P17 & P20 & P22 & P24
+    P05 --> P13 & P16 & P17 & P20 & P22 & P24
+    P10 --> P20 & P22 & P24
     P13 --> P14 --> P15
     P16 --> P13 & P17 & P18 & P24
     P07 --> P18
@@ -149,7 +153,7 @@ segurança do agente (system design, seção 8).
 - [ ] `infra/postgres/init.sql` cria os schemas `analytics`, `operations` e `ai_read`
 - [ ] Role `portal`: lê `analytics` e `ai_read`, lê e escreve em `operations`
 - [ ] Role `ai_read`: só `SELECT` em `ai_read`, com `default_transaction_read_only = on` e `statement_timeout = 5s`
-- [ ] Role `importador`: cria e substitui `analytics` e `analytics_staging`
+- [ ] Role `importador`: cria e substitui `analytics` e `analytics_staging`; `INSERT` em `operations.cargas` (criada pelo `init.sql`); `SELECT` em `operations.inspecoes` (concedido pela migração da P16); é dona das views que leem `analytics` (a `inspecoes` e, no M3, as de `ai_read`) para recriá-las a cada carga; nenhuma outra escrita em `operations`
 - [ ] Teste documentado no PR: conectado como `ai_read`, `INSERT`, `CREATE TABLE` e `SELECT` em `operations` falham
 - [ ] Postgres e Redis não publicam porta no Compose base; `docker-compose.override.yml` publica a `5432` para desenvolvimento
 
@@ -158,7 +162,7 @@ segurança do agente (system design, seção 8).
 ## P05 · [feat] Importador do contrato Gold
 
 **Formulário:** Feature · **Módulo:** backend (pacote `importador`)
-**Milestone:** M1 · **Dev:** A · **Depende de:** P02, P03, P04
+**Milestone:** M1 · **Dev:** A · **Depende de:** P01, P02, P03, P04
 **Prioridade:** Obrigatório (requisito do case)
 **Branch:** `feat/NN-importador-gold`
 
@@ -171,21 +175,23 @@ Databricks.
 - [ ] `docker compose run importador --origem contracts/samples` carrega a amostra; `--origem <dir>` carrega uma exportação real
 - [ ] Carrega em `analytics_staging` com `COPY` e cria os índices da seção 8
 - [ ] Valida tipos, chaves únicas, integridade (`id_uc` existente em `dim_uc`) e contagens contra o manifesto; em falha, aborta com mensagem clara e a carga anterior continua ativa
-- [ ] Troca `analytics` por `analytics_staging` numa transação
+- [ ] Troca `analytics` por `analytics_staging` numa transação: renomeia o schema antigo, promove o novo, recria com `CREATE OR REPLACE VIEW` as views de `importador/views.sql` sobre o schema novo e só então remove o antigo, sem `CASCADE`; se qualquer passo falhar, a transação é desfeita e a carga anterior continua ativa
+- [ ] `importador/views.sql` começa vazio; a P16 acrescenta a view `inspecoes` e o M3 as views de `ai_read`
 - [ ] Registra a carga em `operations.cargas` e grava a versão no Redis (`versao_carga`)
-- [ ] Rodar duas vezes seguidas não altera nada em `operations`
-- [ ] Testes: carga válida, manifesto com contagem errada (aborta), recarga preservando uma ordem de inspeção
+- [ ] Rodar duas vezes seguidas não altera ordens, inspeções nem usuários em `operations`; a única mudança é um registro novo em `operations.cargas`
+- [ ] Testes: carga válida, manifesto com contagem errada (aborta), recarga mantendo intactas as tabelas de `operations` exceto `cargas`
 
 **Contexto e decisões**
-System design, seção 9. A tabela `operations.cargas` pode ser criada pelo
-próprio importador nesta issue e migrada para o Alembic na P06.
+System design, seção 9. A tabela `operations.cargas` vem do `init.sql` da P04
+e passa a ser gerida pelo Alembic na P06. O teste de recarga com ordem de
+inspeção fica na P16, que cria essas tabelas.
 
 ---
 
 ## P06 · [chore] Esqueleto do backend FastAPI
 
 **Formulário:** Tarefa técnica · **Tipo:** chore · **Módulo:** backend
-**Milestone:** M1 · **Dev:** B · **Depende de:** P01, P04
+**Milestone:** M1 · **Dev:** B · **Depende de:** P01, P04, P05
 **Branch:** `chore/NN-esqueleto-backend`
 
 **O que precisa ser feito e por quê?**
@@ -196,8 +202,8 @@ cada dev crie seu módulo sem tocar na infraestrutura do app.
 - [ ] `backend/app/core/`: configuração (pydantic-settings), duas engines SQLAlchemy assíncronas (`portal` e `ai_read`), formato de erro `{"detail", "code"}`, logs com `X-Request-ID`
 - [ ] `backend/app/modules/` com um módulo de exemplo seguindo `router`/`schemas`/`service`/`repository`
 - [ ] `GET /api/v1/health` verifica Postgres e Redis
-- [ ] Alembic configurado só para o schema `operations`
-- [ ] Fixture pytest com Postgres via **Testcontainers** (como pede o `fluxo-git.md`), rodando o `init.sql` e o importador com a amostra uma vez por sessão
+- [ ] Alembic configurado só para o schema `operations`, assumindo a `operations.cargas` criada pelo `init.sql`
+- [ ] Fixture pytest com Postgres via **Testcontainers** (como pede o `fluxo-git.md`), rodando o `init.sql` e o importador da P05 com a amostra uma vez por sessão
 - [ ] `backend/Dockerfile` e serviço `backend` no Compose
 - [ ] README do backend com os comandos para rodar e testar
 
@@ -292,7 +298,7 @@ necessidade.
 ## P11 · [chore] Nginx servindo a SPA e fazendo proxy da API
 
 **Formulário:** Tarefa técnica · **Tipo:** chore · **Módulo:** repositório / CI
-**Milestone:** M1 · **Dev:** A · **Depende de:** P06, P08
+**Milestone:** M1 · **Dev:** A · **Depende de:** P06, P07, P08, P09
 **Branch:** `chore/NN-nginx`
 
 **O que precisa ser feito e por quê?**
@@ -316,16 +322,18 @@ a API, sem CORS, com rate limit por IP.
 **Branch:** `chore/NN-ci-aplicacao`
 
 **O que precisa ser feito e por quê?**
-Substituir o rascunho `Pipeline_CI.yml` (que usa a action inexistente
-`astral/setup-uv` e roda `uv sync` sem projeto na raiz) por checks que
-certifiquem a aplicação, seguindo o `fluxo-git.md`.
+Criar do zero um workflow de CI da aplicação (`.github/workflows/ci.yml`) com
+checks que certifiquem o backend e o frontend, seguindo a seção "CI da
+aplicação" do `fluxo-git.md`. Hoje o único workflow é o `fluxo-git.yml`, que
+valida branch, commits e whitespace, mas não compila nem testa a aplicação; ele
+continua como está.
 
 **Critérios de conclusão**
 - [ ] Job de backend: `astral-sh/setup-uv`, `uv sync --frozen`, `ruff check`, `ruff format --check` e pytest (Testcontainers); uma versão de Python só
 - [ ] Job de frontend: `npm ci`, ESLint, `tsc --noEmit`, Vitest e `vite build`
-- [ ] Jobs pulam o trabalho quando o PR não toca o módulo, mas **um check agregador (`CI`) sempre roda** e é o único marcado como obrigatório (regra do `fluxo-git.md`)
-- [ ] `Pipeline_CI.yml` removido
-- [ ] `fluxo-git.md` atualizado na seção "CI da aplicação"; rulesets atualizados com o novo check obrigatório
+- [ ] Jobs pulam o trabalho quando o PR não toca o módulo, mas **um check agregador (`CI`) sempre roda** e falha se algum job de backend ou frontend falhar (regra do `fluxo-git.md`)
+- [ ] Rulesets de `main` e `dev` exigem `Fluxo Git` **e** `CI`; o `Fluxo Git` continua obrigatório
+- [ ] `fluxo-git.md` atualizado na seção "CI da aplicação"; rulesets reaplicados com `scripts/configurar-github.sh`
 
 ---
 
@@ -404,7 +412,7 @@ numa tela só, para não abrir quatro sistemas com o cliente esperando na linha.
 ## P16 · [chore] Schema de ordens de inspeção
 
 **Formulário:** Tarefa técnica · **Tipo:** chore · **Módulo:** backend
-**Milestone:** M2 · **Dev:** B · **Depende de:** P06
+**Milestone:** M2 · **Dev:** B · **Depende de:** P05, P06
 **Branch:** `chore/NN-schema-ordens`
 
 **O que precisa ser feito e por quê?**
@@ -415,9 +423,10 @@ fila, do ciclo das ordens, da Visão 360 e da taxa de acerto.
 - [ ] Migração de `operations.ordens_inspecao` com status, snapshot (score, motivos, energia a recuperar em kWh e R$), inspetor, resultado, tipo de irregularidade, kWh recuperado, motivo de cancelamento, autores e datas
 - [ ] Índice único parcial `(id_uc) WHERE status IN ('ABERTA','EM_CAMPO')`
 - [ ] `operations.ordem_eventos` (ordem, tipo de evento, autor, data, dados)
-- [ ] `operations.inspecoes` no mesmo formato de `analytics.inspecoes_historicas`, com `id_ordem`
-- [ ] View `inspecoes` = histórico + novas, recriada pelo importador após cada carga
+- [ ] `operations.inspecoes` no mesmo formato de `analytics.inspecoes_historicas`, com `id_ordem`; a migração concede `SELECT` nela à role `importador`
+- [ ] View `inspecoes` = histórico + novas, definida em `importador/views.sql` para o importador recriá-la a cada carga (P05)
 - [ ] Teste: duas ordens ativas para a mesma UC → violação do índice
+- [ ] Teste: com uma ordem e uma inspeção nova em `operations`, recarregar a amostra preserva as duas e a view `inspecoes` continua trazendo histórico + novas
 
 ---
 
