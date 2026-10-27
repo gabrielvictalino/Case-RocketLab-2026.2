@@ -175,7 +175,7 @@ Databricks.
 - [ ] `docker compose run importador --origem contracts/samples` carrega a amostra; `--origem <dir>` carrega uma exportação real
 - [ ] Carrega em `analytics_staging` com `COPY` e cria os índices da seção 8
 - [ ] Valida tipos, chaves únicas, integridade (`id_uc` existente em `dim_uc`) e contagens contra o manifesto; em falha, aborta com mensagem clara e a carga anterior continua ativa
-- [ ] Troca `analytics` por `analytics_staging` numa transação: renomeia o schema antigo, promove o novo, recria com `CREATE OR REPLACE VIEW` as views de `importador/views.sql` sobre o schema novo e só então remove o antigo, sem `CASCADE`; se qualquer passo falhar, a transação é desfeita e a carga anterior continua ativa
+- [ ] Troca `analytics` por `analytics_staging` numa transação: renomeia o schema antigo, promove o novo, recria com `CREATE OR REPLACE VIEW` as views de `importador/views.sql` sobre o schema novo, remove com `DROP TABLE` cada tabela do schema antigo e só então remove o schema vazio com `DROP SCHEMA`, nada disso com `CASCADE`; tudo na mesma transação, e se qualquer passo falhar ela é desfeita e a carga anterior continua ativa
 - [ ] `importador/views.sql` começa vazio; a P16 acrescenta a view `inspecoes` e o M3 as views de `ai_read`
 - [ ] Registra a carga em `operations.cargas` e grava a versão no Redis (`versao_carga`)
 - [ ] Rodar duas vezes seguidas não altera ordens, inspeções nem usuários em `operations`; a única mudança é um registro novo em `operations.cargas`

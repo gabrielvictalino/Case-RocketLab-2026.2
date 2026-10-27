@@ -409,8 +409,10 @@ O Databricks não alcança um Postgres local, então a carga é **pull**:
    integridade e contagens contra o manifesto, e cria os índices.
 4. Numa transação, renomeia o `analytics` antigo, promove
    `analytics_staging` a `analytics`, recria com `CREATE OR REPLACE VIEW` as
-   views de `importador/views.sql` sobre o schema novo e só então remove o
-   antigo, sem `CASCADE`. Se algo falhar, a transação é desfeita e a carga
+   views de `importador/views.sql` sobre o schema novo, remove com
+   `DROP TABLE` cada tabela do schema antigo (as views já não dependem delas)
+   e só então remove o schema, já vazio, com `DROP SCHEMA` sem `CASCADE`.
+   Tudo acontece na mesma transação: se algo falhar, ela é desfeita e a carga
    anterior continua ativa.
 5. Registra a carga em `operations.cargas` e grava a nova versão no Redis.
 
