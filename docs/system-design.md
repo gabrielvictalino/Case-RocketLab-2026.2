@@ -373,12 +373,22 @@ separados.
 | Schema | Conteúdo | Escreve | Lê |
 |---|---|---|---|
 | `analytics` | Tabelas do contrato Gold | importador | role `portal` |
-| `operations` | `usuarios`, `ordens_inspecao`, `ordem_eventos`, `inspecoes`, `importacoes`, `agente_auditoria`, `cargas` | role `portal` | role `portal` |
-| `ai_read` | Views sobre `analytics`, sem nome, CPF e endereço | migração | role `ai_read` |
+| `operations` | `usuarios`, `ordens_inspecao`, `ordem_eventos`, `inspecoes`, `importacoes`, `agente_auditoria`, `cargas` | role `portal`; `cargas` pelo importador | role `portal` |
+| `ai_read` | Views sobre `analytics`, sem nome, CPF e endereço | importador, a cada carga | role `ai_read` |
 
 Role `ai_read`: só `SELECT` em `ai_read`, `default_transaction_read_only = on`,
 `statement_timeout = 5s`. A auditoria do agente é gravada pela conexão do
 portal, nunca pela do agente.
+
+Role `importador`: cria e substitui `analytics` e `analytics_staging`, faz
+`INSERT` em `operations.cargas` (criada pelo `init.sql` e depois gerida pelo
+Alembic) e `SELECT` em `operations.inspecoes` (concedido pela migração que
+cria a tabela). Não escreve em nenhuma outra tabela de `operations`.
+
+As views que leem `analytics` (a `inspecoes` e as de `ai_read`) ficam em
+`importador/views.sql` e pertencem à role `importador`. Uma view do Postgres
+aponta para tabelas, não para o nome do schema, então o importador precisa
+recriá-las a cada troca de schema (seção 9).
 
 Índices: unicidade de `(id_uc, competencia)` em
 `uc_consumo_faturamento_mensal`; `id_uc` nas tabelas por UC;
@@ -397,9 +407,17 @@ O Databricks não alcança um Postgres local, então a carga é **pull**:
    (CSVs baixados do Volume ou `contracts/samples/`).
 3. Carrega em `analytics_staging` com `COPY`, valida tipos, unicidade,
    integridade e contagens contra o manifesto, e cria os índices.
-4. Numa transação, troca `analytics` por `analytics_staging`. Se algo
-   falhar, a carga anterior continua ativa. `operations` nunca é tocado.
+4. Numa transação, renomeia o `analytics` antigo, promove
+   `analytics_staging` a `analytics`, recria com `CREATE OR REPLACE VIEW` as
+   views de `importador/views.sql` sobre o schema novo, remove com
+   `DROP TABLE` cada tabela do schema antigo (as views já não dependem delas)
+   e só então remove o schema, já vazio, com `DROP SCHEMA` sem `CASCADE`.
+   Tudo acontece na mesma transação: se algo falhar, ela é desfeita e a carga
+   anterior continua ativa.
 5. Registra a carga em `operations.cargas` e grava a nova versão no Redis.
+
+Fora o registro em `cargas`, a carga não toca `operations`: rodar o
+importador duas vezes seguidas preserva usuários, ordens e inspeções novas.
 
 **Amostra de desenvolvimento**: `contracts/samples/` traz algumas centenas de
 UCs no formato do contrato, com valores coerentes entre as tabelas. Ela é
@@ -447,7 +465,7 @@ fim; até lá, todo usuário logado vê todas as telas.
 .
 ├── data-engineering/
 ├── contracts/              # contrato Gold + samples/
-├── importador/             # carga CSV → Postgres
+├── importador/             # carga CSV → Postgres; views.sql (views sobre analytics)
 ├── backend/
 ├── ai-agent/               # pacote venergy_ai, importado pelo backend
 ├── frontend/
@@ -476,11 +494,20 @@ das roles) ficam só no `.env`.
 
 ### Testes e CI
 
-| Workflow | Gatilho (`paths`) | Conteúdo |
+| Job | Roda quando o PR toca | Conteúdo |
 |---|---|---|
-| `backend.yml` | `backend/**`, `ai-agent/**`, `contracts/**`, `uv.lock` | `ruff`; pytest contra Postgres e Redis (services do job), carregando `contracts/samples/` |
-| `frontend.yml` | `frontend/**` | `eslint`, `tsc --noEmit`, Vitest, `vite build` |
-| `e2e.yml` | PR para `main` | Compose completo + um teste de fumaça com Playwright (login → abrir UC → gerar ordem) |
+| backend | `backend/**`, `ai-agent/**`, `importador/**`, `contracts/**`, `uv.lock` | `ruff`; pytest com Postgres via Testcontainers, carregando `contracts/samples/` |
+| frontend | `frontend/**` | `eslint`, `tsc --noEmit`, Vitest, `vite build` |
+| `CI` (agregador) | sempre | Falha se o job de backend ou de frontend falhou; obrigatório junto com o `Fluxo Git` |
+| e2e | PR para `main` | Compose completo + um teste de fumaça com Playwright (login → abrir UC → gerar ordem) |
+
+Os jobs de módulo pulam o trabalho quando o PR não toca o módulo, mas o
+agregador sempre roda. O `fluxo-git.md` proíbe checks obrigatórios filtrados
+por caminho, que ficariam pendentes em PRs de documentação.
+
+O CI da aplicação fica num workflow próprio (`.github/workflows/ci.yml`). O
+`fluxo-git.yml` continua validando branch, commits e whitespace, e os rulesets
+de `main` e `dev` exigem os dois checks: `Fluxo Git` e `CI`.
 
 Os testes do backend cobrem todas as transições de ordem, a regra de uma
 ordem ativa, a importação parcial, a permissão por cargo e a decomposição da
@@ -492,14 +519,13 @@ percentual. O CI usa uma única versão de Python, a mesma da imagem Docker.
 
 1. **Base**: contrato em `contracts/` e amostra; Compose com Postgres,
    `init.sql` e importador; backend com `/health` e login; Nginx servindo a
-   SPA com a barra de período.
+   SPA com a barra de período; CI de backend e frontend.
 2. **Telas obrigatórias**: Unidade Consumidora → Perdas (fila e ciclo
    completo das ordens) → Receita → Operação → Visão Geral.
 3. **IA**: painel do agente com auditoria; insights da Receita e da Visão
    Geral.
 4. **Redis**: cache dos agregados e dos insights; rate limit.
-5. **CI** de backend e frontend.
-6. **Diferenciais**: testes do backend (D5) → follow-up (D3) → planilha de
+5. **Diferenciais**: testes do backend (D5) → follow-up (D3) → planilha de
    campo (D1) → avaliações (D4) → telas por cargo (D2).
 
 ## 13. Pendências do contrato com o time de dados
