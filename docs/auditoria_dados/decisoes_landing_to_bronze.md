@@ -42,6 +42,8 @@ Com o separador errado, o Spark lia o cabeçalho inteiro como uma coluna só e o
 
 `multiLine` e `escape` ficam ligados em todo CSV. As quatro combinações (sem proteção, só `multiLine`, só `escape`, as duas) deram a mesma contagem de linhas na leitura bruta e nas tabelas geradas na Bronze. Não houve perda nem inflação de linhas. Aspas no meio do campo, como a potência `"5,03"`, não podem virar coluna extra.
 
+Uma aspa sem o par abre o campo até a próxima aspa, e as linhas no meio viram texto desse campo. Se a aspa de fechamento cai na mesma coluna, o registro continua com o número certo de campos e o `FAILFAST` não vê. Antes do `overwrite`, as linhas de dados do texto têm de ser iguais aos registros que o leitor montou. Linha em branco fica de fora da conta do texto. Se os números divergem, a carga para e a tabela atual permanece. Vale para cada CSV de nome fixo e para cada `leituras_*.csv`. Um arquivo que só cresce, com uma linha por registro, continua no aviso da seção 6. Uma fonte com quebra de linha legítima dentro de um campo ficaria de fora desta comparação. Nesta entrega nenhum CSV tem isso.
+
 `sanitize_column_name()` troca ` ,;{}()\n\t=` por `_`. É rede de segurança depois do separador certo. Nesta carga os nomes já eram válidos.
 
 Espaço no começo e no fim do campo é preservado (`ignoreLeadingWhiteSpace` e `ignoreTrailingWhiteSpace` em `false`). O padrão do Spark para CSV já é esse. A opção fica escrita para a decisão aparecer no código.
@@ -62,7 +64,7 @@ O número no código é o tamanho desta entrega. Antes do `overwrite`, ele é co
 
 Menos linhas interrompe a carga. A tabela que já está na Bronze permanece. Um `faturas.csv` cortado não substitui as 2.184.623 linhas.
 
-Mais linhas imprime um aviso e a gravação segue. No jeito 1 o arquivo volta com a história inteira e o mês novo, então crescer é o caminho esperado.
+Mais linhas imprime um aviso e a gravação segue. No jeito 1 o arquivo volta com a história inteira e o mês novo, então crescer é o caminho esperado. No CSV, esse aviso só vale quando cada linha de texto virou um registro. A comparação está na seção 4.
 
 Vale para cada CSV, para o JSON, para cada `leituras_*.csv` com contagem conhecida e para as abas `ago-set`, `out-nov` e `dez`. Um `leituras_*.csv` novo, sem número no código, entra com aviso.
 
@@ -82,6 +84,8 @@ Campo vazio não é linha torta. Com o cabeçalho `id_uc,nome,cidade`, a linha `
 
 Campo a menos é a vírgula que não veio: `UC1,Maria` tem dois pedaços. O leitor não sabe qual coluna faltou. Campo a mais é um pedaço sobrando: `UC1,Maria,Recife,extra`. Os dois interrompem o arquivo inteiro (`FAILFAST`), antes do `overwrite`.
 
+As linhas de texto do arquivo, sem o cabeçalho e sem linha em branco, têm de bater com os registros montados pelo leitor. A comparação roda antes do `overwrite`. Uma aspa solta que engole linhas no meio do arquivo interrompe a carga mesmo que o total ainda fique acima da referência.
+
 Uma linha com a quantidade certa de campos e o valor no lugar errado entra. Isso fica para a Silver.
 
 ### Excel
@@ -94,7 +98,7 @@ Célula vazia vira nulo e a linha entra. Não existe a trava de campo a mais ou 
 
 Um chamado sem fechar faz o Spark criar `_corrupt_record` e seguir. Se essa coluna aparece, a carga para antes do `overwrite`. A contagem poderia fechar e a tabela seria gravada com uma linha vazia e o texto ilegível escondido nessa coluna.
 
-As chaves `protocolo`, `id_uc`, `canal`, `assunto`, `subassunto`, `data_abertura`, `data_fechamento` e `historico` têm de existir e vir preenchidas. `historico` não pode vir vazio. Cada item da lista tem de ter `sequencia`, `data`, `acao` e `canal`. `nota_satisfacao` tem de existir e pode ser nula: a chave está presente e o valor é nulo em 9.566 dos 318.871 chamados. O primeiro caso é o protocolo `AT000000011`, na linha 280 do arquivo. Nenhuma outra chave falta e não há chave extra. A ordem dos nomes dentro do bloco não importa. Chave ou subchave obrigatória faltando interrompe o arquivo inteiro. Um campo novo não rejeita o arquivo, para a Bronze não descartar o que chegou.
+As chaves `protocolo`, `id_uc`, `canal`, `assunto`, `subassunto`, `data_abertura`, `data_fechamento` e `historico` têm de existir e vir preenchidas. `historico` não pode vir vazio. Cada item da lista tem de ter `sequencia`, `data`, `acao` e `canal`. `nota_satisfacao` tem de existir na raiz de cada chamado e pode ser nula: a chave está presente e o valor é nulo em 9.566 dos 318.871 chamados. Uma ocorrência da chave dentro de `historico` não compensa a ausência na raiz de outro chamado. O primeiro caso é o protocolo `AT000000011`, na linha 280 do arquivo. Nenhuma outra chave falta e não há chave extra. A ordem dos nomes dentro do bloco não importa. Chave ou subchave obrigatória faltando interrompe o arquivo inteiro. Um campo novo não rejeita o arquivo, para a Bronze não descartar o que chegou.
 
 ## 8. `historico` continua aninhado
 
@@ -138,7 +142,7 @@ Os relatórios de auditoria da equipe estão nesta mesma pasta. As consultas de 
 
 A célula unificada foi executada no Databricks. A Bronze ficou com 8 tabelas.
 
-- Teste 1: nos 10 CSVs, as quatro opções de leitura deram a mesma contagem, e a contagem do texto puro fecha com a Bronze. As leituras fecham por arquivo: 271.744, 544.546, 545.652, 546.908 e 273.618.
+- Teste 1: nos 10 CSVs, as quatro opções de leitura deram a mesma contagem, e a contagem do texto puro fecha com a Bronze. As leituras fecham por arquivo: 271.744, 544.546, 545.652, 546.908 e 273.618. A comparação que interrompe a carga quando texto e leitor divergem entrou depois dessa execução. Nesta entrega os números já batiam, então ela não mudaria o resultado.
 - Teste 2: as 8 tabelas têm as colunas de negócio, `source_file` e `ingestion_datetime`. `tb_leituras` ficou com 2.182.468 linhas. `historico` está como array. Nulos acima de 10%: `tb_medidores.data_retirada` 61,4%, `tb_medidores.data_ultima_manutencao` 100%, `tb_inspecoes.tipo_irregularidade` 31,7%.
 - Teste 3: `tb_inspecoes` com 1.389 linhas. Por `sheet`: `ago-set` 511, `out-nov` 495, `dez` 383. Nenhuma duplicata de `id_inspecao`.
 
