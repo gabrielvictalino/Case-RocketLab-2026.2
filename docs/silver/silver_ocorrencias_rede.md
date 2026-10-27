@@ -3,10 +3,10 @@
 | | |
 | :--- | :--- |
 | **Notebook** | `data-engineering/bronze_to_silver/bronze-to-silver-ocorrencias-rede.ipynb` |
-| **Entrada** | `venergy.bronze.ocorrencias_rede` (180.000 linhas, todas as colunas em texto) |
-| **Saída** | `venergy.silver.ocorrencias_rede` (180.000 linhas, tipada e padronizada) |
+| **Entrada** | `` `v-energy`.bronze.tb_ocorrencias_rede `` (180.000 linhas, todas as colunas em texto) |
+| **Saída** | `` `v-energy`.silver.tb_ocorrencias_rede `` (180.000 linhas, tipada e padronizada) |
 | **Grão** | Uma linha por ocorrência (`id_ocorrencia` único). Pela definição do case, cada registro é **uma UC interrompida** |
-| **Depende de** | Bronze de ocorrências (PR #9) |
+| **Depende de** | Bronze unificada (`Landing_to_Bronze.ipynb`, PR #14) |
 | **Usada por** | Gold de continuidade (DEC/FEC por alimentador ao longo do tempo) e visão 360 da UC ("a rua dele teve falta de luz?") |
 | **Auditoria de origem** | `docs/auditoria_dados/auditoria_ocorrencias_rede.md` |
 
@@ -112,7 +112,7 @@ O notebook também imprime os totais de sobreposição (331 ocorrências e 43.56
 
 ---
 
-## 4. Dicionário de dados: `venergy.silver.ocorrencias_rede`
+## 4. Dicionário de dados: `` `v-energy`.silver.tb_ocorrencias_rede ``
 
 | Coluna | Tipo | Nulo? | Descrição | Exemplo |
 | :--- | :--- | :---: | :--- | :--- |
@@ -155,21 +155,21 @@ As descrições também estão gravadas como comentários das colunas no Unity C
 
 ### 6.1. Pré-requisito
 ```sql
-SELECT COUNT(*) FROM venergy.bronze.ocorrencias_rede;  -- esperado: 180000
+SELECT COUNT(*) FROM `v-energy`.bronze.tb_ocorrencias_rede;  -- esperado: 180000
 ```
-Se a tabela não existir, rode antes `data-engineering/landing_to_bronze/landing-to-bronze-ocorrencias-rede.ipynb`.
+Se a tabela não existir, rode antes a Bronze unificada, `data-engineering/Landing_to_Bronze.ipynb` (PR #14).
 
 ### 6.2. Rodar o notebook
 1. **Workspace → (sua pasta) → ⋮ → Import → File** e escolha `bronze-to-silver-ocorrencias-rede.ipynb` (ou abra pelo *Git folder*).
 2. **Connect → Serverless**.
-3. **Run all**. O schema `venergy.silver` é criado se ainda não existir.
+3. **Run all**. O schema `` `v-energy`.silver `` é criado se ainda não existir.
 
 ### 6.3. O que conferir
 * **Tabela de validação:** 12 regras com `violacoes = 0` e `status = OK`.
 * **Resumo:** `Bronze: 180000 linhas | Silver: 180000 linhas | duplicatas removidas: 0`.
 * **Totais:** `Sobrepostas: 331 | minutos somados: 21392087 | minutos efetivos: 21348526 | em dobro: 43561` e `Ocorrências em mês atípico: 12836`.
 * **Meses atípicos:** os 3 alimentadores de 2025-07, com contagem e mediana.
-* **Confirmação final:** `OK: 180000 ocorrências carregadas em venergy.silver.ocorrencias_rede`.
+* **Confirmação final:** `` OK: 180000 ocorrências carregadas em `v-energy`.silver.tb_ocorrencias_rede ``.
 * **Evidências:**
   * causa Bronze → Silver;
   * duração com e sem sufixo;
@@ -189,7 +189,7 @@ A mensagem lista cada regra crítica violada e a quantidade de linhas, e logo ac
 
 ### 6.5. No Workflow (Job)
 ```text
-landing_to_bronze_ocorrencias_rede ──► bronze_to_silver_ocorrencias_rede ──► (Gold de DEC/FEC)
+landing_to_bronze ──► bronze_to_silver_ocorrencias_rede ──► (Gold de DEC/FEC)
 ```
 No Databricks: **Jobs & Pipelines → Create → Job**. Adicione uma tarefa *Notebook* por notebook e marque **Depends on**. O notebook não tem parâmetros.
 
@@ -209,7 +209,7 @@ SELECT alimentador, ano_mes,
        SUM(duracao_efetiva_min) / 60.0                       AS horas_sem_energia,
        COUNT_IF(NOT flag_sobreposicao)                       AS interrupcoes,
        BOOL_OR(flag_mes_atipico_alimentador)                 AS mes_atipico
-FROM venergy.silver.ocorrencias_rede
+FROM `v-energy`.silver.tb_ocorrencias_rede
 GROUP BY alimentador, ano_mes;
 ```
 
@@ -242,7 +242,7 @@ O notebook foi executado sem modificações num Spark 4.0.1 + Delta 4.0.0 local 
   * data impossível `2022-13-01`.
 * **Alimentador novo ou desativado:** simulando o `ALM-CAM-003` só a partir de 2026-01 e o `ALM-REC-014` só até 2022-12, só os 3 meses de 2025-07 continuam marcados. Sem o limite de período, 6 meses normais de cada um seriam marcados.
 
-**Databricks (Serverless):** o notebook também foi executado no Unity Catalog (`venergy.silver`), e a tabela de validação, os totais e as evidências deram os mesmos números do teste local.
+**Databricks (Serverless):** o notebook também foi executado no Unity Catalog (na época em `venergy.silver`, antes da troca para os nomes da Bronze unificada), e a tabela de validação, os totais e as evidências deram os mesmos números do teste local.
 
 ---
 
