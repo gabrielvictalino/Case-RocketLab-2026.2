@@ -3,7 +3,7 @@
 **Escopo da Análise:** Auditoria estrutural, tipológica, semântica e de regras de negócio da base de interrupções de fornecimento, feita sobre o bruto (todas as colunas lidas como texto, sem nenhuma conversão).
 **Volume Total:** 180.000 registros em um único arquivo CSV. Cada registro corresponde a **uma unidade consumidora interrompida** (definição do case).
 **Período Coberto nos Dados:** `data_abertura` de 2022-07-01 a 2026-06-30.
-**Destino na Bronze:** `venergy.bronze.ocorrencias_rede` (conteúdo preservado, mais `source_file` e `ingestion_datetime`).
+**Destino na Bronze:** `` `v-energy`.bronze.tb_ocorrencias_rede `` (conteúdo preservado, mais `source_file` e `ingestion_datetime`).
 
 ---
 
@@ -132,7 +132,7 @@ Os dois meses têm ~5.300 ocorrências (5.317 e 5.302, somando 10.619). O que é
 
 ## 5. Plano Recomendado de Saneamento (Silver)
 
-Recomenda-se aplicar o seguinte pipeline sobre `venergy.bronze.ocorrencias_rede`, em ordem:
+Recomenda-se aplicar o seguinte pipeline sobre `` `v-energy`.bronze.tb_ocorrencias_rede ``, em ordem:
 
 1. **Tipar as datas:** `data_abertura` e `data_encerramento` → `TIMESTAMP` (formato único, sem tratamento prévio).
 2. **Tipar `duracao_min`:** remover o sufixo `" min"` (`regexp_replace(duracao_min, ' min$', '')`) **antes** de converter para inteiro. Validar que nenhum valor fica nulo e que a duração é igual a `data_encerramento − data_abertura` em 100% das linhas.

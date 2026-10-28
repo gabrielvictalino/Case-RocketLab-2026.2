@@ -1,5 +1,5 @@
 # Relatório Técnico de Auditoria: `unidades_consumidoras`
-**Camada de Origem:** Landing / Bronze (`venergy.bronze.bronze_unidades_consumidoras`)
+**Camada de Origem:** Landing / Bronze (`` `v-energy`.bronze.tb_unidades_consumidoras ``)
 **Data da Auditoria:** 19/10/2026
 
 ---

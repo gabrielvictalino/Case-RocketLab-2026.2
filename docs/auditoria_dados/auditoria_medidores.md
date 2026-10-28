@@ -3,7 +3,7 @@
 **Escopo da Análise:** Auditoria estrutural, tipológica, semântica e de regras de negócio do parque de medidores, feita sobre o bruto (todas as colunas lidas como texto, sem nenhuma conversão).
 **Volume Total:** 51.812 registros em um único arquivo CSV.
 **Período Coberto nos Dados:** `data_instalacao` de 1997-11-10 a 2026-03-25; `data_retirada` de 2025-09-05 a 2026-03-25.
-**Destino na Bronze:** `venergy.bronze.medidores` (conteúdo preservado, mais `source_file` e `ingestion_datetime`).
+**Destino na Bronze:** `` `v-energy`.bronze.tb_medidores `` (conteúdo preservado, mais `source_file` e `ingestion_datetime`).
 
 ---
 
@@ -132,7 +132,7 @@ Do ponto de vista de qualidade, a campanha é coerente (datas, status e leituras
 
 ## 5. Plano Recomendado de Saneamento (Silver)
 
-Recomenda-se aplicar o seguinte pipeline sobre `venergy.bronze.medidores`, em ordem:
+Recomenda-se aplicar o seguinte pipeline sobre `` `v-energy`.bronze.tb_medidores ``, em ordem:
 
 1. **Remover duplicatas exatas:** `DISTINCT` sobre as 8 colunas de negócio (−513 linhas → 51.299). Validar em seguida que cada `id_medidor` é único e que cada UC tem exatamente 1 medidor `ATIVO`.
 2. **Normalizar `modelo`:** `trim`. Validar que restam 9 valores distintos.

@@ -3,7 +3,7 @@
 **Escopo da Análise:** Auditoria estrutural, tipológica, semântica e de regras de negócio da base de leituras de medidores, feita sobre o bruto (todas as colunas lidas como texto, sem nenhuma conversão).
 **Volume Total:** 2.182.468 registros distribuídos em 5 arquivos CSV particionados por ano.
 **Período Coberto nos Dados:** `mes_referencia` de 2022-07 a 2026-06.
-**Destino na Bronze:** `venergy.bronze.leituras` (conteúdo preservado, mais `source_file` e `ingestion_datetime`).
+**Destino na Bronze:** `` `v-energy`.bronze.tb_leituras `` (conteúdo preservado, mais `source_file` e `ingestion_datetime`).
 
 ---
 
@@ -180,7 +180,7 @@ Outras 359 leituras têm o mesmo padrão, mas o módulo difere de `atual − ant
 
 ## 5. Plano Recomendado de Saneamento (Silver)
 
-Recomenda-se aplicar o seguinte pipeline sobre `venergy.bronze.leituras`, em ordem:
+Recomenda-se aplicar o seguinte pipeline sobre `` `v-energy`.bronze.tb_leituras ``, em ordem:
 
 1. **Remover duplicatas exatas:** `DISTINCT` sobre as 9 colunas de negócio (−21.523 linhas).
 2. **Descartar clones `LTX`:** manter apenas as leituras cujo `id_medidor` existe em `medidores` (−8.609 linhas). Depois dos passos 1 e 2, validar a unicidade do par (`id_uc`, `mes_referencia`): o esperado é 2.152.336 linhas.
