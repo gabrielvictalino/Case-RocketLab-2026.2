@@ -1,0 +1,70 @@
+{
+  "version": "0.1.0-provisional",
+  "status": "provisorio-nao-aprovado",
+  "table": "continuidade_alimentador_mensal",
+  "grain": "alimentador × competência",
+  "primary_key": [
+    "alimentador",
+    "competencia"
+  ],
+  "columns": {
+    "alimentador": {
+      "type": "text",
+      "nullable": false,
+      "unit": "identificador/texto",
+      "pattern": "^ALM-[A-Z]{3}-\\d{3}$",
+      "references": [
+        "dim_alimentador",
+        "alimentador"
+      ]
+    },
+    "competencia": {
+      "type": "date",
+      "nullable": false,
+      "unit": "data ISO",
+      "month": true
+    },
+    "numero_ucs": {
+      "type": "integer",
+      "nullable": false,
+      "unit": "UCs",
+      "minimum": 1
+    },
+    "chi_horas": {
+      "type": "numeric(18,2)",
+      "nullable": false,
+      "unit": "UC × hora",
+      "minimum": 0
+    },
+    "interrupcoes": {
+      "type": "integer",
+      "nullable": false,
+      "unit": "interrupções",
+      "minimum": 0
+    },
+    "dec": {
+      "type": "numeric(18,2)",
+      "nullable": false,
+      "unit": "horas/UC",
+      "minimum": 0
+    },
+    "fec": {
+      "type": "numeric(18,2)",
+      "nullable": false,
+      "unit": "interrupções/UC",
+      "minimum": 0
+    },
+    "causa": {
+      "type": "text",
+      "nullable": false,
+      "unit": "identificador/texto"
+    },
+    "flag_evento_atipico": {
+      "type": "boolean",
+      "nullable": false,
+      "unit": "flag"
+    }
+  },
+  "description": "Contrato local sintético derivado do system design; sujeito à validação do time de dados.",
+  "control_totals": []
+}

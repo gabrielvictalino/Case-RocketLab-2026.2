@@ -1,0 +1,49 @@
+{
+  "version": "0.1.0-provisional",
+  "status": "provisorio-nao-aprovado",
+  "table": "fila_inspecao",
+  "grain": "UC candidata",
+  "primary_key": [
+    "id_uc"
+  ],
+  "columns": {
+    "id_uc": {
+      "type": "text",
+      "nullable": false,
+      "unit": "identificador/texto",
+      "pattern": "^UC\\d{6}$",
+      "references": [
+        "dim_uc",
+        "id_uc"
+      ]
+    },
+    "score": {
+      "type": "numeric(12,4)",
+      "nullable": false,
+      "unit": "score sintético",
+      "minimum": 0
+    },
+    "motivos": {
+      "type": "jsonb",
+      "nullable": false,
+      "unit": "lista de sinais sintéticos"
+    },
+    "energia_recuperar_kwh": {
+      "type": "numeric(18,2)",
+      "nullable": false,
+      "unit": "kWh",
+      "minimum": 0
+    },
+    "energia_recuperar_reais": {
+      "type": "numeric(18,2)",
+      "nullable": false,
+      "unit": "R$",
+      "minimum": 0
+    }
+  },
+  "description": "Contrato local sintético derivado do system design; sujeito à validação do time de dados.",
+  "control_totals": [
+    "energia_recuperar_kwh",
+    "energia_recuperar_reais"
+  ]
+}

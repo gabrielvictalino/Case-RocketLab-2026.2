@@ -1,0 +1,99 @@
+{
+  "batch_id": "amostra-sintetica-v1",
+  "contract_version": "0.1.0-provisional",
+  "synthetic": true,
+  "period": {
+    "start": "2022-07",
+    "end": "2026-06"
+  },
+  "tables": {
+    "atendimentos": {
+      "file": "atendimentos.csv",
+      "rows": 2,
+      "sha256": "29bc82d4bcc758de6d2e16a27fd4390d5ca8b3b6f563db673cfb4d2113f0d5d4",
+      "totals": {}
+    },
+    "atendimentos_historico": {
+      "file": "atendimentos_historico.csv",
+      "rows": 2,
+      "sha256": "86b8f73d265ebb2624bfbb30e5ea323bf117839ea77ca297da01075f8a006d12",
+      "totals": {}
+    },
+    "continuidade_alimentador_mensal": {
+      "file": "continuidade_alimentador_mensal.csv",
+      "rows": 288,
+      "sha256": "2ce683e5fd72687b4c6b63e961d0127a8589a868b5c1e9743f47aaae588baaed",
+      "totals": {}
+    },
+    "dim_alimentador": {
+      "file": "dim_alimentador.csv",
+      "rows": 6,
+      "sha256": "46aaa4a3b81cc1e6ba526d3db49a97921b5a66744e7d366ed88c93b066263cc6",
+      "totals": {}
+    },
+    "dim_uc": {
+      "file": "dim_uc.csv",
+      "rows": 300,
+      "sha256": "f66359a0f1a68647c0ca199911cf6b24dcfa4a51b80b7b4ba3548eba297a265a",
+      "totals": {}
+    },
+    "fila_inspecao": {
+      "file": "fila_inspecao.csv",
+      "rows": 12,
+      "sha256": "04437102a192f16214a849f06ed4dcfbfe8607d603b2e22f4a10b4895ea79c6b",
+      "totals": {
+        "energia_recuperar_kwh": "1266",
+        "energia_recuperar_reais": "1026"
+      }
+    },
+    "gd_uc": {
+      "file": "gd_uc.csv",
+      "rows": 1,
+      "sha256": "e39f8d01c5fff1feea3fa5262636bb4806ed1979d96c2919e6ea2f5867f03d6b",
+      "totals": {}
+    },
+    "inspecoes_historicas": {
+      "file": "inspecoes_historicas.csv",
+      "rows": 2,
+      "sha256": "75321d4f74808cc8b3bcff3986e085931e93d5255e643f181d2c87360a0ac54c",
+      "totals": {
+        "kwh_recuperado": "100"
+      }
+    },
+    "medidores_historico": {
+      "file": "medidores_historico.csv",
+      "rows": 301,
+      "sha256": "e72a3ca3a5da3e26ff42467895a230bea434cb13979757061ca8d13d69b3d438",
+      "totals": {}
+    },
+    "ocorrencias_uc": {
+      "file": "ocorrencias_uc.csv",
+      "rows": 288,
+      "sha256": "d585adf5195dacbf82b19411a0b053cf3593a90b3a129b6b6dafd47db9ca5a8a",
+      "totals": {
+        "duracao_min": "37860",
+        "duracao_efetiva_min": "37860"
+      }
+    },
+    "receita_volume_mensal": {
+      "file": "receita_volume_mensal.csv",
+      "rows": 1277,
+      "sha256": "d4bb02cba854476f3d16e3fdd3258f20f2b4d92e58bfc7c8c6fed4ebeb4fe580",
+      "totals": {
+        "volume_faturado_kwh": "1721480",
+        "receita": "1294533.40",
+        "receita_arrecadada": "1294262.20"
+      }
+    },
+    "uc_consumo_faturamento_mensal": {
+      "file": "uc_consumo_faturamento_mensal.csv",
+      "rows": 14364,
+      "sha256": "55acee5a6f7f76608b2febcedbf81ab41fb0849375f40fddc6a16a5600a16a49",
+      "totals": {
+        "volume_faturado_kwh": "1721480",
+        "valor_total": "1294533.40",
+        "valor_arrecadado": "1294262.20"
+      }
+    }
+  }
+}

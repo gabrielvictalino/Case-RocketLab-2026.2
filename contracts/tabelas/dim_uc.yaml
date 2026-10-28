@@ -1,0 +1,76 @@
+{
+  "version": "0.1.0-provisional",
+  "status": "provisorio-nao-aprovado",
+  "table": "dim_uc",
+  "grain": "UC",
+  "primary_key": [
+    "id_uc"
+  ],
+  "columns": {
+    "id_uc": {
+      "type": "text",
+      "nullable": false,
+      "unit": "identificador/texto",
+      "pattern": "^UC\\d{6}$"
+    },
+    "titular": {
+      "type": "text",
+      "nullable": false,
+      "unit": "identificador/texto"
+    },
+    "documento_mascarado": {
+      "type": "text",
+      "nullable": false,
+      "unit": "identificador/texto"
+    },
+    "endereco": {
+      "type": "text",
+      "nullable": false,
+      "unit": "identificador/texto"
+    },
+    "municipio": {
+      "type": "text",
+      "nullable": false,
+      "unit": "identificador/texto"
+    },
+    "bairro": {
+      "type": "text",
+      "nullable": false,
+      "unit": "identificador/texto"
+    },
+    "classe": {
+      "type": "text",
+      "nullable": false,
+      "unit": "identificador/texto",
+      "enum": [
+        "Residencial",
+        "Comercial",
+        "Industrial",
+        "Rural",
+        "Poder Público"
+      ]
+    },
+    "alimentador": {
+      "type": "text",
+      "nullable": false,
+      "unit": "identificador/texto",
+      "pattern": "^ALM-[A-Z]{3}-\\d{3}$",
+      "references": [
+        "dim_alimentador",
+        "alimentador"
+      ]
+    },
+    "flag_gd": {
+      "type": "boolean",
+      "nullable": false,
+      "unit": "flag"
+    },
+    "flag_irregularidade_confirmada": {
+      "type": "boolean",
+      "nullable": false,
+      "unit": "flag"
+    }
+  },
+  "description": "Contrato local sintético derivado do system design; sujeito à validação do time de dados.",
+  "control_totals": []
+}

@@ -1,0 +1,81 @@
+name: venergy
+x-python: &python
+  build:
+    context: .
+    dockerfile: backend/Dockerfile
+  image: venergy-backend:local
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-venergy}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Copie .env.example para .env}
+      PORTAL_ROLE_PASSWORD: ${PORTAL_ROLE_PASSWORD:?Defina PORTAL_ROLE_PASSWORD}
+      AI_READ_ROLE_PASSWORD: ${AI_READ_ROLE_PASSWORD:?Defina AI_READ_ROLE_PASSWORD}
+      IMPORTADOR_ROLE_PASSWORD: ${IMPORTADOR_ROLE_PASSWORD:?Defina IMPORTADOR_ROLE_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sh:/docker-entrypoint-initdb.d/10-init.sh:ro
+      - ./infra/postgres/init.sql:/opt/venergy/init.sql:ro
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  redis:
+    image: redis:7-alpine
+    command: [redis-server, --appendonly, 'yes']
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  backend:
+    <<: *python
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      DATABASE_URL_PORTAL: postgresql+asyncpg://portal:${PORTAL_ROLE_PASSWORD}@postgres:5432/${POSTGRES_DB:-venergy}
+      DATABASE_URL_AI: postgresql+asyncpg://ai_read:${AI_READ_ROLE_PASSWORD}@postgres:5432/${POSTGRES_DB:-venergy}
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:?Defina JWT_SECRET}
+      JWT_EXPIRATION_HOURS: ${JWT_EXPIRATION_HOURS:-8}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, 'import urllib.request; urllib.request.urlopen("http://localhost:8000/api/v1/health")']
+      interval: 10s
+      timeout: 5s
+      retries: 6
+  migracoes:
+    <<: *python
+    profiles: [tools]
+    environment:
+      DATABASE_URL_MIGRATIONS: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-venergy}
+    command: [alembic, -c, backend/alembic.ini, upgrade, head]
+    depends_on:
+      postgres:
+        condition: service_healthy
+  importador:
+    <<: *python
+    profiles: [carga]
+    environment:
+      DATABASE_URL_IMPORTADOR: postgresql://importador:${IMPORTADOR_ROLE_PASSWORD}@postgres:5432/${POSTGRES_DB:-venergy}
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./contracts:/app/contracts:ro
+    entrypoint: [importador]
+    command: [--origem, contracts/samples]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+volumes:
+  postgres_data:
+  redis_data:

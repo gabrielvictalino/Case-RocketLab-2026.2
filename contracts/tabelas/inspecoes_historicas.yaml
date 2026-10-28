@@ -1,0 +1,62 @@
+{
+  "version": "0.1.0-provisional",
+  "status": "provisorio-nao-aprovado",
+  "table": "inspecoes_historicas",
+  "grain": "inspeção",
+  "primary_key": [
+    "id_inspecao"
+  ],
+  "columns": {
+    "id_inspecao": {
+      "type": "text",
+      "nullable": false,
+      "unit": "identificador/texto",
+      "pattern": "^IN\\d{7}$"
+    },
+    "id_uc": {
+      "type": "text",
+      "nullable": false,
+      "unit": "identificador/texto",
+      "pattern": "^UC\\d{6}$",
+      "references": [
+        "dim_uc",
+        "id_uc"
+      ]
+    },
+    "data": {
+      "type": "date",
+      "nullable": false,
+      "unit": "data ISO"
+    },
+    "inspetor": {
+      "type": "text",
+      "nullable": false,
+      "unit": "identificador/texto",
+      "pattern": "^INSP-(00[1-9]|0[1-3][0-9]|040)$"
+    },
+    "resultado": {
+      "type": "text",
+      "nullable": false,
+      "unit": "identificador/texto",
+      "enum": [
+        "IRREGULARIDADE CONFIRMADA",
+        "SEM IRREGULARIDADE"
+      ]
+    },
+    "tipo_irregularidade": {
+      "type": "text",
+      "nullable": true,
+      "unit": "identificador/texto"
+    },
+    "kwh_recuperado": {
+      "type": "numeric(18,2)",
+      "nullable": false,
+      "unit": "kWh",
+      "minimum": 0
+    }
+  },
+  "description": "Contrato local sintético derivado do system design; sujeito à validação do time de dados.",
+  "control_totals": [
+    "kwh_recuperado"
+  ]
+}

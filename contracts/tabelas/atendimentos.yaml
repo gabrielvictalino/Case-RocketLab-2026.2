@@ -1,0 +1,50 @@
+{
+  "version": "0.1.0-provisional",
+  "status": "provisorio-nao-aprovado",
+  "table": "atendimentos",
+  "grain": "protocolo",
+  "primary_key": [
+    "protocolo"
+  ],
+  "columns": {
+    "protocolo": {
+      "type": "text",
+      "nullable": false,
+      "unit": "identificador/texto"
+    },
+    "id_uc": {
+      "type": "text",
+      "nullable": false,
+      "unit": "identificador/texto",
+      "pattern": "^UC\\d{6}$",
+      "references": [
+        "dim_uc",
+        "id_uc"
+      ]
+    },
+    "aberto_em": {
+      "type": "timestamp",
+      "nullable": false,
+      "unit": "data-hora local sem fuso"
+    },
+    "assunto": {
+      "type": "text",
+      "nullable": false,
+      "unit": "identificador/texto"
+    },
+    "status": {
+      "type": "text",
+      "nullable": false,
+      "unit": "identificador/texto"
+    },
+    "nota": {
+      "type": "integer",
+      "nullable": true,
+      "unit": "nota",
+      "minimum": 0,
+      "maximum": 10
+    }
+  },
+  "description": "Contrato local sintético derivado do system design; sujeito à validação do time de dados.",
+  "control_totals": []
+}
