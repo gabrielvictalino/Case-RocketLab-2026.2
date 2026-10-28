@@ -92,7 +92,7 @@ Uma linha com a quantidade certa de campos e o valor no lugar errado entra. Isso
 
 A aba só entra se o cabeçalho for exatamente `id_inspecao`, `id_uc`, `data`, `inspetor`, `resultado`, `tipo_irregularidade`, `kwh_recuperado`, nessa ordem. As três abas deste arquivo já têm essa lista. Aba de capa fica de fora. Se `ago-set`, `out-nov` ou `dez` vier com outro cabeçalho, a carga de `inspecoes.xlsx` para.
 
-Célula vazia vira nulo e a linha entra. Não existe a trava de campo a mais ou a menos do CSV. Uma coluna a mais muda o cabeçalho e cai na trava do cabeçalho.
+Célula vazia vira nulo e a linha entra. O texto `NA`, `NULL` ou `NaN` permanece texto. Não existe a trava de campo a mais ou a menos do CSV. Uma coluna a mais muda o cabeçalho e cai na trava do cabeçalho.
 
 ### JSON
 
