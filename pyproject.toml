@@ -1,0 +1,33 @@
+[project]
+name = "case-rocketlab-2026-2"
+version = "0.1.0"
+description = "Projeto V-Energy do case RocketLab 2026.2"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = []
+
+[tool.uv.workspace]
+members = ["backend", "ai-agent", "importador"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "ruff>=0.17.3",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.format]
+quote-style = "single"
+docstring-code-format = true
+
+[tool.ruff.lint]
+select = ["E", "F"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.uv]
+package = false
