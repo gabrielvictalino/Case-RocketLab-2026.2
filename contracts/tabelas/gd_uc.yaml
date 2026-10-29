@@ -1,0 +1,27 @@
+version: 0.2.0-provisional
+status: provisorio-nao-aprovado
+table: gd_uc
+grain: UC com GD
+primary_key:
+- id_uc
+columns:
+  id_uc:
+    type: text
+    nullable: false
+    unit: identificador/texto
+    pattern: ^UC\d{6}$
+    references:
+    - dim_uc
+    - id_uc
+  potencia_kw:
+    type: numeric(18,2)
+    nullable: false
+    unit: kW
+    minimum: 0
+  data_conexao:
+    type: date
+    nullable: false
+    unit: data ISO
+description: Contrato local sintético derivado do system design; sujeito à validação
+  do time de dados.
+control_totals: []

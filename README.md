@@ -12,4 +12,6 @@ configuração na `main`, execute `bash scripts/configurar-github.sh` com GitHub
 autenticado como administrador. Os JSONs em `.github/rulesets/` não ativam regras
 por conta própria.
 
-Build, lint e testes da aplicação devem ser definidos quando a stack for adicionada.
+Backend, importador, contratos sintéticos e infraestrutura local estão descritos
+em [backend/README.md](backend/README.md). As pendências para a Gold real estão em
+[docs/backend-pendencias.md](docs/backend-pendencias.md).

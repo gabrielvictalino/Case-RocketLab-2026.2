@@ -3,7 +3,7 @@ name = "case-rocketlab-2026-2"
 version = "0.1.0"
 description = "Projeto V-Energy do case RocketLab 2026.2"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.12,<3.13"
 dependencies = []
 
 [tool.uv.workspace]
@@ -11,13 +11,17 @@ members = ["backend", "ai-agent", "importador"]
 
 [dependency-groups]
 dev = [
-    "pytest>=9.2.0",
-    "ruff>=0.17.3",
+    "pytest>=8.3,<10",
+    "pytest-asyncio>=0.25,<2",
+    "httpx>=0.28,<1",
+    "testcontainers[postgres,redis]>=4.10,<5",
+    "psycopg[binary]>=3.2,<4",
+    "ruff>=0.11,<1",
 ]
 
 [tool.ruff]
 line-length = 100
-target-version = "py314"
+target-version = "py312"
 
 [tool.ruff.format]
 quote-style = "single"
@@ -31,3 +35,10 @@ select = ["E", "F"]
 
 [tool.uv]
 package = false
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests", "importador/tests", "tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+markers = ["integration: PostgreSQL 17 e Redis 7 reais via Testcontainers"]

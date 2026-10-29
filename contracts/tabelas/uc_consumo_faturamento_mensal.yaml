@@ -1,0 +1,99 @@
+version: 0.2.0-provisional
+status: provisorio-nao-aprovado
+table: uc_consumo_faturamento_mensal
+grain: UC × competência
+primary_key:
+- id_uc
+- competencia
+columns:
+  id_uc:
+    type: text
+    nullable: false
+    unit: identificador/texto
+    pattern: ^UC\d{6}$
+    references:
+    - dim_uc
+    - id_uc
+  competencia:
+    type: date
+    nullable: false
+    unit: data ISO
+    month: true
+  consumo_kwh_original:
+    type: numeric(18,2)
+    nullable: false
+    unit: kWh
+  consumo_kwh_analitico:
+    type: numeric(18,2)
+    nullable: false
+    unit: kWh
+    minimum: 0
+  metodo_consumo:
+    type: text
+    nullable: false
+    unit: identificador/texto
+  tipo_leitura:
+    type: text
+    nullable: false
+    unit: identificador/texto
+    enum:
+    - REAL
+    - ESTIMADA
+  flag_troca_medidor:
+    type: boolean
+    nullable: false
+    unit: flag
+  id_fatura:
+    type: text
+    nullable: true
+    unit: identificador/texto
+  volume_faturado_kwh:
+    type: numeric(18,2)
+    nullable: false
+    unit: kWh
+    minimum: 0
+  valor_total:
+    type: numeric(18,2)
+    nullable: false
+    unit: R$
+    minimum: 0
+  valor_arrecadado:
+    type: numeric(18,2)
+    nullable: false
+    unit: R$
+    minimum: 0
+  tarifa_base:
+    type: numeric(18,6)
+    nullable: false
+    unit: R$/kWh
+    minimum: 0
+  adicional_bandeira:
+    type: numeric(18,6)
+    nullable: false
+    unit: R$/kWh
+    minimum: 0
+  bandeira:
+    type: text
+    nullable: false
+    unit: identificador/texto
+  status_pagamento:
+    type: text
+    nullable: false
+    unit: identificador/texto
+    enum:
+    - PAGA
+    - ABERTA
+  grupo_uc:
+    type: text
+    nullable: false
+    unit: identificador/texto
+    enum:
+    - GD
+    - IRREGULARIDADE_CONFIRMADA
+    - DEMAIS
+description: Contrato local sintético derivado do system design; sujeito à validação
+  do time de dados.
+control_totals:
+- volume_faturado_kwh
+- valor_total
+- valor_arrecadado

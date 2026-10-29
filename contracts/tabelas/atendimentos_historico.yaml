@@ -1,0 +1,31 @@
+version: 0.2.0-provisional
+status: provisorio-nao-aprovado
+table: atendimentos_historico
+grain: protocolo × sequência
+primary_key:
+- protocolo
+- sequencia
+columns:
+  protocolo:
+    type: text
+    nullable: false
+    unit: identificador/texto
+    references:
+    - atendimentos
+    - protocolo
+  sequencia:
+    type: integer
+    nullable: false
+    unit: sequência
+    minimum: 1
+  data:
+    type: timestamp
+    nullable: false
+    unit: data-hora local sem fuso
+  descricao:
+    type: text
+    nullable: false
+    unit: identificador/texto
+description: Contrato local sintético derivado do system design; sujeito à validação
+  do time de dados.
+control_totals: []

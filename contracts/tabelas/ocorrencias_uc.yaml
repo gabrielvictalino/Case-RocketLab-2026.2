@@ -1,0 +1,58 @@
+version: 0.2.0-provisional
+status: provisorio-nao-aprovado
+table: ocorrencias_uc
+grain: ocorrência por UC
+primary_key:
+- id_ocorrencia
+columns:
+  id_ocorrencia:
+    type: text
+    nullable: false
+    unit: identificador/texto
+  id_uc:
+    type: text
+    nullable: false
+    unit: identificador/texto
+    pattern: ^UC\d{6}$
+    references:
+    - dim_uc
+    - id_uc
+  alimentador:
+    type: text
+    nullable: false
+    unit: identificador/texto
+    pattern: ^ALM-[A-Z]{3}-\d{3}$
+    references:
+    - dim_alimentador
+    - alimentador
+  data_abertura:
+    type: timestamp
+    nullable: false
+    unit: data-hora local sem fuso
+  data_encerramento:
+    type: timestamp
+    nullable: false
+    unit: data-hora local sem fuso
+  duracao_min:
+    type: numeric(18,2)
+    nullable: false
+    unit: min
+    minimum: 0
+  duracao_efetiva_min:
+    type: numeric(18,2)
+    nullable: false
+    unit: min
+    minimum: 0
+  causa:
+    type: text
+    nullable: false
+    unit: identificador/texto
+  flag_sobreposicao:
+    type: boolean
+    nullable: false
+    unit: flag
+description: Contrato local sintético derivado do system design; sujeito à validação
+  do time de dados.
+control_totals:
+- duracao_min
+- duracao_efetiva_min

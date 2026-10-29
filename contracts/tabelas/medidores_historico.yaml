@@ -1,0 +1,35 @@
+version: 0.2.0-provisional
+status: provisorio-nao-aprovado
+table: medidores_historico
+grain: instalação de medidor
+primary_key:
+- id_medidor
+- data_instalacao
+columns:
+  id_medidor:
+    type: text
+    nullable: false
+    unit: identificador/texto
+  id_uc:
+    type: text
+    nullable: false
+    unit: identificador/texto
+    pattern: ^UC\d{6}$
+    references:
+    - dim_uc
+    - id_uc
+  data_instalacao:
+    type: date
+    nullable: false
+    unit: data ISO
+  data_retirada:
+    type: date
+    nullable: true
+    unit: data ISO
+  tipo_medidor:
+    type: text
+    nullable: false
+    unit: identificador/texto
+description: Contrato local sintético derivado do system design; sujeito à validação
+  do time de dados.
+control_totals: []
