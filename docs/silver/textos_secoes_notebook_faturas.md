@@ -1,12 +1,12 @@
 # Textos para apresentação do notebook de faturas
 
-**Notebook de referência:** [bronze-to-silver-faturas-corrigido.ipynb](../../data-engineering/bronze_to_silver/bronze-to-silver-faturas-corrigido.ipynb), com 92 células e outputs históricos preservados.
+**Evidência de execução:** [bronze-to-silver-faturas.ipynb](../../data-engineering/bronze-to-silver-faturas.ipynb), anexo preservado sem alterações, com publicação concluída em 29/10/2026.
 
-**Objetivo deste arquivo:** fornecer textos para as células Markdown, mantendo os códigos, as explorações e os outputs existentes.
+**Versão operacional:** [bronze-to-silver-faturas-operacional.ipynb](../../data-engineering/bronze-to-silver-faturas-operacional.ipynb), cópia sem outputs e com revisões em `silver_revisoes`; ainda não executada no Databricks.
 
-Copiar cada seção abaixo para a célula Markdown correspondente. Os resultados numéricos são evidências da extração executada, não constantes que o código deve impor a futuras cargas. As Seções 11–13 registram a migração inicial já concluída; não representam uma rotina mensal independente das tabelas de revisão.
+**Objetivo deste arquivo:** apoiar a apresentação das etapas e dos resultados. Os números pertencem à extração auditada, sem impor contagens fixas a futuras cargas.
 
-**Execução:** não é necessário executar código nem clicar em Run All para inserir estes textos. Uma execução completa também executaria a publicação da Seção 13 e poderia substituir os outputs que documentam o histórico.
+**Execução:** a leitura deste documento não exige reexecutar o notebook. Antes de uma execução, confira os destinos e o parâmetro: `true` permite gravar revisões e substituir as duas tabelas finais de `v-energy.silver`. O padrão para uma nova configuração é `false`, e um widget existente pode conservar `true`.
 
 ---
 
@@ -62,7 +62,7 @@ Copiar cada seção abaixo para a célula Markdown correspondente. Os resultados
 
 **Objetivo.** Verificar os identificadores e a presença das UCs faturadas no cadastro disponível, preservando a cardinalidade das faturas.
 
-**Resultado observado.** Todos os IDs das faturas seguem os padrões testados. O cadastro Bronze versão 0 contém 46.461 linhas e apresenta IDs repetidos, sem espaços nas extremidades. Há 201 valores cadastrais fora do padrão, incluindo a string `id_uc`. Encontramos 2.152.336 faturas com cadastro, em 45.000 UCs, e 32.285 sem cadastro, em 31.705 UCs. As 42 faturas dos pares UC/mês repetidos estão integralmente no grupo sem cadastro.
+**Resultado observado.** O diagnóstico contou 32.285 IDs `FTX`, fora do contrato da principal e preservados nas pendências. A principal passou na validação `^FT[0-9]{9}$`. O cadastro Bronze versão 0 contém 46.461 linhas e apresenta IDs repetidos, sem espaços nas extremidades. Há 201 valores cadastrais fora do padrão, incluindo a string `id_uc`. Encontramos 2.152.336 faturas com cadastro, em 45.000 UCs, e 32.285 sem cadastro, em 31.705 UCs. As 42 faturas dos pares UC/mês repetidos estão integralmente no grupo sem cadastro.
 
 **Decisão.** Cruzar com chaves distintas para não multiplicar valores financeiros. Isso não escolhe atributos cadastrais conflitantes nem conclui a Silver do cadastro. Separar as faturas sem referência em uma saída de pendências, com preservação e reconciliação; não inferir fraude nem excluir pelo prefixo do ID. Os R$ 20.341,61 dos pares repetidos já estão incluídos nos R$ 10.192.373,82 sem cadastro e não devem ser contados novamente.
 
@@ -78,7 +78,7 @@ Copiar cada seção abaixo para a célula Markdown correspondente. Os resultados
 
 **Objetivo.** Aplicar as decisões fundamentadas na exploração e produzir uma representação tipada sem perder o conteúdo de origem.
 
-**Implementação.** Datas são convertidas para `DATE`; energia, tributos e total para `DECIMAL(18,2)`. As onze colunas brutas ficam no `STRUCT dados_originais`. São preservados arquivo e timestamp de ingestão e registradas as versões Bronze de faturas, cadastro e leituras. O método de interpretação da emissão e o motivo de ausência de pagamento ficam explícitos.
+**Implementação.** A candidata é persistida e materializada antes das ações repetidas. Diagnóstico e tipagem compartilham as funções de interpretação de datas. Datas são convertidas para `DATE`; energia, tributos e total para `DECIMAL(18,2)`. As onze colunas brutas ficam no `STRUCT dados_originais`. São preservados arquivo e timestamp de ingestão e registradas as versões Bronze de faturas, cadastro e leituras. O método de interpretação da emissão e o motivo de ausência de pagamento ficam explícitos.
 
 **Resultado observado.** A candidata tem 25 colunas de primeiro nível. Preserva as 2.184.621 faturas e sinaliza ambiguidade original, emissão fora da competência, atraso, ausência cadastral, ausência de leitura e multiplicidade UC/mês. A separação produz 2.152.336 faturas com cadastro e 32.285 pendentes. A escolha de uma data por convenção não apaga a ambiguidade original.
 
@@ -90,30 +90,48 @@ Copiar cada seção abaixo para a célula Markdown correspondente. Os resultados
 
 **Resultado observado.** As verificações executadas passaram. Isso demonstra preservação e aplicação do contrato escolhido para esta extração; não substitui confirmação externa das convenções nem valida as demais entidades. Os marcadores em memória registram o andamento da sessão e não são, isoladamente, evidência durável de auditoria.
 
-**Correção posterior — issue #27.** Foi acrescentada a regra `pagamento_nao_interpretado`: pagamento tipado nulo sem motivo de ausência reconhecido bloqueia a candidata. Nulo original e sentinela continuam com seus motivos; formato desconhecido, vazio e calendário inválido não podem passar como ausência legítima. Os outputs preservados são anteriores a essa inclusão. Para conferir a correção nos dados, execute somente as células da Seção 10 com a candidata e os diagnósticos disponíveis na sessão; não é necessário Run All nem republicar tabelas.
+**Bloqueio de pagamentos — issue #27.** A regra `pagamento_nao_interpretado` bloqueia pagamento tipado nulo sem motivo reconhecido. Nulo original e sentinela continuam com seus motivos. A execução de 29/10/2026 inclui essa regra e registrou aprovação das validações antes da publicação.
 
-## 11. Inspeção dos destinos antes da migração
+## 11. Inspeção dos destinos definitivos
 
-**Objetivo.** Conhecer a tabela existente e tornar explícita a alteração de contrato antes de substituí-la.
+**Objetivo.** Identificar os destinos existentes e comparar seus nomes e tipos
+de colunas com a candidata, antes de preparar a escrita. A inspeção não substitui
+a comparação posterior dos dados publicados.
 
-**Situação inicial registrada.** `silver.tb_faturas` era Delta, versão 0, com 2.184.621 faturas. Os nomes das duas tabelas de revisão estavam disponíveis. A comparação mostrou mudanças de schema, incluindo método de interpretação, versões de origem e referência com leituras, além da retirada das candidatas MDY/DMY e do alerta estatístico antigo da saída final.
+**Resultado observado.** Os dois destinos já existiam e tinham contratos
+compatíveis. A seção fez somente consultas.
 
-**Decisão.** Conferir primeiro duas tabelas de revisão: uma com cadastro e outra com pendências. A comparação de schemas descreve a mudança, mas não prova igualdade de conteúdo. Esta seção é um registro da preparação da migração inicial, não uma necessidade de criar tabelas de revisão em toda carga futura.
+## 12. Revisões da execução e conferência da persistência
 
-## 12. Conferência das tabelas de revisão já persistidas
+**Objetivo.** Criar revisões exclusivas da candidata atual e conferir integralmente
+o que foi salvo. Com `false`, a seção ignora a escrita; com `true`, cria as revisões.
 
-**Objetivo.** Verificar se a persistência intermediária corresponde integralmente aos DataFrames validados.
+**Resultado observado em 29/10/2026.** As revisões com sufixo
+`1bb6358d020a4ca1b1148d09c87c2fc7` foram criadas em `v-energy.silver`, ambas na
+versão 0. Schemas e conteúdos completos corresponderam aos DataFrames esperados,
+incluindo originais e metadados. São 2.152.336 faturas com cadastro e 32.285 pendentes.
 
-**Resultado observado.** `silver.tb_faturas_revisao_v1` e `silver.tb_faturas_pendentes_cadastro_revisao_v1`, ambas na versão 0, tiveram schema e conteúdo completo conferidos. A primeira contém 2.152.336 faturas e R$ 666.482.773,76; a segunda contém 32.285 e R$ 10.192.373,82.
-
-**Decisão operacional.** Como as tabelas já existiam, as células atuais desta seção apenas as leem e conferem. As tentativas anteriores de recriação foram interrompidas; o alias `errorifexists` também não foi aceito nessa implementação Spark Connect. A retomada ocorreu sem apagar ou sobrescrever as revisões. Esta seção registra uma conferência histórica, não a rotina de criação para cada nova extração.
+**Versão operacional.** A cópia separada grava novas revisões em
+`v-energy.silver_revisoes`; seus outputs estão vazios porque essa configuração
+ainda não foi executada no Databricks. O anexo comprovado permanece intacto.
 
 ## 13. Publicação definitiva e conferência dos destinos
 
-**Objetivo.** Publicar a separação aprovada e conferir o resultado efetivamente armazenado nos destinos finais.
+**Objetivo.** Publicar exatamente os snapshots conferidos e verificar os resultados
+nas versões Delta registradas pela escrita. O plano não exige que a fonte seja
+sempre a versão 0: exige correspondência com o registro de conferência.
 
-**Execução registrada.** A publicação usou a versão 0 das tabelas de revisão já conferidas. Primeiro foi criada `silver.tb_faturas_pendentes_cadastro`, versão 0, com 32.285 faturas e R$ 10.192.373,82. Depois, `silver.tb_faturas` foi substituída, passando da versão 0 para a 1, com 2.152.336 faturas e R$ 666.482.773,76. Os schemas e conteúdos completos dos dois destinos corresponderam às referências.
+**Execução registrada.** O Run All com `true`, em 29/10/2026, terminou sem erros.
+As pendências foram publicadas na versão 1, com 32.285 faturas e
+R$ 10.192.373,82; a principal foi publicada na versão 2, com 2.152.336 faturas e
+R$ 666.482.773,76. Schemas e conteúdos completos dos destinos corresponderam
+às revisões conferidas.
 
-**Proteção posterior — issue #28.** O plano exige que a versão 0 das duas revisões tenha sido efetivamente conferida na Seção 12. Faltas ou divergências bloqueiam a preparação e são verificadas novamente antes da escrita. A preparação reutiliza o snapshot conferido como referência. O caminho válido foi conferido em uma preparação somente leitura no Databricks; onze cenários de publicação foram testados separadamente com catálogo e escritas simulados em memória. Os outputs de publicação preservam a execução histórica e não representam nova gravação após a correção. Para conferir a preparação, execute A e B da Seção 12 e apenas a primeira célula da Seção 13, com as dependências disponíveis na sessão; não use Run All nem execute a célula de gravação para essa conferência.
+**Conclusão e limite operacional.** Foram preservadas 2.184.621 faturas e
+R$ 676.675.147,58 entre as duas saídas. A última célula registrou
+`OK: publicação definitiva concluída e conferida.`. Cada gravação é uma
+transação Delta separada; esse sucesso não transforma as duas escritas em
+uma transação conjunta nem comprova a execução da Gold.
 
-**Conclusão e limite operacional.** Permaneceram preservadas 2.184.621 faturas e R$ 676.675.147,58 entre as duas saídas. Cada gravação Delta é atômica por tabela; as duas juntas não formam uma transação. Esta seção é a migração inicial baseada em revisões fixas: não deve ser apresentada como rotina de atualização automática a partir de novas versões Bronze. O notebook é mantido completo para documentar o processo e suas decisões.
+O [guia de operação](../auditoria_dados/operacao_faturas.md) explica os dois
+notebooks, os destinos e a organização das revisões.

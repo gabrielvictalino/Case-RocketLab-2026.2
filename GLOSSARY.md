@@ -59,6 +59,16 @@ _Evitar_: último ano, ano atual
 
 ### Receita
 
+**Pendência cadastral**:
+Fatura cuja UC não foi encontrada na versão do cadastro consultada. É preservada
+em uma saída separada para análise e reconciliação, sem compor a principal que
+exige correspondência cadastral.
+
+**Fatura órfã**:
+Fatura cuja referência de unidade consumidora não é encontrada no cadastro
+consultado. Na extração auditada, as ocorrências têm prefixo FTX; o prefixo,
+isoladamente, não comprova a ausência de cadastro em toda carga futura.
+
 **Receita**:
 Valor total faturado nas competências do período, com tributos. Sem qualificativo, receita é sempre a faturada.
 _Evitar_: faturamento, receita bruta

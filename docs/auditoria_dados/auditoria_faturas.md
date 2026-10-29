@@ -6,13 +6,15 @@
 
 **Data de consolidação:** 23/10/2026, fuso America/Fortaleza.
 
-**Revisão documental:** 24/10/2026. Atualização das referências do notebook e das correções de validação e publicação, sem nova execução da carga.
+**Revisão documental:** 29/10/2026, fuso America/Fortaleza. Registro da publicação executada pelo autor no Databricks e da cópia operacional com revisões em schema separado.
 
 **Base de código:** commit `8381720b2bed81befcc95ba02ba9dc1b9cf75b8d` — ingestão Bronze unificada.
 
-**Notebook de referência:** [bronze-to-silver-faturas-corrigido.ipynb](../../data-engineering/bronze_to_silver/bronze-to-silver-faturas-corrigido.ipynb), com 92 células e outputs históricos preservados.
+**Evidência de execução:** [bronze-to-silver-faturas.ipynb](../../data-engineering/bronze-to-silver-faturas.ipynb), anexo do autor preservado byte a byte, com 92 células e 42 células Python. A publicação de 29/10/2026 foi concluída entre 19h18min36s e 19h22min46s, no fuso America/Fortaleza.
 
-**Situação:** publicação definitiva conferida para a extração analisada; histórico de exploração e migração preservado.
+**Versão operacional:** [bronze-to-silver-faturas-operacional.ipynb](../../data-engineering/bronze-to-silver-faturas-operacional.ipynb), cópia sem outputs, com revisões em `v-energy.silver_revisoes`. Essa configuração ainda não foi executada no Databricks.
+
+**Situação:** os dois destinos de `v-energy.silver` foram publicados e conferidos na execução anexada. A adoção de `silver_revisoes` está implementada na cópia operacional; a revisão documental não move nem recria tabelas existentes.
 
 Os resultados deste relatório provêm das execuções no Databricks registradas no notebook e das tabelas CSV de resultados exportadas. Não se trata de uma nova execução independente sobre o CSV integral. Valores e contagens são um retrato da extração auditada, não constantes para impor a futuras entregas.
 
@@ -96,10 +98,10 @@ Foram identificadas duas linhas em que os onze campos são exatamente iguais aos
 
 - `id_fatura` é único e preenchido em todas as 2.184.621 faturas.
 - Não há duplicata exata nas onze colunas de negócio.
-- Todos os IDs de fatura seguem `FT` ou `FTX` seguido de números; os IDs de UC seguem `UC` seguido de números.
+- A principal exige `id_fatura` no padrão `^FT[0-9]{9}$`. O diagnóstico contou 32.285 identificadores `FTX`, preservados nas pendências cadastrais. Os IDs de UC seguem `UC` seguido de números.
 - Existem 21 pares UC/competência repetidos, com 42 faturas de IDs distintos.
 
-**Decisão:** manter o grão de uma linha por `id_fatura`. Não impor unicidade por UC/mês nem selecionar arbitrariamente maior ID, maior valor ou última linha. O prefixo do identificador não foi usado como critério de exclusão.
+**Decisão:** manter o grão de uma linha por `id_fatura`. Não impor unicidade por UC/mês nem selecionar arbitrariamente maior ID, maior valor ou última linha. Nenhuma linha foi descartada pelo prefixo; um ID fora do contrato bloqueia sua entrada na principal, enquanto as faturas sem cadastro são preservadas nas pendências.
 
 ### 3.4. Completude e categorias
 
@@ -313,46 +315,80 @@ A revisão do código identificou que uma fatura `EM ABERTO` com pagamento não 
 
 Foi acrescentada à Seção 10 a regra `pagamento_nao_interpretado`: a combinação de pagamento tipado nulo e motivo nulo passa a ser falha de qualidade. Nulo original continua com motivo `CAMPO_NULO`, e sentinela com `SENTINELA_9999_12_31`; datas válidas continuam tipadas. As regras existentes para `PAGA` sem pagamento e `EM ABERTO` com pagamento permanecem aplicáveis.
 
-Os outputs do notebook preservam a execução histórica, anterior à nova regra. Na revisão técnica, passaram quatro testes de regressão em Spark local 4.0.1, incluindo 14 combinações de status e pagamento com ANSI ligado e desligado. Os testes usaram dados sintéticos em memória e o código extraído do notebook, sem gravar tabelas; também reproduziram a aceitação anterior ao remover a nova regra. Esses testes foram executados separadamente e seus scripts não integram os quatro arquivos desta entrega. A confirmação com os dados completos no Databricks exige executar a Seção 10 na sessão com a candidata disponível, sem Run All nem repetição da publicação. A correção está presente no código revisado e foi registrada na [issue #27](https://github.com/gabrielvictalino/Case-RocketLab-2026.2/issues/27), encerrada após a revisão.
+A execução completa de 29/10/2026 inclui a regra `pagamento_nao_interpretado` e registrou aprovação da Seção 10 antes da escrita. A evidência está nas células 72–76 do anexo preservado. A [issue #27](https://github.com/gabrielvictalino/Case-RocketLab-2026.2/issues/27) registra a correção. A aprovação nesta extração não dispensa a validação em novas cargas.
 
 ---
 
 ## 9. Revisão Intermediária e Publicação Definitiva
 
-### 9.1. Estado anterior e revisões
+### 9.1. Migração inicial e execução atual
 
-Na inspeção inicial, `v-energy.silver.tb_faturas` era Delta, versão 0, com 2.184.621 faturas. Foram criadas e conferidas duas tabelas intermediárias:
+A migração de 23/10/2026 criou as revisões `_revisao_v1`, ambas na versão 0,
+e publicou a principal na versão 1 e as pendências na versão 0. Esse é o
+estado histórico anterior à rodada aqui consolidada.
 
-| Tabela de revisão | Versão | Registros | Total |
+Em 29/10/2026 o autor executou o notebook completo com
+`confirmar_publicacao=true`, entre 19h18min36s e 19h22min46s, no fuso
+America/Fortaleza. As 42 células Python executaram em sequência, sem erros
+ou `Command skipped`. A revisão deste relatório leu o arquivo exportado;
+não executou uma nova carga nem consultou o catálogo ao vivo.
+
+### 9.2. Revisões criadas e conferidas
+
+A candidata foi calculada a partir das três fontes Bronze na versão 0,
+persistida em cache e validada. A célula 86 criou estas duas revisões:
+
+| Revisão em `v-energy.silver` | Versão Delta | Faturas | Total |
 | :--- | ---: | ---: | ---: |
-| `v-energy.silver.tb_faturas_revisao_v1` | 0 | 2.152.336 | R$ 666.482.773,76 |
-| `v-energy.silver.tb_faturas_pendentes_cadastro_revisao_v1` | 0 | 32.285 | R$ 10.192.373,82 |
+| `tb_faturas_revisao_1bb6358d020a4ca1b1148d09c87c2fc7` | 0 | 2.152.336 | R$ 666.482.773,76 |
+| `tb_faturas_pendentes_cadastro_revisao_1bb6358d020a4ca1b1148d09c87c2fc7` | 0 | 32.285 | R$ 10.192.373,82 |
 
-Durante a preparação, o alias `errorifexists` não foi aceito pela implementação Spark Connect usada. Tentativas de criar novamente destinos já existentes também foram interrompidas. A conferência foi retomada por leitura das tabelas existentes e comparação integral, sem usar exclusão para contornar esses bloqueios. No notebook exportado, a Seção 12 contém as células de leitura e conferência.
+A célula 87 comparou nomes, ordem e tipos das colunas e o conteúdo completo
+contra os DataFrames da mesma execução, com `exceptAll` nos dois sentidos.
+Os originais, indicadores e metadados técnicos participaram da conferência.
+O procedimento cria suas próprias revisões: uma nova ingestão não é
+comparada com carimbos técnicos de revisões antigas.
 
-### 9.2. Mudanças de contrato
-
-A principal passou a conter somente faturas com referência cadastral encontrada. As pendentes foram preservadas separadamente. A emissão ambígua passou a receber a data da convenção com indicador e método explícitos. Foram acrescentadas referências com leituras e versões de origem; as candidatas MDY/DMY e o alerta estatístico antigo não compõem o schema final, mantendo-se o texto original no STRUCT.
-
-Os destinos e a separação foram aprovados antes da substituição definitiva. A publicação usou a versão 0 das duas revisões. A pendência foi publicada primeiro, seguida da principal.
-
-### 9.3. Resultado persistido
+### 9.3. Resultado publicado em 29/10/2026
 
 | Destino definitivo | Versão Delta | Faturas | Energia | Tributos | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `v-energy.silver.tb_faturas` | 1 | 2.152.336 | R$ 499.862.082,73 | R$ 166.620.691,03 | R$ 666.482.773,76 |
-| `v-energy.silver.tb_faturas_pendentes_cadastro` | 0 | 32.285 | R$ 7.644.280,57 | R$ 2.548.093,25 | R$ 10.192.373,82 |
+| `v-energy.silver.tb_faturas` | 2 | 2.152.336 | R$ 499.862.082,73 | R$ 166.620.691,03 | R$ 666.482.773,76 |
+| `v-energy.silver.tb_faturas_pendentes_cadastro` | 1 | 32.285 | R$ 7.644.280,57 | R$ 2.548.093,25 | R$ 10.192.373,82 |
 | **Conjunto preservado** | — | **2.184.621** | **R$ 507.506.363,30** | **R$ 169.168.784,28** | **R$ 676.675.147,58** |
 
-Os schemas e conteúdos completos publicados corresponderam às fontes de revisão. Os originais continuam na Bronze e no STRUCT das saídas; a diferença de cobertura da principal é uma separação explícita, não perda de faturas.
+A célula 90 registrou `CREATE OR REPLACE TABLE AS SELECT` nos dois destinos.
+A célula 91 aprovou seus schemas e conteúdos completos nas versões publicadas.
+A célula 92 apresentou a reconciliação e concluiu com
+`OK: publicação definitiva concluída e conferida.`. Não há evidência de
+publicação parcial nessa rodada. Cada tabela tem seu próprio histórico Delta;
+as versões 2 e 1 não precisam ser iguais.
 
 ### 9.4. Vínculo entre conferência e publicação — issue #28
 
-A revisão identificou que a Seção 12 conferia a última versão disponível das revisões, enquanto a publicação usava a versão 0. Se houvesse uma versão posterior, seria possível conferir um snapshot e publicar outro. Na migração histórica, ambas estavam na versão 0; não há evidência de impacto naquela publicação.
+O plano registra a fonte, a versão, o snapshot conferido e o estado anterior
+do destino. A escrita exige validações e conferências concluídas na sessão,
+revalida a identidade e a versão das fontes e verifica os destinos antes
+da primeira escrita e imediatamente antes de cada substituição.
 
-A correção mantém a versão 0 aprovada e exige que as duas origens, os destinos e as versões do plano correspondam ao registro de conferência. O plano anterior é invalidado ao iniciar uma nova preparação. A referência reutiliza o snapshot efetivamente conferido. Antes da escrita, a proteção é repetida e os estados dos dois destinos são verificados; divergências detectadas nessa preparação interrompem o fluxo antes da primeira gravação. Uma mudança durante as gravações ainda pode produzir resultado parcial, pois elas continuam sendo transações separadas.
+As revisões desta rodada estavam na versão 0 por serem novas. O código
+publica a versão efetivamente conferida, sem exigir versão 0. A proteção
+da [issue #28](https://github.com/gabrielvictalino/Case-RocketLab-2026.2/issues/28)
+continua aplicável. As duas gravações são transações separadas; uma falha
+entre elas pode deixar resultado parcial e exige investigação.
 
-A preparação somente leitura foi conferida no Databricks, com 32.285 pendências e 2.152.336 faturas principais, ambas com fonte conferida na versão 0. Isso confirma a preparação, não uma nova publicação. Onze cenários com catálogo e escritas simulados em memória verificaram o caminho 0/0, divergências de cada origem, conferências ausentes, marcadores falsos, mudanças do plano ou destino e invalidação de plano anterior. Os testes usaram as células extraídas do notebook; não executaram gravação Delta real. A [issue #28](https://github.com/gabrielvictalino/Case-RocketLab-2026.2/issues/28) foi encerrada após a revisão da cópia corrigida.
+### 9.5. Schema separado na versão operacional
+
+O anexo de execução foi preservado sem alterações e continua registrando
+revisões em `silver`. A cópia `bronze-to-silver-faturas-operacional.ipynb`
+define `SCHEMA_REVISOES = "silver_revisoes"`: as futuras revisões ficam em
+`v-energy.silver_revisoes` e os destinos finais permanecem em `v-energy.silver`.
+Com o parâmetro `false`, nenhum dos schemas ou tabelas é gravado.
+
+Essa cópia está sem outputs e não foi executada no Databricks. O isolamento
+do schema foi validado localmente; a publicação comprovada acima corresponde
+ao anexo preservado. O versionamento não move, apaga ou republica as tabelas
+já existentes. O procedimento está em [Operação e revisões](operacao_faturas.md).
 
 ---
 
@@ -370,8 +406,8 @@ A preparação somente leitura foi conferida no Databricks, com 32.285 pendênci
 | 8 | Correspondência com pares UC/competência em leituras |
 | 9 | Tipagem, preservação, indicadores e separação em memória |
 | 10 | Validação da candidata e reconciliação das saídas |
-| 11 | Inspeção dos destinos antes da migração inicial |
-| 12 | Conferência das revisões já persistidas |
+| 11 | Inspeção dos destinos definitivos e comparação de contrato |
+| 12 | Criação das revisões da execução e conferência da persistência |
 | 13 | Publicação definitiva baseada nas revisões e conferência posterior |
 
 As explorações e seus resultados são mantidos para apresentação e discussão das decisões. Não é necessário reexecutar o notebook para acrescentar os textos explicativos.
@@ -387,7 +423,7 @@ As explorações e seus resultados são mantidos para apresentação e discussã
 5. **Semântica financeira:** não há validação externa de tarifas ou alíquotas, nem suporte suficiente para inventar kWh faturado, tarifa unitária ou posição atual de inadimplência.
 6. **CSV integral:** a preservação comprovada nesta reconstrução é Bronze de negócio → saídas Silver. Não repetir como nova evidência uma comparação CSV/Bronze que não foi reexecutada aqui.
 7. **Atomicidade:** Delta é atômico por tabela. As duas saídas não formam uma transação conjunta; uma execução parcial exige investigação. O consumo automatizado precisa depender da conclusão bem-sucedida do fluxo.
-8. **Rotina futura:** o notebook documentado publica revisões na versão 0. Se novas extrações Bronze chegarem, essa migração não pode ser tratada como rotina mensal atualizada. A alternativa de gravação direta foi preparada separadamente, mas não foi adotada como substituição do histórico nem validada em nova execução Databricks nesta auditoria.
+8. **Rotina futura:** cada execução calcula e valida a candidata a partir de versões fixadas da Bronze, cria revisões próprias e publica os snapshots conferidos. A cópia operacional isola as revisões em `silver_revisoes` e ainda precisa de execução Databricks para validar essa configuração. A operação exige uma execução publicadora por vez.
 9. **Escopo de entrega:** a publicação de faturas não comprova conclusão das outras entidades Silver, da Gold, do portal ou de um Workflow integrado. Não se afirmou execução desses componentes.
 
 ---
@@ -402,7 +438,9 @@ O versionamento deste relatório e da correção não representa uma nova execu�
 
 ### Referências de evidência
 
-- [Notebook de faturas](../../data-engineering/bronze_to_silver/bronze-to-silver-faturas-corrigido.ipynb), com códigos e outputs históricos das Seções 1–13; a nota da Seção 10 distingue a correção posterior.
+- [bronze-to-silver-faturas.ipynb](../../data-engineering/bronze-to-silver-faturas.ipynb): anexo preservado com as saídas da publicação de 29/10/2026.
+- [bronze-to-silver-faturas-operacional.ipynb](../../data-engineering/bronze-to-silver-faturas-operacional.ipynb): cópia com revisões em schema separado, sem outputs.
+- [Operação e revisões](operacao_faturas.md): destinos, parâmetro e limites da execução.
 - CSVs de resultados exportados das Seções 2–13 e disponibilizados durante a revisão. Os nomes se repetem entre etapas; a associação é feita pelo conteúdo e pela seção correspondente.
 - Enunciado “Case Final - RocketLab Visagio 2026.2”: responsabilidades Silver, integridade referencial e documentação de suposições.
 - Commit-base `8381720b2bed81befcc95ba02ba9dc1b9cf75b8d`: `data-engineering/Landing_to_Bronze.ipynb` e `docs/auditoria_dados/decisoes_landing_to_bronze.md`.
