@@ -1,8 +1,11 @@
+import asyncio
 import csv
 import hashlib
 import json
 import shutil
 from pathlib import Path
+from datetime import datetime, timedelta
+from decimal import Decimal, ROUND_HALF_UP
 
 import asyncpg
 import pytest
@@ -55,7 +58,6 @@ async def analytics_snapshot(db):
         'total',
         'period',
         'version',
-        'non_synthetic',
         'filename',
         'inspection',
         'aggregate',
@@ -76,8 +78,6 @@ async def test_invalid_import_preserves_previous(db, infrastructure, tmp_path, f
         manifest['period']['end'] = '2026-05'
     elif failure == 'version':
         manifest['contract_version'] = 'aprovado-inexistente'
-    elif failure == 'non_synthetic':
-        manifest['synthetic'] = False
     elif failure == 'filename':
         manifest['tables']['dim_uc']['file'] = '../../arquivo.csv'
     manifest_file.write_text(json.dumps(manifest))
@@ -101,6 +101,156 @@ async def test_invalid_import_preserves_previous(db, infrastructure, tmp_path, f
         await load(origin, infrastructure['importer_url'], infrastructure['settings'].redis_url)
     assert await analytics_snapshot(db) == before
     assert await db.fetchval("SELECT to_regnamespace('analytics_staging')") is None
+
+
+@pytest.mark.parametrize('failure', ['duplicate', 'orphan'])
+async def test_key_errors_identify_table_column_and_value(db, infrastructure, tmp_path, failure):
+    origin = tmp_path / 'batch'
+    shutil.copytree(SAMPLES, origin)
+    if failure == 'duplicate':
+        rewrite(origin, 'dim_uc', lambda rows: rows[1].update(id_uc=rows[0]['id_uc']))
+        expected = ['dim_uc', 'id_uc', 'UC100000', 'duplicada']
+    else:
+        rewrite(origin, 'fila_inspecao', lambda rows: rows[0].update(id_uc='UC999999'))
+        expected = ['fila_inspecao', 'id_uc', 'UC999999', 'dim_uc', 'inexistente']
+    with pytest.raises(ContractError) as error:
+        await load(origin, infrastructure['importer_url'])
+    assert all(fragment in str(error.value) for fragment in expected)
+
+
+async def test_non_synthetic_manifest_keeps_provenance(db, infrastructure, tmp_path):
+    # Simula a indicação de proveniência real; a fixture continua sendo sintética.
+    origin = tmp_path / 'exportacao'
+    shutil.copytree(SAMPLES, origin)
+    file = origin / 'manifest.json'
+    manifest = json.loads(file.read_text())
+    manifest['synthetic'] = False
+    file.write_text(json.dumps(manifest))
+    try:
+        version = await load(origin, infrastructure['importer_url'])
+        assert (
+            await db.fetchval('SELECT sintetica FROM operations.cargas WHERE id=$1', version)
+            is False
+        )
+    finally:
+        await load(SAMPLES, infrastructure['importer_url'], infrastructure['settings'].redis_url)
+
+
+def csv_rows(origin, name):
+    with (origin / f'{name}.csv').open(newline='') as stream:
+        return list(csv.DictReader(stream))
+
+
+@pytest.mark.parametrize('corruption', [None, 'tarifa', 'duracao'])
+async def test_rounded_derivatives_and_tariff_precision(db, infrastructure, tmp_path, corruption):
+    origin = tmp_path / 'batch'
+    shutil.copytree(SAMPLES, origin)
+    rewrite(
+        origin,
+        'uc_consumo_faturamento_mensal',
+        lambda rows: rows[0].update(tarifa_base='0.7845', adicional_bandeira='0.016950'),
+    )
+    dims = {r['id_uc']: r for r in csv_rows(origin, 'dim_uc')}
+    components = {}
+
+    def key(row):
+        return tuple(row[c] for c in ['competencia', 'municipio', 'bairro', 'classe', 'grupo_uc'])
+
+    for row in csv_rows(origin, 'uc_consumo_faturamento_mensal'):
+        group = key({**row, **dims[row['id_uc']]})
+        totals = components.setdefault(group, [Decimal(0), Decimal(0)])
+        totals[0] += Decimal(row['volume_faturado_kwh']) * Decimal(row['tarifa_base'])
+        totals[1] += Decimal(row['volume_faturado_kwh']) * Decimal(row['adicional_bandeira'])
+
+    def aggregate(rows):
+        for row in rows:
+            for column, total in zip(
+                ['componente_tarifa_reais', 'componente_bandeira_reais'], components[key(row)]
+            ):
+                row[column] = str(total.quantize(Decimal('.01'), rounding=ROUND_HALF_UP))
+        if corruption == 'tarifa':
+            rows[0]['componente_tarifa_reais'] = str(
+                Decimal(rows[0]['componente_tarifa_reais']) + 1
+            )
+
+    rewrite(origin, 'receita_volume_mensal', aggregate)
+
+    def duration(rows):
+        rows[0].update(
+            data_encerramento=(
+                datetime.fromisoformat(rows[0]['data_abertura']) + timedelta(seconds=80)
+            ).isoformat(),
+            duracao_min='1.33' if corruption != 'duracao' else '1.34',
+            duracao_efetiva_min='1.33',
+        )
+
+    rewrite(origin, 'ocorrencias_uc', duration)
+    file = origin / 'manifest.json'
+    manifest = json.loads(file.read_text())
+    for column in manifest['tables']['ocorrencias_uc']['totals']:
+        manifest['tables']['ocorrencias_uc']['totals'][column] = str(
+            sum(Decimal(r[column]) for r in csv_rows(origin, 'ocorrencias_uc'))
+        )
+    file.write_text(json.dumps(manifest))
+    before = await analytics_snapshot(db)
+    try:
+        if corruption:
+            with pytest.raises(ContractError):
+                await load(origin, infrastructure['importer_url'])
+            assert await analytics_snapshot(db) == before
+        else:
+            await load(origin, infrastructure['importer_url'])
+            assert await db.fetchval("""SELECT tarifa_base
+                FROM analytics.uc_consumo_faturamento_mensal
+                ORDER BY id_uc,competencia LIMIT 1""") == Decimal('0.7845')
+    finally:
+        await load(SAMPLES, infrastructure['importer_url'], infrastructure['settings'].redis_url)
+
+
+async def test_delayed_redis_serializes_next_publication(db, infrastructure, monkeypatch):
+    from importador import loader
+
+    paused, release = asyncio.Event(), asyncio.Event()
+    original = loader.publish_redis
+    first = True
+
+    async def delayed(url, version):
+        nonlocal first
+        if first:
+            first = False
+            paused.set()
+            await release.wait()
+        await original(url, version)
+
+    monkeypatch.setattr(loader, 'publish_redis', delayed)
+    args = (SAMPLES, infrastructure['importer_url'], infrastructure['settings'].redis_url)
+    task_a = asyncio.create_task(load(*args))
+    task_b = None
+    try:
+        await asyncio.wait_for(paused.wait(), timeout=10)
+        committed = await db.fetchval('SELECT count(*) FROM operations.cargas')
+        task_b = asyncio.create_task(load(*args))
+
+        async def waiting_on_lock():
+            while not await db.fetchval("""SELECT EXISTS(
+                SELECT 1 FROM pg_locks WHERE locktype='advisory' AND NOT granted)"""):
+                await asyncio.sleep(0.01)
+
+        await asyncio.wait_for(waiting_on_lock(), timeout=5)
+        assert not task_b.done()
+        assert await db.fetchval('SELECT count(*) FROM operations.cargas') == committed
+    finally:
+        release.set()
+        versions = await asyncio.gather(*[t for t in [task_a, task_b] if t is not None])
+    latest = await db.fetchval(
+        'SELECT id FROM operations.cargas ORDER BY ordem_publicacao DESC LIMIT 1'
+    )
+    assert latest == versions[-1]
+    redis = Redis.from_url(infrastructure['settings'].redis_url)
+    try:
+        assert (await redis.get('versao_carga')).decode() == str(latest)
+    finally:
+        await redis.aclose()
 
 
 async def test_publication_failure_rolls_back_renames_views_and_batch(db, infrastructure):
@@ -141,10 +291,11 @@ async def test_reload_preserves_operations_and_unified_view(client, headers, db,
         assert {
             t: await db.fetch(f'SELECT * FROM operations.{t} ORDER BY 1') for t in tables
         } == before
-        origins = await db.fetch(
-            'SELECT origem,count(*) n FROM ai_read.inspecoes GROUP BY origem ORDER BY origem'
-        )
-        assert [(r['origem'], r['n']) for r in origins] == [('historica', 2), ('portal', 1)]
+        for schema in ['portal_read', 'ai_read']:
+            origins = await db.fetch(
+                f'SELECT origem,count(*) n FROM {schema}.inspecoes GROUP BY origem ORDER BY origem'
+            )
+            assert [(r['origem'], r['n']) for r in origins] == [('historica', 2), ('portal', 1)]
     assert await db.fetchval('SELECT count(*) FROM operations.cargas') == old_count + 2
     assert await db.fetchval('SELECT count(*) FROM analytics.dim_uc') == 300
     redis = Redis.from_url(infrastructure['settings'].redis_url)

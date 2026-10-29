@@ -1,4 +1,6 @@
 import asyncio
+import json
+from datetime import date, timedelta
 
 import asyncpg
 import pytest
@@ -47,6 +49,10 @@ async def test_full_cycle(client, headers, db, irregular):
             url + '/tentativas', headers=headers, json={'observacao': 'Imóvel fechado'}
         )
     ).json()['status'] == 'ABERTA'
+    tentativa = json.loads(
+        await db.fetchval("SELECT dados FROM operations.ordem_eventos WHERE tipo='TENTATIVAS'")
+    )
+    assert tentativa == {'observacao': 'Imóvel fechado', 'inspetor': 'INSP-040'}
     await client.post(url + '/despachar', headers=headers, json={'inspetor': 'INSP-002'})
     body = dict(
         resultado='IRREGULARIDADE CONFIRMADA' if irregular else 'SEM IRREGULARIDADE',
@@ -64,6 +70,25 @@ async def test_full_cycle(client, headers, db, irregular):
     assert await db.fetchval("SELECT count(*) FROM ai_read.inspecoes WHERE origem='portal'") == 1
     # Reinspeção permitida após conclusão.
     assert await criar(client, headers) != id_
+
+
+async def test_future_result_preserves_order_and_audit(client, headers, db):
+    id_ = await criar(client, headers)
+    url = f'{BASE}/{id_}'
+    await client.post(url + '/despachar', headers=headers, json={'inspetor': 'INSP-001'})
+    response = await client.post(
+        url + '/resultado',
+        headers=headers,
+        json={
+            'resultado': 'SEM IRREGULARIDADE',
+            'kwh_recuperado': 0,
+            'data': (date.today() + timedelta(days=1)).isoformat(),
+        },
+    )
+    assert response.status_code == 422
+    assert await db.fetchval('SELECT status FROM operations.ordens_inspecao') == 'EM_CAMPO'
+    assert await db.fetchval('SELECT count(*) FROM operations.inspecoes') == 0
+    assert await db.fetchval('SELECT count(*) FROM operations.ordem_eventos') == 2
 
 
 @pytest.mark.parametrize('state', ['ABERTA', 'EM_CAMPO'])

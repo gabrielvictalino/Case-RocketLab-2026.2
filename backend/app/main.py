@@ -9,6 +9,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from redis.asyncio import Redis
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import async_sessionmaker
 from starlette.exceptions import HTTPException
 
 from app.core.config import get_settings
@@ -30,6 +31,10 @@ def create_app(settings=None):
         )
         app.state.settings = settings
         app.state.portal_engine, app.state.ai_engine = create_engines(settings)
+        app.state.portal_sessions = async_sessionmaker(
+            app.state.portal_engine, expire_on_commit=False
+        )
+        app.state.ai_sessions = async_sessionmaker(app.state.ai_engine, expire_on_commit=False)
         app.state.redis = Redis.from_url(
             settings.redis_url, socket_connect_timeout=2, socket_timeout=2
         )

@@ -86,9 +86,13 @@ em repositórios privados depende do plano GitHub.
 
 O workflow `ci.yml` executa Ruff (lint e formatação) e pytest do workspace Python,
 incluindo os testes existentes do fluxo Git. Usa Python 3.12, uv com lockfile
-congelado e PostgreSQL 17/Redis 7 reais via Testcontainers. O backend roda em
-todas as PRs/pushes para `dev` e `main`, sem filtros por caminho. O agregador
-`CI` sempre executa e falha se o backend falhar ou não concluir com sucesso.
+congelado e PostgreSQL 17/Redis 7 reais via Testcontainers. O workflow roda em
+todas as PRs/pushes para `dev` e `main`. Um detector compara as revisões e o job
+de backend roda quando mudam os pacotes Python, contratos, infraestrutura Postgres,
+testes, scripts ou arquivos compartilhados (lockfile, Compose, CI e configuração).
+O agregador `CI` sempre executa: aceita backend pulado apenas quando o detector
+confirma ausência de mudanças relevantes; falha se o detector ou backend falhar
+ou for cancelado. O workflow obrigatório não usa filtros de evento por caminho.
 
 Os rulesets versionados exigem `Fluxo Git` e `CI`. Sua ativação continua sendo
 administrativa: depois da integração/revisão, reaplique

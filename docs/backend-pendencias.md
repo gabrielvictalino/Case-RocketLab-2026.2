@@ -16,10 +16,10 @@ não foi encontrado contrato Gold aprovado/versionado nessas referências.
 | Python | Workspace #61 propunha 3.14 | 3.12 em todos os membros, imagem e CI, para usar o runtime disponível e validado; versões resolvidas no uv.lock |
 | Consumo | Diagnóstico usa mediana, tela menciona média, Silver preserva negativos sinalizados | Nenhuma estimativa oficial implementada; original preservado, analítico sintético e método explícito |
 | Continuidade | Soma simples no diagnóstico versus duração efetiva/união na Silver | Nenhuma regra oficial implementada; amostra sintética com numeradores/denominadores explícitos |
-| Gold | Modelos propostos sem contrato aprovado | `0.1.0-provisional`, sinalizado no manifesto e `/meta/carga`; dados reais são recusados |
-| Inspeções | View unificada não tinha schema definido | `ai_read.inspecoes`, propriedade do importador, SELECT explícito ao portal e à IA |
+| Gold | Modelos propostos sem contrato aprovado | `0.2.0-provisional`, sinalizado no manifesto; `synthetic` preserva a proveniência e aceita exportação real compatível, sem certificar as fórmulas |
+| Inspeções | Portal e IA compartilhavam a mesma view | `portal_read.inspecoes` para o portal e projeção independente `ai_read.inspecoes` para a IA, ambas do importador |
 | Bootstrap | Importador precisa de novas inspeções, migrações não devem precisar de Gold | init → Alembic operations → importador e views, sem dependência circular |
-| Redis | Commit de banco e atualização Redis não são uma transação distribuída | Banco é fonte de verdade, atualização Redis após commit com aviso se falhar |
+| Redis | Commit de banco e atualização Redis não são uma transação distribuída | Lock de sessão até terminar Redis, timestamp na publicação e sequência para ordenar cargas; em falha, banco segue sendo a fonte de verdade |
 
 Foram mantidas as decisões de segurança da seção 8 do system design: a IA não
 recebe sessão do portal, nem USAGE em analytics/operations, nem criação de objetos.
@@ -56,6 +56,30 @@ no PR #62. Nenhum notebook foi executado ou tabela do Databricks modificada.
    auditoria; insights compartilham os mesmos serviços de métricas.
 4. Cache com versão de carga e invalidação da fila, rate limit por usuário,
    exportação/importação de planilha de campo e frontend/Nginx.
+
+## Correções da revisão do PR #63
+
+O contrato passou para `0.2.0-provisional` por ampliar tarifas para seis casas e
+definir arredondamento dos derivados na escala exportada. O importador aceita
+`synthetic: false` com os mesmos gates de tipo, chave, referência, hash, totais e
+reconciliação; nenhuma exportação Gold real foi fornecida para homologação.
+A montagem `GOLD_EXPORT_DIR` permite usar `/entrada` no Compose.
+
+Alembic `0002` atualiza bancos já inicializados: faz backfill da ordem de publicação,
+cria `portal_read` e preserva a view existente até a próxima carga. Novas publicações
+renovam os default privileges no schema promovido. O downgrade conhecido remove as
+views antes das tabelas, sem `CASCADE`. As factories de sessão são criadas no lifespan.
+
+O login verifica Argon2 no pool de threads; tentativas guardam o inspetor no próprio
+evento; resultados com data futura são rejeitados. Um período atual válido sem ano
+anterior completo retorna comparação indisponível (`None`), mantendo a validação
+estrita para comparação explícita. O system design passa a registrar Python 3.12
+e o mínimo de FastAPI 0.121. O CI detecta caminhos antes de executar o backend,
+mantendo o agregador sempre ativo.
+
+O mapa de issues, critérios atendidos e pendências está em
+[`pr-63-criterios.md`](pr-63-criterios.md). O PR conjunto foi autorizado na entrega
+original; as correções continuam no mesmo PR, sem reescrever seu histórico.
 
 Os rulesets versionados passam a exigir `CI` e `Fluxo Git`. A reaplicação
 administrativa no GitHub com `scripts/configurar-github.sh` fica para o ciclo de

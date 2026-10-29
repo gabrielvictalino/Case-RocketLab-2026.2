@@ -4,8 +4,9 @@ FastAPI modular, Python 3.12, SQLAlchemy assíncrono e PostgreSQL 17. O workspac
 uv compartilha o lockfile entre `backend`, `importador` e `ai-agent`. O agente
 tem apenas sua interface preparada e não faz chamadas a provedores.
 
-Esta entrega trabalha **somente com dados sintéticos** e contrato
-`0.1.0-provisional`, não aprovado pelo time de dados. Consulte
+Esta entrega inclui **amostras sintéticas** e contrato
+`0.2.0-provisional`, não aprovado pelo time de dados. O importador também aceita
+exportações reais que cumpram essa versão, preservando a proveniência. Consulte
 [`contracts/README.md`](../contracts/README.md) e
 [`docs/backend-pendencias.md`](../docs/backend-pendencias.md).
 
@@ -63,6 +64,7 @@ também o importador e a suíte completa, use `--all-packages`.
 2. Alembic usa `DATABASE_URL_MIGRATIONS`, exclusivamente no serviço de migrações.
    Sua tabela de versões e todas as migrações ficam em `operations`. A revisão
    `0001` assume `cargas` já existente e cria usuários, ordens, eventos e inspeções.
+   `0002` acrescenta a ordem de publicação de cargas e o schema `portal_read`.
    Alterações futuras de `cargas` devem ser migrações; não reeditar o bootstrap
    esperando que ele rode num volume existente.
 3. O importador depende dessa migração, pois as views unem inspeções novas e
@@ -77,31 +79,43 @@ Cada importação ganha um UUID distinto, mesmo para o mesmo `batch_id` de orige
 O UUID é a versão da carga, também publicada na chave Redis `versao_carga`.
 O PostgreSQL é a fonte de verdade: se a atualização do Redis falhar, o CLI avisa,
 a carga permanece confirmada e `/meta/carga` informa sua versão correta.
-Um advisory lock serializa importações concorrentes. O staging também é
+Um advisory lock de sessão serializa importações até o fim da atualização Redis,
+inclusive após o commit. `carregado_em` usa o relógio da publicação e
+`ordem_publicacao`, uma sequência do banco, define a carga atual em `/meta/carga`.
+Uma falha de Redis pode manter sua chave antiga: consumidores de cache devem obter
+a versão em `operations.cargas`, usando a mesma transação da consulta analítica,
+e nunca confiar só na chave Redis. O cache de endpoints ainda não foi implementado.
+O staging também é
 transacional e desaparece quando uma carga falha.
 
-Não execute downgrade sobre uma base com views publicadas sem antes remover,
-com a role dona, a view `ai_read.inspecoes` dependente de `operations.inspecoes`.
-Não se usa `CASCADE` para contornar dependências.
+O downgrade remove as views de inspeções conhecidas antes de remover suas tabelas,
+sem `CASCADE`. Dependências externas desconhecidas continuam bloqueando a operação.
+Downgrade remove os dados operacionais das revisões revertidas; faça backup antes
+de usá-lo fora de uma base de teste.
 
-Para carregar outro diretório sintético que siga o contrato:
+Para carregar outro diretório que siga o contrato:
 
 ```bash
 uv run importador --origem /caminho/exportacao
 # Em container, monte o diretório explicitamente:
 docker compose run --rm -v /caminho/exportacao:/entrada:ro importador --origem /entrada
+# Ou configure GOLD_EXPORT_DIR no .env e use a montagem já prevista:
+GOLD_EXPORT_DIR=/caminho/exportacao docker compose run --rm importador --origem /entrada
 ```
 
-O contrato provisório recusa manifestos com `synthetic: false`. Aprovar e versionar
-o contrato real, adaptar seu produtor e homologar a exportação são pré-requisitos
-para habilitar dados Gold reais. Nenhuma operação acessa o Databricks.
+Manifestos com `synthetic: false` são aceitos e registrados como dados reais.
+Aprovar o contrato e homologar uma exportação real com o time de dados continuam
+pendentes; a validação estrutural não aprova as regras de negócio. Nenhuma operação
+acessa o Databricks. Erros de duplicidade e referência informam tabela, coluna e
+chave; erros de tipo incluem também a linha do CSV.
 
 ## Login e API
 
 O seed é explícito, idempotente e permitido somente com `APP_ENV=development`.
 Cria os logins `diretoria`, `comercial`, `atendimento`, `perdas` e `operacao`,
 todos com senha de demonstração **`Demo-Venergy-2026!`**. Uma nova execução não
-sobrescreve senhas ou usuários existentes. Hashes usam Argon2id.
+sobrescreve senhas ou usuários existentes. Hashes usam Argon2id e a verificação
+do login executa no pool de threads para preservar a responsividade da API.
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/auth/login \
@@ -134,14 +148,19 @@ Rotas implementadas:
 
 `core/periodos.py` valida `AAAA-MM..AAAA-MM`, limites e comparação padrão no ano
 anterior. `/meta/filtros` aceita `periodo` e `comparacao` para exercitar a mesma
-validação que será usada nos módulos de métricas. Um período sem comparação
-disponível no ano anterior retorna 422; não inventa nem recorta dados.
+validação que será usada nos módulos de métricas. Sem um ano anterior completo,
+o período atual continua válido e o utilitário devolve comparação `None`. Módulos
+de métricas devem indicar comparação indisponível. Uma comparação explícita fora
+da base continua retornando 422.
 
 Criar uma ordem congela o score, os motivos e os valores sintéticos da fila.
 Transições usam bloqueio da linha e gravam eventos na mesma transação. O índice
 único parcial garante uma ordem ativa por UC inclusive sob concorrência.
-Concluir gera uma inspeção nova. `ai_read.inspecoes`, acessível também ao portal,
-une históricas e novas com a coluna `origem`. Ordens não referenciam `analytics`
+Tentativas sem acesso registram observação e inspetor no evento, mesmo que a ordem
+volte a ficar sem atribuição. Resultado com data futura retorna 422.
+Concluir gera uma inspeção nova. `portal_read.inspecoes` une históricas e novas
+com a coluna `origem`. A IA usa `ai_read.inspecoes`, uma projeção independente e
+explícita: alterações na view do portal não ampliam a allowlist. Ordens não referenciam `analytics`
 por FK: o snapshot precisa sobreviver a uma recarga ou à retirada da UC da Gold.
 
 ## Testes e validações
@@ -168,7 +187,9 @@ Somente testes sem containers:
 uv run pytest -m 'not integration' -q
 ```
 
-O workflow `Aplicação` roda lint, formatação e a suíte em toda PR/push para dev/main,
-com agregador obrigatório `CI` sempre executado. `Fluxo Git` permanece independente.
+O workflow `Aplicação` detecta alterações em código, contratos, infraestrutura e
+configuração compartilhada. Só então roda lint, formatação e a suíte do backend;
+o agregador obrigatório `CI` sempre executa e aceita o skip por ausência de mudanças.
+Falha ou cancelamento do detector/backend falha o agregador. `Fluxo Git` permanece independente.
 Frontend, cache de endpoints, planilha de campo, métricas finais e IA completa
 ficam para próximas entregas.

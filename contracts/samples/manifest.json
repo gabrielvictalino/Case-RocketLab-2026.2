@@ -1,6 +1,6 @@
 {
   "batch_id": "amostra-sintetica-v1",
-  "contract_version": "0.1.0-provisional",
+  "contract_version": "0.2.0-provisional",
   "synthetic": true,
   "period": {
     "start": "2022-07",

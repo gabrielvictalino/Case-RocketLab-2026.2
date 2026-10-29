@@ -37,5 +37,12 @@ class Periodo:
 
 def validar_periodos(periodo: str, comparacao: str | None, minimo: date, maximo: date):
     atual = Periodo.parse(periodo).dentro_da_base(minimo, maximo)
-    anterior = Periodo.parse(comparacao) if comparacao else atual.comparacao_padrao()
-    return atual, anterior.dentro_da_base(minimo, maximo)
+    if comparacao is not None:
+        return atual, Periodo.parse(comparacao).dentro_da_base(minimo, maximo)
+    if atual.inicio.year == 1:
+        return atual, None
+    anterior = atual.comparacao_padrao()
+    # A ausência de um ano anterior completo não invalida o período solicitado.
+    if anterior.inicio < minimo or anterior.fim > maximo:
+        return atual, None
+    return atual, anterior

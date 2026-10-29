@@ -1,3 +1,5 @@
+import asyncio
+import threading
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -9,6 +11,54 @@ from redis.asyncio import Redis
 from app.main import create_app
 
 pytestmark = pytest.mark.integration
+
+
+async def test_login_verification_keeps_health_responsive(client, monkeypatch):
+    from app.modules.auth import service
+
+    started, release = threading.Event(), threading.Event()
+
+    def slow_verify(*args):
+        started.set()
+        assert release.wait(timeout=5)
+        return True
+
+    monkeypatch.setattr(service.password_hash, 'verify', slow_verify)
+    task = asyncio.create_task(
+        client.post('/api/v1/auth/login', json={'login': 'perdas', 'senha': 'teste'})
+    )
+    try:
+        assert await asyncio.to_thread(started.wait, 2)
+        assert not task.done()
+        response = await asyncio.wait_for(client.get('/api/v1/health'), timeout=1)
+        assert response.status_code == 200
+    finally:
+        release.set()
+        response = await task
+    assert response.status_code == 200
+
+
+async def test_current_load_uses_publication_order(client, headers, db):
+    current = await db.fetchval(
+        'SELECT id FROM operations.cargas ORDER BY ordem_publicacao DESC LIMIT 1'
+    )
+    # Mesmo com um horário anterior incorreto, a ordem de publicação é inequívoca.
+    older = uuid4()
+    await db.execute(
+        """INSERT INTO operations.cargas
+        (id,batch_id,versao_contrato,sintetica,periodo_inicio,periodo_fim,manifesto,
+         ordem_publicacao,carregado_em)
+        SELECT $1,'relogio_incorreto',versao_contrato,sintetica,periodo_inicio,periodo_fim,
+            manifesto,(SELECT min(ordem_publicacao)-1 FROM operations.cargas),'2099-01-01'
+        FROM operations.cargas WHERE id=$2""",
+        older,
+        current,
+    )
+    try:
+        response = await client.get('/api/v1/meta/carga', headers=headers)
+        assert response.json()['id'] == str(current)
+    finally:
+        await db.execute('DELETE FROM operations.cargas WHERE id=$1', older)
 
 
 async def test_health_login_meta_and_periods(client, headers, infrastructure):
@@ -33,13 +83,15 @@ async def test_health_login_meta_and_periods(client, headers, infrastructure):
         'periodo=2025-13..2026-06',
         'periodo=2021-01..2021-12',
         'comparacao=2024-07..2025-06',
-        'periodo=2022-07..2023-06',
+        'periodo=2022-07..2023-06&comparacao=2021-07..2022-06',
     ):
         response = await client.get('/api/v1/meta/filtros?' + query, headers=headers)
         assert response.status_code == 422
         assert response.json()['code'].startswith('PERIODO')
     valid = await client.get('/api/v1/meta/filtros?periodo=2025-07..2026-06', headers=headers)
     assert valid.status_code == 200
+    first_year = await client.get('/api/v1/meta/filtros?periodo=2022-07..2023-06', headers=headers)
+    assert first_year.status_code == 200
     spec = (await client.get('/openapi.json')).json()
     assert spec['paths']['/api/v1/meta/filtros']['get']['security']
 

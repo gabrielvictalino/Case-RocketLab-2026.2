@@ -7,7 +7,40 @@ on:
 permissions:
   contents: read
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.paths.outputs.backend }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: paths
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          python - <<'PY'
+          import os
+          import subprocess
+          base = os.environ['BASE_SHA']
+          head = os.environ['HEAD_SHA']
+          args = ['git', 'diff', '--name-only', '--no-renames', base, head]
+          if not base or set(base) == {'0'}:
+              args = ['git', 'ls-files']
+          paths = subprocess.check_output(args, text=True).splitlines()
+          prefixes = ('backend/', 'ai-agent/', 'importador/', 'contracts/',
+                      'infra/postgres/', 'tests/', 'scripts/')
+          files = {'pyproject.toml', 'uv.lock', '.python-version', 'conftest.py',
+                   'docker-compose.yml', 'docker-compose.override.yml', '.dockerignore',
+                   '.github/workflows/ci.yml', '.env.example'}
+          changed = any(p.startswith(prefixes) or p in files for p in paths)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'backend={str(changed).lower()}\n')
+          PY
   backend:
+    needs: [changes]
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,10 +55,18 @@ jobs:
   ci:
     name: CI
     if: always()
-    needs: [backend]
+    needs: [changes, backend]
     runs-on: ubuntu-latest
     steps:
       - name: Conferir resultado
         env:
           BACKEND_RESULT: ${{ needs.backend.result }}
-        run: test "$BACKEND_RESULT" = success
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          BACKEND_CHANGED: ${{ needs.changes.outputs.backend }}
+        run: |
+          test "$CHANGES_RESULT" = success
+          if [ "$BACKEND_CHANGED" = true ]; then
+            test "$BACKEND_RESULT" = success
+          else
+            test "$BACKEND_RESULT" = skipped
+          fi

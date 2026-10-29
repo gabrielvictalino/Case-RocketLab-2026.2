@@ -16,7 +16,7 @@
       "maxLength": 200
     },
     "contract_version": {
-      "const": "0.1.0-provisional"
+      "const": "0.2.0-provisional"
     },
     "synthetic": {
       "type": "boolean"

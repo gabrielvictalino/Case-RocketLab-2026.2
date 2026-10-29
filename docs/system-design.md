@@ -50,6 +50,10 @@ estão em [adr/](adr/).
 
 - Stack do case: React + TypeScript (Vite), FastAPI, PostgreSQL, agente em
   Python integrado ao backend, Gemini 3.1 Flash-Lite (ou outro via OpenRouter).
+- Runtime Python fixado em **3.12** (`>=3.12,<3.13`) no workspace uv, imagem e CI.
+  FastAPI exige pelo menos **0.121.0** pelo uso de `Depends(..., scope='function')`.
+  O lockfile registra as versões resolvidas. A proposta anterior de Python 3.14
+  foi substituída pelo runtime disponível e validado na implementação.
 - Entrega em 04/11/2026. Prioridade: o obrigatório funcionando antes dos
   diferenciais (seção 12).
 
@@ -513,7 +517,7 @@ Os testes do backend cobrem todas as transições de ordem, a regra de uma
 ordem ativa, a importação parcial, a permissão por cargo e a decomposição da
 receita conferida contra valores calculados à mão na amostra. No frontend, o
 Vitest cobre a lógica de períodos e filtros. Não há meta de cobertura
-percentual. O CI usa uma única versão de Python, a mesma da imagem Docker.
+percentual. O CI usa Python 3.12, a mesma versão da imagem Docker.
 
 ### Ordem de implementação
 

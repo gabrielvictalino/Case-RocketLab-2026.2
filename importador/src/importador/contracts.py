@@ -34,8 +34,6 @@ def manifest_for(origin):
         raise ContractError('Manifesto inválido: ' + errors[0].message)
     if manifest['contract_version'] != (CONTRACTS / 'VERSION').read_text().strip():
         raise ContractError('Versão do contrato incompatível')
-    if not manifest['synthetic']:
-        raise ContractError('Contrato provisório aceita apenas dados explicitamente sintéticos')
     if manifest['period']['start'] > manifest['period']['end']:
         raise ContractError('Período invertido no manifesto')
     return manifest
@@ -108,10 +106,13 @@ def records(file, spec):
         for line, row in enumerate(reader, 2):
             if None in row:
                 raise ContractError(f'{spec["table"]}: linha {line} tem colunas extras')
-            try:
-                yield tuple(parse(row[name], col) for name, col in spec['columns'].items())
-            except (ValueError, TypeError, InvalidOperation) as exc:
-                raise ContractError(f'{spec["table"]}: linha {line}: {exc}') from exc
+            values = []
+            for name, col in spec['columns'].items():
+                try:
+                    values.append(parse(row[name], col))
+                except (ValueError, TypeError, InvalidOperation) as exc:
+                    raise ContractError(f'{spec["table"]}.{name}: linha {line}: {exc}') from exc
+            yield tuple(values)
 
 
 def file_hash(file):

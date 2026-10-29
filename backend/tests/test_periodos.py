@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 
@@ -28,8 +28,22 @@ def test_default_comparison_and_bounds():
     atual, anterior = validar_periodos('2025-07..2026-06', None, date(2022, 7, 1), date(2026, 6, 1))
     assert atual.fim == date(2026, 6, 1)
     assert anterior == Periodo(date(2024, 7, 1), date(2025, 6, 1))
+    atual, anterior = validar_periodos('2022-07..2023-06', None, date(2022, 7, 1), date(2026, 6, 1))
+    assert atual.inicio == date(2022, 7, 1)
+    assert anterior is None
     with pytest.raises(APIError):
-        validar_periodos('2022-07..2023-06', None, date(2022, 7, 1), date(2026, 6, 1))
+        validar_periodos('2022-07..2023-06', '2021-07..2022-06', date(2022, 7, 1), date(2026, 6, 1))
+
+
+def test_future_inspection_date_rejected():
+    with pytest.raises(ValueError, match='futura'):
+        Resultado(
+            resultado='SEM IRREGULARIDADE', kwh_recuperado=0, data=date.today() + timedelta(days=1)
+        )
+    assert (
+        Resultado(resultado='SEM IRREGULARIDADE', kwh_recuperado=0, data=date.today()).data
+        == date.today()
+    )
 
 
 @pytest.mark.parametrize(

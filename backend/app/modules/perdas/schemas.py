@@ -43,6 +43,8 @@ class Resultado(BaseModel):
 
     @model_validator(mode='after')
     def coerencia(self):
+        if self.data > date.today():
+            raise ValueError('Data da inspeção não pode ser futura')
         if self.resultado == 'IRREGULARIDADE CONFIRMADA':
             if not self.tipo_irregularidade or self.kwh_recuperado <= 0:
                 raise ValueError('Irregularidade exige tipo e kWh recuperado > 0')

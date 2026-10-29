@@ -1,9 +1,8 @@
-# Contrato local provisório — 0.1.0-provisional
+# Contrato local provisório — 0.2.0-provisional
 
-**Não aprovado pelo time de dados. Somente dados sintéticos.** As 12 tabelas de
+**Não aprovado pelo time de dados. A amostra fornecida é sintética.** As 12 tabelas de
 `tabelas/*.yaml` derivam da seção 3 do system design, com grão, chave, tipos,
-unidades, nulabilidade, referências e totais de controle. Os arquivos YAML usam
-a sintaxe JSON, que é um subconjunto válido de YAML.
+unidades, nulabilidade, referências e totais de controle, em YAML.
 
 O importador não estima consumo, calcula scores nem determina regras oficiais
 de receita ou DEC/FEC. Valida tipos e estrutura recebidos e a consistência entre
@@ -22,13 +21,35 @@ implementação da decomposição oficial da receita.
   sem fuso, conforme a Silver de ocorrências (TIMESTAMP_NTZ). Eventos criados
   pelo portal usam `timestamptz`.
 - `manifest.schema.json` exige todas as tabelas, contagens, SHA-256 e totais de
-  controle. A versão precisa coincidir com `VERSION`. `synthetic` precisa ser true
-  nesta versão, verificado também pelo importador.
-- Sem nome, CPF ou endereço reais: titular e endereço são inventados e o documento
-  já vem mascarado. A view de IA `ucs` omite esses três campos.
+  controle. A versão precisa coincidir com `VERSION`. `synthetic` declara a
+  proveniência: `true` na amostra e `false` numa exportação de dados reais.
+  O importador aceita ambos com as mesmas validações. Isso valida a estrutura;
+  não representa aprovação das fórmulas pelo time de dados.
+- Na amostra, titular e endereço são inventados e o documento já vem mascarado.
+  Exportações devem manter o documento mascarado. A view de IA `ucs` omite esses
+  três campos.
 - Inspeções históricas usam `IN` + 7 dígitos; novas inspeções usam `PORTAL-<UUID>`.
   A view unificada inclui `origem`. Tipos de irregularidade ainda são texto livre:
   a auditoria e o overview apresentam listas divergentes; não fixamos um enum falso.
+
+## Precisão e reconciliação
+
+Em `0.2.0-provisional`, `tarifa_base` e `adicional_bandeira` usam `numeric(18,6)`
+em R$/kWh. Valores como `0.7845` são preservados. Demais campos mantêm a escala
+declarada; entradas com excesso de casas continuam sendo rejeitadas, sem truncamento.
+
+Volume, receita e arrecadação somam os valores recebidos e reconciliam exatamente
+por grão. Os componentes derivados de tarifa/bandeira somam os produtos com
+precisão decimal e só então arredondam para duas casas, por grão, com empate
+afastando de zero (`ROUND_HALF_UP` para os valores não negativos). Não há tolerância
+percentual ou compensação entre grupos. Duração é a diferença de timestamps em
+minutos arredondada para duas casas: 80 segundos resultam em `1.33` minuto.
+Totais do manifesto reconciliam exatamente os valores já exportados.
+
+Essa convenção de intercâmbio continua provisória e deve ser validada com o
+produtor Gold. A alteração de escala exige a nova versão; manifestos `0.1.0-provisional`
+devem ser reexportados ou regenerados. Nenhuma migração reescreve a carga analítica
+anterior: ela é substituída na próxima publicação válida.
 
 ## Amostra e reprodução
 

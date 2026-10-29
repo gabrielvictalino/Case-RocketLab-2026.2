@@ -1,5 +1,5 @@
 from fastapi import Request
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import create_async_engine
 
 
 def create_engines(settings):
@@ -19,12 +19,10 @@ def create_engines(settings):
 
 
 async def session(request: Request):
-    factory = async_sessionmaker(request.app.state.portal_engine, expire_on_commit=False)
-    async with factory() as db, db.begin():
+    async with request.app.state.portal_sessions() as db, db.begin():
         yield db
 
 
 async def ai_session(request: Request):
-    factory = async_sessionmaker(request.app.state.ai_engine, expire_on_commit=False)
-    async with factory() as db, db.begin():
+    async with request.app.state.ai_sessions() as db, db.begin():
         yield db

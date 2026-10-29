@@ -1,89 +1,73 @@
-{
-  "version": "0.1.0-provisional",
-  "status": "provisorio-nao-aprovado",
-  "table": "receita_volume_mensal",
-  "grain": "competência × município × bairro × classe × grupo de UC",
-  "primary_key": [
-    "competencia",
-    "municipio",
-    "bairro",
-    "classe",
-    "grupo_uc"
-  ],
-  "columns": {
-    "competencia": {
-      "type": "date",
-      "nullable": false,
-      "unit": "data ISO",
-      "month": true
-    },
-    "municipio": {
-      "type": "text",
-      "nullable": false,
-      "unit": "identificador/texto"
-    },
-    "bairro": {
-      "type": "text",
-      "nullable": false,
-      "unit": "identificador/texto"
-    },
-    "classe": {
-      "type": "text",
-      "nullable": false,
-      "unit": "identificador/texto",
-      "enum": [
-        "Residencial",
-        "Comercial",
-        "Industrial",
-        "Rural",
-        "Poder Público"
-      ]
-    },
-    "grupo_uc": {
-      "type": "text",
-      "nullable": false,
-      "unit": "identificador/texto",
-      "enum": [
-        "GD",
-        "IRREGULARIDADE_CONFIRMADA",
-        "DEMAIS"
-      ]
-    },
-    "volume_faturado_kwh": {
-      "type": "numeric(18,2)",
-      "nullable": false,
-      "unit": "kWh",
-      "minimum": 0
-    },
-    "receita": {
-      "type": "numeric(18,2)",
-      "nullable": false,
-      "unit": "R$",
-      "minimum": 0
-    },
-    "receita_arrecadada": {
-      "type": "numeric(18,2)",
-      "nullable": false,
-      "unit": "R$",
-      "minimum": 0
-    },
-    "componente_tarifa_reais": {
-      "type": "numeric(18,2)",
-      "nullable": false,
-      "unit": "R$",
-      "minimum": 0
-    },
-    "componente_bandeira_reais": {
-      "type": "numeric(18,2)",
-      "nullable": false,
-      "unit": "R$",
-      "minimum": 0
-    }
-  },
-  "description": "Contrato local sintético derivado do system design; sujeito à validação do time de dados.",
-  "control_totals": [
-    "volume_faturado_kwh",
-    "receita",
-    "receita_arrecadada"
-  ]
-}
+version: 0.2.0-provisional
+status: provisorio-nao-aprovado
+table: receita_volume_mensal
+grain: competência × município × bairro × classe × grupo de UC
+primary_key:
+- competencia
+- municipio
+- bairro
+- classe
+- grupo_uc
+columns:
+  competencia:
+    type: date
+    nullable: false
+    unit: data ISO
+    month: true
+  municipio:
+    type: text
+    nullable: false
+    unit: identificador/texto
+  bairro:
+    type: text
+    nullable: false
+    unit: identificador/texto
+  classe:
+    type: text
+    nullable: false
+    unit: identificador/texto
+    enum:
+    - Residencial
+    - Comercial
+    - Industrial
+    - Rural
+    - Poder Público
+  grupo_uc:
+    type: text
+    nullable: false
+    unit: identificador/texto
+    enum:
+    - GD
+    - IRREGULARIDADE_CONFIRMADA
+    - DEMAIS
+  volume_faturado_kwh:
+    type: numeric(18,2)
+    nullable: false
+    unit: kWh
+    minimum: 0
+  receita:
+    type: numeric(18,2)
+    nullable: false
+    unit: R$
+    minimum: 0
+  receita_arrecadada:
+    type: numeric(18,2)
+    nullable: false
+    unit: R$
+    minimum: 0
+  componente_tarifa_reais:
+    type: numeric(18,2)
+    nullable: false
+    unit: R$
+    minimum: 0
+  componente_bandeira_reais:
+    type: numeric(18,2)
+    nullable: false
+    unit: R$
+    minimum: 0
+description: Contrato local sintético derivado do system design; sujeito à validação
+  do time de dados.
+control_totals:
+- volume_faturado_kwh
+- receita
+- receita_arrecadada

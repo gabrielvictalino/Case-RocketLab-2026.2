@@ -19,11 +19,4 @@ async def filtros(db, periodo=None, comparacao=None):
         )
     elif comparacao is not None:
         raise APIError(422, 'Informe periodo junto com comparacao', 'PERIODO_INVALIDO')
-    data = await repository.dimensoes(db)
-    municipios = sorted({r['municipio'] for r in data})
-    return Filtros(
-        municipios=municipios,
-        bairros={m: sorted({r['bairro'] for r in data if r['municipio'] == m}) for m in municipios},
-        classes=sorted({r['classe'] for r in data}),
-        alimentadores=sorted({r['alimentador'] for r in data}),
-    )
+    return Filtros(**await repository.dimensoes(db))

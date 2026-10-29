@@ -52,5 +52,8 @@ async def transicao(db, id_, acao, body, user):
         }
         await repo.inspecao(db, ordem, body)
     result = await repo.atualizar(db, id_, user['id'], values)
-    await repo.evento(db, id_, user['id'], acao.upper(), body.model_dump(mode='json'))
+    dados = body.model_dump(mode='json')
+    if acao == 'tentativas':
+        dados['inspetor'] = ordem['inspetor']
+    await repo.evento(db, id_, user['id'], acao.upper(), dados)
     return result

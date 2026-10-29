@@ -69,6 +69,7 @@ services:
       REDIS_URL: redis://redis:6379/0
     volumes:
       - ./contracts:/app/contracts:ro
+      - ${GOLD_EXPORT_DIR:-./contracts/samples}:/entrada:ro
     entrypoint: [importador]
     command: [--origem, contracts/samples]
     depends_on:

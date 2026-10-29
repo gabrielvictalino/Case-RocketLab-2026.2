@@ -21,6 +21,7 @@ async def test_ai_allowlist_and_no_write(infrastructure, db):
             'SELECT * FROM operations.usuarios',
             'SELECT * FROM analytics.dim_uc',
             'SELECT * FROM operations.cargas',
+            'SELECT * FROM portal_read.inspecoes',
         ):
             with pytest.raises(asyncpg.InsufficientPrivilegeError):
                 await ai.execute(query)
@@ -52,4 +53,22 @@ async def test_importer_cannot_write_operational_tables(infrastructure, db):
         with pytest.raises(asyncpg.InsufficientPrivilegeError):
             await connection.execute('UPDATE operations.inspecoes SET kwh_recuperado=0')
     finally:
+        await connection.close()
+
+
+async def test_default_grants_follow_republished_schema(infrastructure, db):
+    from importador.loader import load
+    from pathlib import Path
+
+    await load(
+        Path(__file__).resolve().parents[2] / 'contracts/samples', infrastructure['importer_url']
+    )
+    connection = await asyncpg.connect(infrastructure['importer_url'])
+    try:
+        await connection.execute('CREATE TABLE analytics.teste_grant (id integer)')
+        assert await db.fetchval(
+            "SELECT has_table_privilege('portal','analytics.teste_grant','SELECT')"
+        )
+    finally:
+        await connection.execute('DROP TABLE IF EXISTS analytics.teste_grant')
         await connection.close()
