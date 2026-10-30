@@ -24,7 +24,7 @@ Quando a mesma UC aparece mais de uma vez no cadastro, fica a linha com o `inges
 | :--- | :--- |
 | `id_uc` | `trim` |
 | `potencia_kwp` | `trim`, vírgula trocada por ponto, `decimal(12,2)` na leitura e `decimal(10,2)` na Silver. O texto fica em `potencia_kwp_raw` |
-| `energia_injetada_kwh_media_mensal` | `trim`, `decimal(12,2)` na leitura e `decimal(10,2)` na Silver. O texto fica na quarentena como `energia_raw` |
+| `energia_injetada_kwh_media_mensal` | `trim`, vírgula trocada por ponto, `decimal(12,2)` na leitura e `decimal(10,2)` na Silver. O texto fica na quarentena como `energia_raw` |
 | `data_conexao` | `trim`, `try_to_date`. O texto fica na quarentena como `data_conexao_raw` |
 | `modalidade` | `trim`. O texto de origem fica em `modalidade_origem` |
 
@@ -61,7 +61,7 @@ Nesta entrega são 35 linhas corrigidas.
 
 ## Data de conexão
 
-`fl_data_inconsistente` fica verdadeiro quando `data_conexao` é anterior a 2024-01-01, posterior a 2026-06-30, ou anterior à `data_ligacao` da UC. A janela acompanha o período histórico do case (até junho de 2026). A linha permanece na Silver.
+`fl_data_inconsistente` fica verdadeiro quando `data_conexao` é anterior a 2024-01-01, posterior à data de execução (`current_date()`), ou anterior à `data_ligacao` da UC. A linha permanece na Silver.
 
 Nesta entrega nenhuma data sai da janela. As 5 marcas são conexão anterior à ligação: `UC100259`, `UC102507`, `UC106046`, `UC110560` e `UC119180`. A validação principal confere a regra de datas em todas as linhas; se uma dessas cinco tiver a data corrigida na origem, ou se uma sexta UC entrar nessa condição, a carga segue normalmente. A lista das cinco fica apenas como aviso informativo da amostra histórica.
 
@@ -95,5 +95,5 @@ As checagens que condicionam a publicação rodam sobre `df_silver` **antes** do
 - `modalidade` dentro dos três códigos.
 - `fl_correcao_escala` verdadeiro exatamente quando a potência original é maior que 75 e a razão bruta (injeção ÷ potência original) é menor que 1.
 - `potencia_kwp` e `kwh_por_kwp_mes` iguais ao resultado numérico esperado da transformação em `decimal(10,2)` (dividindo por 1.000 apenas quando a condição de escala é verdadeira).
-- `fl_data_inconsistente` igual à regra de datas (`data_conexao` fora de `2024-01-01`..`2026-06-30` ou anterior à `data_ligacao`) em todas as linhas.
+- `fl_data_inconsistente` igual à regra de datas (`data_conexao` anterior a `2024-01-01`, posterior a `current_date()` ou anterior à `data_ligacao`) em todas as linhas.
 - As cinco UCs conhecidas desta entrega são conferidas depois da gravação apenas como aviso da amostra histórica, sem interromper a carga se uma data for corrigida na origem.

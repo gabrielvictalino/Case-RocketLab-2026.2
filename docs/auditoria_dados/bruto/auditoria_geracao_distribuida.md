@@ -82,7 +82,7 @@ A correção de escala é essa divisão por 1.000, com a marca `fl_correcao_esca
 | `UC110560` | 2024-09-12 | 2024-12-09 | Recife |
 | `UC119180` | 2024-09-18 | 2024-11-12 | Olinda |
 
-Data inconsistente é essa marca, `fl_data_inconsistente`. A linha permanece na Silver. Apagar a UC esconderia o sistema solar da visão 360. A flag também cobriria uma `data_conexao` fora de 2024-01-01 a 2026-06-30. Nesta entrega nenhuma data cai fora dessa janela, então as 5 linhas acima são o conjunto inteiro.
+Data inconsistente é essa marca, `fl_data_inconsistente`. A linha permanece na Silver. Apagar a UC esconderia o sistema solar da visão 360. A flag também cobre uma `data_conexao` anterior a 2024-01-01 ou no futuro (`> current_date()`). Nesta entrega nenhuma data cai fora dessa faixa, então as 5 linhas acima são o conjunto inteiro.
 
 A `data_ligacao` usada na comparação vem de `tb_unidades_consumidoras`. Esse cadastro repete o cabeçalho numa linha (`id_uc` vale `id_uc` e `data_ligacao` vale o texto `data_ligacao`). Essa linha fica de fora da consulta. Cem UCs com solar aparecem mais de uma vez no cadastro, e as cópias concordam em `data_ligacao`, `classe` e `municipio`.
 
@@ -94,8 +94,8 @@ Notebook: `data-engineering/Bronze_to_Silver.ipynb`. Tabela: `` `v-energy`.silve
 
 1. Trocar a vírgula de `potencia_kwp` por ponto e converter para `decimal(10,2)`. Guardar o texto em `potencia_kwp_raw`.
 2. Se a potência convertida for maior que 75 e a razão bruta (injeção ÷ potência original) for menor que 1 kWh por kWp por mês, dividir por 1.000 e ligar `fl_correcao_escala`.
-3. Converter `energia_injetada_kwh_media_mensal` para `decimal(10,2)`.
-4. Converter `data_conexao` para `date`. Ligar `fl_data_inconsistente` quando a data sai de 2024-01-01 a 2026-06-30 ou quando é anterior à `data_ligacao`.
+3. Trocar eventual vírgula de `energia_injetada_kwh_media_mensal` por ponto e converter para `decimal(10,2)`.
+4. Converter `data_conexao` para `date`. Ligar `fl_data_inconsistente` quando a data é anterior a 2024-01-01, posterior a `current_date()` ou anterior à `data_ligacao`.
 5. Traduzir a modalidade para `PROPRIA_UC`, `AUTOCONSUMO_REMOTO` ou `COMPARTILHADA`. O texto de origem fica em `modalidade_origem`.
 6. Calcular `kwh_por_kwp_mes` depois da correção de escala, só como auditoria. O patamar perto de 34 kWh por kWp por mês é o normal deste arquivo e não reprova linha.
 
