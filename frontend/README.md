@@ -44,3 +44,17 @@ uv sync --package backend   # na raiz do repositório, se ainda não sincronizad
 cd frontend
 npm run gen:api
 ```
+
+## Login e período
+
+Em desenvolvimento (`app.seed`), os usuários de demonstração são criados com
+login igual ao cargo (`diretoria`, `comercial`, `atendimento`, `perdas` e
+`operacao`) e senha `Demo-Venergy-2026!`. A sessão fica em `localStorage` na
+chave `venergy.sessao` e qualquer resposta `401` fora do login redireciona para
+`/login` preservando a rota de retorno.
+
+O período e o período de comparação globais ficam sincronizados na URL no
+formato `?periodo=AAAA-MM..AAAA-MM&comparacao=AAAA-MM..AAAA-MM` (por padrão, os
+últimos 12 meses contra os mesmos 12 meses do ano anterior, segundo os limites
+de `GET /api/v1/meta/carga`) e são expostos às telas pelo hook `usePeriodo()`.
+
