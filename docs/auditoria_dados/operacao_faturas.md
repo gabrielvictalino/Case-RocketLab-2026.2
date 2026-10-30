@@ -4,10 +4,10 @@
 
 | Arquivo | Finalidade | Revisões | Evidência Databricks |
 | :--- | :--- | :--- | :--- |
-| [bronze-to-silver-faturas.ipynb](../../data-engineering/bronze-to-silver-faturas.ipynb) | Anexo do autor, preservado byte a byte | `v-energy.silver` | Run All com `true`, concluído em 29/10/2026 |
-| [bronze-to-silver-faturas-operacional.ipynb](../../data-engineering/bronze-to-silver-faturas-operacional.ipynb) | Cópia para futuras execuções | `v-energy.silver_revisoes` | Sem execução Databricks desta configuração; outputs vazios |
+| [bronze-to-silver-faturas-evidencia-2026-10-29.ipynb](../../data-engineering/bronze-to-silver-faturas-evidencia-2026-10-29.ipynb) | Anexo do autor, com código e outputs históricos preservados | `v-energy.silver` | Run All com `true`, concluído em 29/10/2026 |
+| [bronze-to-silver-faturas.ipynb](../../data-engineering/bronze-to-silver-faturas.ipynb) | Cópia para futuras execuções | `v-energy.silver_revisoes` | Sem execução Databricks desta configuração; outputs vazios |
 
-A preservação do anexo inclui código, metadados, widget e outputs. Nele,
+O arquivo de evidência recebeu somente ajustes de apresentação e identificação após a renomeação. Código, outputs, widget e demais metadados históricos foram preservados. Nele,
 o widget exportado está em `true`. A versão operacional conserva as regras
 de negócio e separa o schema das revisões; os destinos definitivos continuam
 em `v-energy.silver.tb_faturas` e `v-energy.silver.tb_faturas_pendentes_cadastro`.

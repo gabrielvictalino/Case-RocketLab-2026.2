@@ -10,9 +10,9 @@
 
 **Base de código:** commit `8381720b2bed81befcc95ba02ba9dc1b9cf75b8d` — ingestão Bronze unificada.
 
-**Evidência de execução:** [bronze-to-silver-faturas.ipynb](../../data-engineering/bronze-to-silver-faturas.ipynb), anexo do autor preservado byte a byte, com 92 células e 42 células Python. A publicação de 29/10/2026 foi concluída entre 19h18min36s e 19h22min46s, no fuso America/Fortaleza.
+**Evidência de execução:** [bronze-to-silver-faturas-evidencia-2026-10-29.ipynb](../../data-engineering/bronze-to-silver-faturas-evidencia-2026-10-29.ipynb), anexo do autor com código e outputs históricos preservados, com 92 células e 42 células Python. A publicação de 29/10/2026 foi concluída entre 19h18min36s e 19h22min46s, no fuso America/Fortaleza.
 
-**Versão operacional:** [bronze-to-silver-faturas-operacional.ipynb](../../data-engineering/bronze-to-silver-faturas-operacional.ipynb), cópia sem outputs, com revisões em `v-energy.silver_revisoes`. Essa configuração ainda não foi executada no Databricks.
+**Versão operacional:** [bronze-to-silver-faturas.ipynb](../../data-engineering/bronze-to-silver-faturas.ipynb), cópia sem outputs, com revisões em `v-energy.silver_revisoes`. Essa configuração ainda não foi executada no Databricks.
 
 **Situação:** os dois destinos de `v-energy.silver` foram publicados e conferidos na execução anexada. A adoção de `silver_revisoes` está implementada na cópia operacional; a revisão documental não move nem recria tabelas existentes.
 
@@ -379,8 +379,8 @@ entre elas pode deixar resultado parcial e exige investigação.
 
 ### 9.5. Schema separado na versão operacional
 
-O anexo de execução foi preservado sem alterações e continua registrando
-revisões em `silver`. A cópia `bronze-to-silver-faturas-operacional.ipynb`
+O anexo de execução mantém o código e os outputs históricos e continua registrando
+revisões em `silver`. A cópia `bronze-to-silver-faturas.ipynb`
 define `SCHEMA_REVISOES = "silver_revisoes"`: as futuras revisões ficam em
 `v-energy.silver_revisoes` e os destinos finais permanecem em `v-energy.silver`.
 Com o parâmetro `false`, nenhum dos schemas ou tabelas é gravado.
@@ -438,8 +438,8 @@ O versionamento deste relatório e da correção não representa uma nova execu�
 
 ### Referências de evidência
 
-- [bronze-to-silver-faturas.ipynb](../../data-engineering/bronze-to-silver-faturas.ipynb): anexo preservado com as saídas da publicação de 29/10/2026.
-- [bronze-to-silver-faturas-operacional.ipynb](../../data-engineering/bronze-to-silver-faturas-operacional.ipynb): cópia com revisões em schema separado, sem outputs.
+- [bronze-to-silver-faturas-evidencia-2026-10-29.ipynb](../../data-engineering/bronze-to-silver-faturas-evidencia-2026-10-29.ipynb): anexo preservado com as saídas da publicação de 29/10/2026.
+- [bronze-to-silver-faturas.ipynb](../../data-engineering/bronze-to-silver-faturas.ipynb): cópia com revisões em schema separado, sem outputs.
 - [Operação e revisões](operacao_faturas.md): destinos, parâmetro e limites da execução.
 - CSVs de resultados exportados das Seções 2–13 e disponibilizados durante a revisão. Os nomes se repetem entre etapas; a associação é feita pelo conteúdo e pela seção correspondente.
 - Enunciado “Case Final - RocketLab Visagio 2026.2”: responsabilidades Silver, integridade referencial e documentação de suposições.

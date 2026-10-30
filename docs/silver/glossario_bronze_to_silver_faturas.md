@@ -6,11 +6,11 @@ incluindo [pendência cadastral](../../GLOSSARY.md#receita) e
 dos campos e as regras específicas da implementação; não mantém um glossário
 paralelo de termos gerais como JSON, tabela ou Git.
 
-**Evidência de execução:** [bronze-to-silver-faturas.ipynb](../../data-engineering/bronze-to-silver-faturas.ipynb).
+**Evidência de execução:** [bronze-to-silver-faturas-evidencia-2026-10-29.ipynb](../../data-engineering/bronze-to-silver-faturas-evidencia-2026-10-29.ipynb).
 
-**Versão operacional:** [bronze-to-silver-faturas-operacional.ipynb](../../data-engineering/bronze-to-silver-faturas-operacional.ipynb).
+**Versão operacional:** [bronze-to-silver-faturas.ipynb](../../data-engineering/bronze-to-silver-faturas.ipynb).
 
-O anexo foi preservado sem alterações e contém o Run All com publicação de
+O anexo mantém o código e os outputs históricos e contém o Run All com publicação de
 29/10/2026. A cópia operacional está sem outputs e isola as futuras revisões
 em `v-energy.silver_revisoes`; essa configuração ainda não foi executada no Databricks.
 
