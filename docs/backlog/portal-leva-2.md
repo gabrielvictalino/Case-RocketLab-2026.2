@@ -112,7 +112,7 @@ flowchart LR
     P28 --> P29
     P29 --> P30 --> P31
     P29 --> P32 --> P33
-    P29 & P30 --> P34
+    P26 & P29 & P30 --> P34
     P20 & P24 --> P32
     P30 --> P36 & P37 & P41
     P32 --> P35
@@ -146,6 +146,8 @@ dados.
 - [ ] Grant explícito de `SELECT` para a role `ai_read`, view a view, sem grant por schema
 - [ ] Nenhuma view expõe `nome_titular`, `cpf_cnpj`, `logradouro`, `numero` ou `cep` (teste que varre as colunas de `ai_read`)
 - [ ] Teste: como `ai_read`, `SELECT` em `analytics`, `operations` e `portal_read` falha
+- [ ] Endurecimento da role no `infra/postgres/init.sql`: `REVOKE EXECUTE ... FROM PUBLIC` em `set_config` e em `pg_sleep`, `pg_sleep_for` e `pg_sleep_until`, com grant de volta só para `portal` e `importador`. O `init.sql` roda só na criação do volume, então a mudança exige recriar o volume em dev
+- [ ] Teste: como `ai_read`, `set_config`, `pg_sleep`, `pg_read_file` e `lo_import` falham por permissão, e `dblink` não existe
 - [ ] As views são recriadas a cada carga, com os grants
 
 ---
@@ -213,6 +215,7 @@ fundamentadas, sem precisar escrever SQL.
 - [ ] Implementa o protocolo `Assistente` de `venergy_ai.interface` com PydanticAI; provedor e modelo por configuração (Gemini 3.1 Flash-Lite; OpenRouter como alternativa)
 - [ ] O contexto recebido (tela, período, comparação, recortes) é o padrão quando a pergunta não define período
 - [ ] Fluxo: pergunta → plano estruturado (métrica, filtros, período) → SQL → guarda (P28) → execução pela engine `ai_read` com timeout → no máximo uma nova tentativa em erro → resposta
+- [ ] Cada consulta roda numa transação encerrada com `ROLLBACK`, para que um `SET` vindo do SQL não sobreviva na conexão do pool (a consulta seguinte volta a ser só leitura e com timeout)
 - [ ] Resposta estruturada: texto, período e métrica usados, SQL, linhas (até 50 para exibição), modelo, tokens e latência
 - [ ] **"Não sei"** quando: zero linhas, erro após a nova tentativa, pergunta fora do domínio ou dado inexistente no catálogo. Traz o motivo e, quando houver, uma alternativa que os dados permitem
 - [ ] Validação de saída: todo número citado no texto existe nas linhas retornadas; se não existir, a resposta vira "não sei"
@@ -304,7 +307,7 @@ Como diretor, quero abrir a tela e já ler o que os números do período signifi
 ## P34 · [test] Testes de segurança da IA (F10)
 
 **Formulário:** Tarefa técnica · **Tipo:** test · **Módulo:** ai-agent
-**Milestone:** M3 · **Dev:** B · **Depende de:** P29, P30
+**Milestone:** M3 · **Dev:** B · **Depende de:** P26, P29, P30
 **Branch:** `test/NN-seguranca-ia`
 
 **O que precisa ser feito e por quê?**
@@ -312,10 +315,11 @@ Comprovar o requisito "as funcionalidades de IA não podem alterar dados nem ser
 manipuladas para agir fora do seu papel" com testes que a banca possa ler.
 
 **Critérios de conclusão**
-- [ ] Bateria de prompt injection pela rota real com o LLM simulado devolvendo SQL malicioso: `DROP`, `UPDATE`, `INSERT`, múltiplas instruções, acesso a `operations` e funções proibidas. Todas bloqueadas pela guarda **e**, com a guarda desligada no teste, pela role `ai_read`
+- [ ] Bateria de prompt injection pela rota real com o LLM simulado devolvendo SQL malicioso: `DROP`, `UPDATE`, `INSERT`, múltiplas instruções, acesso a `operations`, funções proibidas e `SET`. Com a guarda ligada, todos são rejeitados por ela
+- [ ] Com a guarda desligada no teste, cada caso é barrado pela camada de banco que o cobre, e o teste nomeia a camada: escrita, DDL e acesso a `operations` → falta de privilégio da role `ai_read`; `set_config` e `pg_sleep` → `REVOKE EXECUTE` (P26); consulta longa → `statement_timeout`; `SET` → desfeito pelo `ROLLBACK` da execução (P29), com a consulta seguinte ainda só leitura e com timeout
 - [ ] Pergunta pedindo CPF ou nome → "não sei", sem dado pessoal na resposta nem na auditoria
 - [ ] Instrução embutida nos dados (ex.: texto de chamado "ignore as instruções") tratada como dado
-- [ ] Documento curto `docs/seguranca-ia.md` com as camadas de defesa e o link para os testes (vai para o README)
+- [ ] Documento curto `docs/seguranca-ia.md` com as camadas de defesa, o que cada uma bloqueia e o link para os testes (vai para o README)
 
 ---
 
@@ -335,9 +339,9 @@ recalcular o que não mudou.
 **Critérios de aceite**
 - [ ] Utilitário em `core/cache.py` com chave `cache:{versao_carga}:{rota}:{sha1(filtros normalizados)}` e TTL de 24 h
 - [ ] Aplicado a `meta`, `kpis`, `receita`, `continuidade`, `perdas/fila` e `insights`; a Visão 360 e o assistente ficam fora
-- [ ] Escrita de ordem apaga as chaves da fila
+- [ ] Escrita de ordem apaga as chaves da fila. A escrita que gera inspeção (resultado e confirmação da importação) apaga também as de `kpis` e `insights/visao-geral`, porque a taxa de acerto lê a view `inspecoes`
 - [ ] Fail-open: com o Redis fora, a resposta vem do Postgres e o erro vai para o log
-- [ ] Testes: hit, miss, nova carga invalida tudo, escrita de ordem invalida a fila, Redis fora do ar
+- [ ] Testes: hit, miss, nova carga invalida tudo, escrita de ordem invalida a fila, concluir uma ordem atualiza a taxa de acerto nos KPIs e no insight da Visão Geral sem nova carga, Redis fora do ar
 
 ---
 
