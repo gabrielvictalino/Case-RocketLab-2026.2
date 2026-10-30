@@ -2,7 +2,7 @@
 
 **Evidência de execução:** [bronze-to-silver-faturas-evidencia-2026-10-29.ipynb](../../data-engineering/bronze-to-silver-faturas-evidencia-2026-10-29.ipynb), anexo com código e outputs históricos preservados, com publicação concluída em 29/10/2026.
 
-**Versão operacional:** [bronze-to-silver-faturas.ipynb](../../data-engineering/bronze-to-silver-faturas.ipynb), cópia sem outputs e com revisões em `silver_revisoes`; ainda não executada no Databricks.
+**Versão operacional:** [bronze-to-silver-faturas.ipynb](../../data-engineering/bronze-to-silver-faturas.ipynb), versão operacional com outputs de 30/10/2026 e com revisões em `silver_revisoes`; executada com `false` e `true` em 30/10/2026.
 
 **Objetivo deste arquivo:** apoiar a apresentação das etapas e dos resultados. Os números pertencem à extração auditada, sem impor contagens fixas a futuras cargas.
 
@@ -112,8 +112,7 @@ versão 0. Schemas e conteúdos completos corresponderam aos DataFrames esperado
 incluindo originais e metadados. São 2.152.336 faturas com cadastro e 32.285 pendentes.
 
 **Versão operacional.** A cópia separada grava novas revisões em
-`v-energy.silver_revisoes`; seus outputs estão vazios porque essa configuração
-ainda não foi executada no Databricks. O anexo comprovado mantém o código e os outputs históricos.
+`v-energy.silver_revisoes`; o arquivo operacional contém os outputs de 30/10/2026, e as execuções com `false` e `true` de 30/10/2026 estão registradas separadamente. O anexo comprovado mantém o código e os outputs históricos.
 
 ## 13. Publicação definitiva e conferência dos destinos
 
@@ -135,3 +134,9 @@ uma transação conjunta nem comprova a execução da Gold.
 
 O [guia de operação](../auditoria_dados/operacao_faturas.md) explica os dois
 notebooks, os destinos e a organização das revisões.
+
+## Atualização operacional — 30/10/2026
+
+As execuções com `false` e `true` foram conferidas no mesmo código Python da versão operacional atual. A publicação com `true` criou revisões em `silver_revisoes` e publicou `silver.tb_faturas` na versão Delta **3** e `silver.tb_faturas_pendentes_cadastro` na versão **2**. As contagens e os valores foram mantidos. Tabelas referentes a 29/10/2026 neste documento permanecem como histórico.
+
+Consulte o [registro das novas evidências](../auditoria_dados/evidencias_operacionais_faturas.md), com anexos originais, horários, hashes e limites da validação. Os anexos conservam os nomes anteriores à renomeação.

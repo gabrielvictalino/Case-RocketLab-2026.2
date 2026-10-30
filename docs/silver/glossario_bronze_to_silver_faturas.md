@@ -11,8 +11,8 @@ paralelo de termos gerais como JSON, tabela ou Git.
 **Versão operacional:** [bronze-to-silver-faturas.ipynb](../../data-engineering/bronze-to-silver-faturas.ipynb).
 
 O anexo mantém o código e os outputs históricos e contém o Run All com publicação de
-29/10/2026. A cópia operacional está sem outputs e isola as futuras revisões
-em `v-energy.silver_revisoes`; essa configuração ainda não foi executada no Databricks.
+29/10/2026. A cópia operacional contém os outputs de 30/10/2026 e isola as futuras revisões
+em `v-energy.silver_revisoes`; essa configuração foi executada com `false` e `true` em 30/10/2026.
 
 ## Contrato e verificações
 
@@ -95,3 +95,9 @@ transação separada; falhas entre as duas podem produzir publicação parcial.
 - [Auditoria de faturas](../auditoria_dados/auditoria_faturas.md).
 - [Textos das seções](textos_secoes_notebook_faturas.md).
 - [Operação e revisões](../auditoria_dados/operacao_faturas.md).
+
+## Atualização operacional — 30/10/2026
+
+As execuções com `false` e `true` foram conferidas no mesmo código Python da versão operacional atual. A publicação com `true` criou revisões em `silver_revisoes` e publicou `silver.tb_faturas` na versão Delta **3** e `silver.tb_faturas_pendentes_cadastro` na versão **2**. As contagens e os valores foram mantidos. Tabelas referentes a 29/10/2026 neste documento permanecem como histórico.
+
+Consulte o [registro das novas evidências](../auditoria_dados/evidencias_operacionais_faturas.md), com anexos originais, horários, hashes e limites da validação. Os anexos conservam os nomes anteriores à renomeação.
