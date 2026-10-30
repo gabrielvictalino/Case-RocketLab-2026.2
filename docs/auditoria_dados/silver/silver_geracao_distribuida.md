@@ -51,15 +51,19 @@ Se o mesmo `id_uc` vier duas vezes na Bronze de geração, fica a maior `data_co
 
 ## Escala da potência
 
-Potência convertida acima de 200 kWp é dividida por 1.000. `fl_correcao_escala` fica verdadeiro. O corte fica no vão entre 75 kWp, o topo da distribuição saudável, e o bloco que começa em 3.050. O texto original permanece em `potencia_kwp_raw`.
+Potência convertida acima de 75 kWp cujo rendimento bruto (injeção ÷ potência original) fica abaixo de 1 kWh por kWp por mês é dividida por 1.000. `fl_correcao_escala` fica verdadeiro. O texto original permanece em `potencia_kwp_raw`.
 
-Nesta entrega são 35 linhas.
+Nesta entrega, as 3.475 linhas na escala certa vão de 1,50 a 75,00 kWp, com razão de 11,6 a 110,0 kWh/kWp/mês. As 35 linhas deslocadas vão de 3.049,99 a 8.994,91, com razão bruta de 0,014 a 0,328. Depois da divisão por 1.000, elas caem em 3,05 a 8,99 kWp.
+
+A combinação de potência e razão separa o erro de escala em Wp de uma minigeração real. Um sistema legítimo de 500 kWp com injeção compatível (cerca de 17.000 kWh/mês, razão ~34) não tem a razão abaixo de 1, então permanece em 500 kWp e com `fl_correcao_escala` falso.
+
+Nesta entrega são 35 linhas corrigidas.
 
 ## Data de conexão
 
-`fl_data_inconsistente` fica verdadeiro quando `data_conexao` é anterior a 2024-01-01, posterior a 2026-06-30, ou anterior à `data_ligacao` da UC. A linha permanece na Silver.
+`fl_data_inconsistente` fica verdadeiro quando `data_conexao` é anterior a 2024-01-01, posterior a 2026-06-30, ou anterior à `data_ligacao` da UC. A janela acompanha o período histórico do case (até junho de 2026). A linha permanece na Silver.
 
-Nesta entrega nenhuma data sai da janela. As 5 marcas são conexão anterior à ligação: `UC100259`, `UC102507`, `UC106046`, `UC110560` e `UC119180`.
+Nesta entrega nenhuma data sai da janela. As 5 marcas são conexão anterior à ligação: `UC100259`, `UC102507`, `UC106046`, `UC110560` e `UC119180`. A validação principal confere a regra de datas em todas as linhas; se uma dessas cinco tiver a data corrigida na origem, ou se uma sexta UC entrar nessa condição, a carga segue normalmente. A lista das cinco fica apenas como aviso informativo da amostra histórica.
 
 ## Modalidade
 
@@ -81,13 +85,15 @@ Nesta entrega: 3.042, 321 e 147.
 
 `fl_correcao_escala`, `fl_data_inconsistente` e `fl_deduplicado` não existem no CSV. A Silver cria as três.
 
-## Validação da tabela gravada
+## Validação antes e depois da gravação
 
-Depois do `overwrite`, o notebook lê a tabela e interrompe se alguma checagem falhar.
+As checagens que condicionam a publicação rodam sobre `df_silver` **antes** do `overwrite`, junto com o fechamento `Bronze = Silver + quarentena + duplicatas descartadas`. Se alguma falhar, o notebook lança `RuntimeError` e a tabela Silver anterior é preservada. Depois do `overwrite`, a mesma bateria roda sobre a tabela lida do catálogo para confirmar a gravação.
 
 - Uma linha por `id_uc`.
-- `potencia_kwp` maior que 0 e menor ou igual a 200.
+- `potencia_kwp` maior que 0.
 - `energia_injetada_kwh_media_mensal` maior que 0.
 - `modalidade` dentro dos três códigos.
-- `fl_correcao_escala` verdadeiro exatamente quando o texto original, já com ponto no lugar da vírgula, é maior que 200.
-- As cinco UCs da lista estão na tabela e com `fl_data_inconsistente` verdadeiro.
+- `fl_correcao_escala` verdadeiro exatamente quando a potência original é maior que 75 e a razão bruta (injeção ÷ potência original) é menor que 1.
+- `potencia_kwp` e `kwh_por_kwp_mes` iguais ao resultado numérico esperado da transformação em `decimal(10,2)` (dividindo por 1.000 apenas quando a condição de escala é verdadeira).
+- `fl_data_inconsistente` igual à regra de datas (`data_conexao` fora de `2024-01-01`..`2026-06-30` ou anterior à `data_ligacao`) em todas as linhas.
+- As cinco UCs conhecidas desta entrega são conferidas depois da gravação apenas como aviso da amostra histórica, sem interromper a carga se uma data for corrigida na origem.

@@ -68,7 +68,7 @@ O rendimento (injeção ÷ potência) das 3.475 linhas na escala certa tem media
 
 Há 44 UCs que injetam mais de 2.000 kWh por mês. A potência delas está entre 22,78 e 75,00 kWp, na escala certa. São sistemas grandes. Não entram na correção.
 
-A correção de escala é essa divisão por 1.000, com a marca `fl_correcao_escala`. O texto original permanece em `potencia_kwp_raw`. O corte usado é potência convertida acima de 200 kWp, no vão entre 75 e 3.050.
+A correção de escala é essa divisão por 1.000, com a marca `fl_correcao_escala`. O texto original permanece em `potencia_kwp_raw`. A regra combina potência convertida acima de 75 kWp e rendimento bruto (injeção ÷ potência original) abaixo de 1 kWh por kWp por mês.
 
 ### 3.3. Data de conexão anterior à ligação
 
@@ -90,10 +90,10 @@ A `data_ligacao` usada na comparação vem de `tb_unidades_consumidoras`. Esse c
 
 ## 4. Plano aplicado na Silver
 
-Notebook: `data-engineering/bronze_to_silver/bronze-to-silver-geracao-distribuida.ipynb`. Tabela: `` `v-energy`.silver.tb_geracao_distribuida ``. Grão: uma linha por `id_uc`.
+Notebook: `data-engineering/Bronze_to_Silver.ipynb`. Tabela: `` `v-energy`.silver.tb_geracao_distribuida ``. Grão: uma linha por `id_uc`.
 
 1. Trocar a vírgula de `potencia_kwp` por ponto e converter para `decimal(10,2)`. Guardar o texto em `potencia_kwp_raw`.
-2. Se a potência convertida for maior que 200, dividir por 1.000 e ligar `fl_correcao_escala`.
+2. Se a potência convertida for maior que 75 e a razão bruta (injeção ÷ potência original) for menor que 1 kWh por kWp por mês, dividir por 1.000 e ligar `fl_correcao_escala`.
 3. Converter `energia_injetada_kwh_media_mensal` para `decimal(10,2)`.
 4. Converter `data_conexao` para `date`. Ligar `fl_data_inconsistente` quando a data sai de 2024-01-01 a 2026-06-30 ou quando é anterior à `data_ligacao`.
 5. Traduzir a modalidade para `PROPRIA_UC`, `AUTOCONSUMO_REMOTO` ou `COMPARTILHADA`. O texto de origem fica em `modalidade_origem`.
