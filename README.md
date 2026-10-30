@@ -15,3 +15,6 @@ por conta própria.
 Backend, importador, contratos sintéticos e infraestrutura local estão descritos
 em [backend/README.md](backend/README.md). As pendências para a Gold real estão em
 [docs/backend-pendencias.md](docs/backend-pendencias.md).
+
+Comandos de desenvolvimento, testes, proxy e geração do cliente OpenAPI do portal
+web estão em [frontend/README.md](frontend/README.md).
