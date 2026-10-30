@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router'
+import { NavLink, useSearchParams } from 'react-router'
 import { cn } from '@/lib/utils'
 
 export interface ItemNavegacao {
@@ -16,6 +16,19 @@ export const ITENS_NAVEGACAO: readonly ItemNavegacao[] = [
 ]
 
 export function NavegacaoLateral() {
+  const [searchParams] = useSearchParams()
+
+  const queryPeriodo = new URLSearchParams()
+  const periodo = searchParams.get('periodo')
+  const comparacao = searchParams.get('comparacao')
+  if (periodo) {
+    queryPeriodo.set('periodo', periodo)
+  }
+  if (comparacao) {
+    queryPeriodo.set('comparacao', comparacao)
+  }
+  const sufixoBusca = queryPeriodo.toString()
+
   return (
     <aside
       aria-label="Navegação principal"
@@ -27,22 +40,27 @@ export function NavegacaoLateral() {
         </span>
       </div>
       <nav className="flex flex-col gap-1">
-        {ITENS_NAVEGACAO.map((item) => (
-          <NavLink
-            key={item.caminho}
-            to={item.caminho}
-            className={({ isActive }) =>
-              cn(
-                'rounded-md px-3 py-2 text-sm font-medium transition-colors',
-                isActive
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-              )
-            }
-          >
-            {item.rotulo}
-          </NavLink>
-        ))}
+        {ITENS_NAVEGACAO.map((item) => {
+          const destino = sufixoBusca
+            ? `${item.caminho}?${sufixoBusca}`
+            : item.caminho
+          return (
+            <NavLink
+              key={item.caminho}
+              to={destino}
+              className={({ isActive }) =>
+                cn(
+                  'rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                  isActive
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                )
+              }
+            >
+              {item.rotulo}
+            </NavLink>
+          )
+        })}
       </nav>
     </aside>
   )
