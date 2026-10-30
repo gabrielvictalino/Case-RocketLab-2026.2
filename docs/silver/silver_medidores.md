@@ -31,7 +31,7 @@ As regras são aplicadas na ordem abaixo. Cada uma resolve um achado da auditori
 
 ### 2.1. Padronização de texto (achados M3 e M4)
 * **`id_medidor`, `id_uc`, `modelo`, `status`:** `trim` e maiúsculas. Isso resolve os 3.109 modelos com espaço (`"  EL-3000 "` → `EL-3000`).
-* **`tipo`:** maiúsculas → remove acentos → remove tudo que não é letra → remove o sufixo `METER`. Resultado, em medidores únicos:
+* **`tipo`:** maiúsculas → remove acentos → remove espaços e hífens → remove o sufixo `METER`. Resultado, em medidores únicos:
 
 | Grafias na Bronze | Silver | Medidores |
 | :--- | :--- | :---: |
@@ -40,6 +40,8 @@ As regras são aplicadas na ordem abaixo. Cada uma resolve um achado da auditori
 | `SMART` (7.614), `smart meter` (439), `Smart` (414) | `SMART` | 8.467 |
 
 > **Por que uma regra e não uma tabela de-para:** uma variação nova numa carga futura (ex.: `ELETRÔNICO` ou `Smart Meter`) cai no valor certo sem mudar o código. Se algo não couber no domínio (ex.: `DIGITAL`), a validação barra a carga e mostra a linha.
+>
+> **Por que só espaços e hífens:** são os únicos separadores que aparecem nas grafias da Bronze. Dígitos e outros símbolos continuam no valor, então `ELETRONICO 2` vira `ELETRONICO2` e é barrado como fora do domínio, em vez de ser aceito como `ELETRONICO` (apontado na review do PR #22).
 
 ### 2.2. Conversão de datas (achados M5 e M6)
 O formato é escolhido **pelo padrão do próprio valor**, nunca por tentativa e erro:
@@ -57,7 +59,9 @@ O formato é escolhido **pelo padrão do próprio valor**, nunca por tentativa e
 * As mesmas regras valem para `data_instalacao`, `data_retirada` e `data_ultima_manutencao`. A última está vazia hoje, mas, se uma extração futura trouxer valores, eles serão convertidos e validados.
 
 ### 2.3. Remoção de duplicatas (achado M1)
-`dropDuplicates` sobre as 8 colunas de negócio, **depois** da padronização. Assim, duas linhas que só diferem por espaço ou formato de data também contam como a mesma. Resultado: **513 linhas removidas**.
+`dropDuplicates` sobre as 8 colunas de negócio, **depois** da padronização. Assim, duas linhas que só diferem por espaço ou formato de data também contam como a mesma. Resultado: **513 linhas removidas**, todas idênticas já no texto da Bronze.
+
+Nas 3 datas, a comparação usa a data convertida ou, **se ela não converteu, o texto original**. Sem isso, um `''` e um `30/02/2025` no mesmo medidor virariam nulo os dois, contariam como duplicata, e o `dropDuplicates` manteria um deles ao acaso: a mesma Bronze poderia passar numa execução e ser barrada na seguinte. Com o texto na comparação, as duas linhas ficam, e a carga é sempre barrada (id repetido e data não convertida). Linhas que entram no mesmo grupo têm as mesmas colunas gravadas, então a escolha do `dropDuplicates` não muda a Silver (apontado na review do PR #22).
 
 Se aparecer o mesmo `id_medidor` com conteúdo **diferente**, a carga é barrada (regra "id_medidor repetido"). Escolher uma das versões é decisão de negócio, não algo para a Silver fazer sozinha.
 
@@ -72,6 +76,8 @@ Os medidores de cada UC são ordenados por data de instalação, e cada um receb
 
 Em 100% das trocas, o novo medidor foi instalado no mesmo dia da retirada do anterior (regra de aviso "troca com lacuna" = 0).
 
+**Empate na data de instalação:** se um medidor foi instalado e retirado no mesmo dia em que o seguinte foi instalado, os dois têm a mesma `data_instalacao`. O desempate é `data_retirada` com nulos por último: o retirado vem antes e o `ATIVO` fica por último. Sem isso, a ordem cairia no `id_medidor` (ex.: `MD500100` ativo antes de `MD500900` retirado), a troca sairia invertida e a regra abaixo barraria uma carga válida (apontado na review do PR #22).
+
 A validação também exige que o medidor anterior esteja `RETIRADO`. Se uma carga trouxer o `ATIVO` com data de instalação anterior à do retirado (datas trocadas na origem), a ordenação inverteria a troca, gravando o retirado como se tivesse substituído o ativo. Nesse caso a carga para.
 
 > **Por que na Silver:** é uma derivação dentro da própria tabela, sem depender de outra fonte, e deixa simples as perguntas da Gold sobre a campanha ("o consumo mudou depois da troca para smart?"), que importam para o diagnóstico de receita e para a fila de inspeção.
@@ -80,9 +86,13 @@ A validação também exige que o medidor anterior esteja `RETIRADO`. Se uma car
 
 ## 3. Validações (gate de qualidade)
 
-Antes de gravar, o notebook confere 14 regras numa única passada pelos dados:
+Antes de gravar, o notebook confere 15 regras numa única passada pelos dados:
 * **crítica:** qualquer violação **interrompe a carga antes do `overwrite`**. A Silver anterior continua intacta, e o notebook mostra até 20 linhas que violam a regra.
 * **aviso:** aparece na tabela de resultados, mas não bloqueia a carga.
+
+**Mesmos dados na validação e na escrita:** o notebook lê a Bronze por uma versão fixa (`VERSION AS OF`, a última no início da execução). Validação e escrita são ações separadas do Spark, e cada uma relê a Bronze. Sem a versão fixa, uma recarga da Bronze entre as duas faria o `overwrite` gravar linhas que não foram validadas. O `cache()` resolveria também o custo de recalcular, mas o Serverless não aceita `cache()`/`persist()` (apontado na review do PR #22).
+
+**"Hoje"** é a data atual em `America/Recife` (`FUSO_LOCAL`), o fuso das datas da origem. A sessão do Databricks costuma estar em UTC, 3 horas à frente, e das 21h à meia-noite já estaria no dia seguinte.
 
 | Regra | Nível | Por que existe | Hoje |
 | :--- | :---: | :--- | :---: |
@@ -96,7 +106,8 @@ Antes de gravar, o notebook confere 14 regras numa única passada pelos dados:
 | `data_ultima_manutencao` informada mas não convertida | crítica | Idem, para cargas futuras | 0 |
 | `status` incoerente com `data_retirada` | crítica | `RETIRADO` sem data ou `ATIVO` com data (ex.: sentinela em outro formato) | 0 |
 | Retirada anterior à instalação | crítica | Datas trocadas | 0 |
-| Instalação no futuro | crítica | Erro de digitação de ano | 0 |
+| Data no futuro (instalação, retirada ou manutenção) | crítica | Erro de digitação de ano (ex.: retirada em 2052) | 0 |
+| Manutenção antes da instalação ou depois da retirada | crítica | Datas trocadas; quebraria "medidor ativo na data X" na Gold | 0 |
 | UC sem exatamente 1 medidor `ATIVO` | crítica | Regra do negócio confirmada na auditoria | 0 |
 | Medidor anterior não está `RETIRADO` (troca invertida) | crítica | O `ATIVO` precisa ser o último instalado da UC; senão `id_medidor_anterior` sai ao contrário | 0 |
 | Troca com lacuna (instalação ≠ retirada do anterior) | aviso | UC sem medidor entre uma troca e outra | 0 |
@@ -130,12 +141,13 @@ As descrições também estão gravadas como comentários das colunas no Unity C
 | Decisão | Alternativa descartada | Motivo |
 | :--- | :--- | :--- |
 | Manter os medidores `RETIRADO` | Guardar só os ativos | As leituras antigas apontam para eles, e a troca é informação de negócio |
-| Remover duplicatas **depois** da padronização | Remover antes, sobre o texto bruto | Pega também duplicatas que só diferem por espaço ou formato de data |
+| Remover duplicatas **depois** da padronização, com o texto original das datas que não convertem | Remover antes, sobre o texto bruto | Pega também duplicatas que só diferem por espaço ou formato de data, sem juntar uma data inválida com uma vazia |
+| Ler a Bronze por versão fixa (`VERSION AS OF`) | `cache()`/`persist()` do `df_tratado` | Garante que a escrita grava o que foi validado; o Serverless não aceita cache |
 | Formato de data escolhido pelo padrão do valor | Tentar vários formatos em sequência | Tentativa e erro aceitaria `04-07-1999` como 4 de julho |
 | Manter `data_ultima_manutencao` (vazia) | Remover a coluna | Mantém o schema estável e valida a coluna se ela vier preenchida no futuro |
 | Validação **antes** do `overwrite` | Validar depois de gravar | Uma carga reprovada nunca substitui a Silver boa |
 | Domínios e formatos na célula de configuração | Valores espalhados no código | Uma mudança de regra fica num lugar só e é revisável |
-| Silver sem dependência do cadastro | Cruzar com `unidades_consumidoras` aqui | A Bronze do cadastro ainda está em revisão (PR #13). Os cruzamentos estão listados na seção 9 |
+| Silver sem dependência do cadastro | Cruzar com `unidades_consumidoras` aqui | O cadastro já está na Bronze unificada (PR #14), mas a conversão de `data_ligacao` e as datas implausíveis são tratadas na Silver do cadastro (PR #24). Os cruzamentos estão na seção 9 |
 | Carga completa com `overwrite` | `merge` incremental | Extração única: reexecutar dá o mesmo resultado, e o Delta guarda as versões anteriores |
 
 ---
@@ -155,7 +167,8 @@ Se a tabela não existir, rode antes a Bronze unificada, `data-engineering/Landi
 3. **Run all**. O schema `` `v-energy`.silver `` é criado na primeira execução.
 
 ### 6.3. O que conferir
-* **Tabela de validação:** 14 regras com `violacoes = 0` e `status = OK`.
+* **Leitura:** `` `v-energy`.bronze.tb_medidores (versão N): 51812 linhas ``, com a versão da Bronze usada na carga.
+* **Tabela de validação:** 15 regras com `violacoes = 0` e `status = OK`.
 * **Linha de resumo:** `Bronze: 51812 linhas | Silver: 51299 linhas | duplicatas removidas: 513`.
 * **Confirmação final:** `` OK: 51299 medidores carregados em `v-energy`.silver.tb_medidores ``.
 * **Evidências:** as grafias de `tipo` convergindo para 3 valores, um exemplo de cada formato de data convertido, a visão por status e tipo, e as trocas por mês.
@@ -172,6 +185,7 @@ A mensagem lista cada regra crítica violada e a quantidade de linhas, e logo ac
 | UC sem exatamente 1 `ATIVO` | Troca registrada pela metade | Investigar a UC na Bronze |
 | `status incoerente com data_retirada` | Sentinela nova (ex.: `31/12/9999`) | Incluir a sentinela em `SENTINELAS_DATA` |
 | `medidor anterior não está RETIRADO` | `ATIVO` com instalação anterior à do retirado (datas trocadas na origem) | Corrigir a data na origem; a Silver não escolhe qual data vale |
+| `data no futuro` / `manutenção antes da instalação…` | Erro de digitação de ano ou datas trocadas | Corrigir a data na origem |
 
 ### 6.5. No Workflow (Job)
 Esta tarefa depende apenas da Bronze de medidores:
@@ -217,6 +231,16 @@ O notebook foi executado sem modificações num Spark 4.0.1 + Delta 4.0.0 local 
   * segundo medidor ativo na UC;
   * sentinela no formato `31/12/9999`;
   * medidor `ATIVO` com instalação anterior à do retirado (troca invertida, apontado na review do PR #22).
+* **Cenários da segunda review do PR #22**, com a Bronze alterada e a sessão em UTC, como no Serverless (versão anterior → versão atual):
+  * `''` e `30/02/2025` na `data_retirada` do mesmo medidor: a anterior gravou, porque a duplicata escondeu a data inválida; agora a carga é barrada;
+  * retirado e `ATIVO` instalados no mesmo dia, com o `ATIVO` de id menor: a anterior barrava como troca invertida; agora grava, e o `ATIVO` aponta o retirado como anterior;
+  * `data_retirada` em 2052 e manutenção em 1990, antes da instalação: a anterior gravou; agora os dois são barrados;
+  * `tipo` `ELETRONICO 2`: a anterior gravou como `ELETRONICO`; agora é barrado;
+  * apóstrofo no comentário da tabela: a anterior quebrava no `COMMENT ON TABLE`, depois do `overwrite`; agora grava;
+  * 1.000 ids em minúsculas na Bronze: a evidência 1 perdia os 1.000; agora cobre os 51.299;
+  * Bronze recarregada com 50.000 linhas entre a validação e a escrita: a anterior gravou as 50.000, que não tinham sido validadas; agora grava as 51.299 validadas.
+* Com a Bronze original, a versão atual dá a mesma Silver da anterior (51.299 linhas, nenhuma diferente), e os 6 defeitos acima continuam barrados.
+* `ruff check` e `ruff format --check`, com a configuração do `pyproject.toml`, passam no notebook. `spark` e `display` são globais do Databricks, liberados com `# ruff: noqa: F821` na primeira célula.
 
 **Databricks (Serverless):** o notebook também foi executado no Unity Catalog (na época em `venergy.silver`, antes da troca para os nomes da Bronze unificada), e a tabela de validação, os totais e as evidências deram os mesmos números do teste local.
 
@@ -224,5 +248,5 @@ O notebook foi executado sem modificações num Spark 4.0.1 + Delta 4.0.0 local 
 
 ## 9. Pendências e pontos que dependem de outras tabelas
 
-* **Cadastro (`unidades_consumidoras`, PR #13):** quando a Silver do cadastro existir, conferir que todo `id_uc` existe lá (hoje 100%, segundo a auditoria) e que nenhuma instalação é anterior à `data_ligacao`. As 90 UCs com `data_ligacao` implausível (ex.: `1903-01-01`) são problema do cadastro, não desta tabela.
+* **Cadastro (`unidades_consumidoras`):** a Bronze do cadastro já está carregada pela Bronze unificada (PR #14), e conferi nela que as 45.000 UCs dos medidores existem no cadastro (100%). Falta conferir que nenhuma instalação é anterior à `data_ligacao`: isso depende da Silver do cadastro (PR #24), que trata as UCs repetidas e as 90 UCs com `data_ligacao` implausível (ex.: `1903-01-01`). Essas datas são problema do cadastro, não desta tabela.
 * **Leituras:** a Silver de leituras (PR #18) usa a Bronze de medidores para descartar os clones `LTX`. O resultado seria o mesmo com esta tabela, porque os `id_medidor` são idênticos. Para análises que comparam datas de leitura com datas de troca, prefira esta Silver, com as datas já convertidas.
