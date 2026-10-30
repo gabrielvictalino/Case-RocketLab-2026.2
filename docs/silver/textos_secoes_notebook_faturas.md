@@ -1,8 +1,8 @@
 # Textos para apresentação do notebook de faturas
 
-**Evidência de execução:** [bronze-to-silver-faturas.ipynb](../../data-engineering/bronze-to-silver-faturas.ipynb), anexo preservado sem alterações, com publicação concluída em 29/10/2026.
+**Evidência de execução:** [bronze-to-silver-faturas-evidencia-2026-10-29.ipynb](../../data-engineering/bronze-to-silver-faturas-evidencia-2026-10-29.ipynb), anexo com código e outputs históricos preservados, com publicação concluída em 29/10/2026.
 
-**Versão operacional:** [bronze-to-silver-faturas-operacional.ipynb](../../data-engineering/bronze-to-silver-faturas-operacional.ipynb), cópia sem outputs e com revisões em `silver_revisoes`; ainda não executada no Databricks.
+**Versão operacional:** [bronze-to-silver-faturas.ipynb](../../data-engineering/bronze-to-silver-faturas.ipynb), cópia sem outputs e com revisões em `silver_revisoes`; ainda não executada no Databricks.
 
 **Objetivo deste arquivo:** apoiar a apresentação das etapas e dos resultados. Os números pertencem à extração auditada, sem impor contagens fixas a futuras cargas.
 
@@ -113,7 +113,7 @@ incluindo originais e metadados. São 2.152.336 faturas com cadastro e 32.285 pe
 
 **Versão operacional.** A cópia separada grava novas revisões em
 `v-energy.silver_revisoes`; seus outputs estão vazios porque essa configuração
-ainda não foi executada no Databricks. O anexo comprovado permanece intacto.
+ainda não foi executada no Databricks. O anexo comprovado mantém o código e os outputs históricos.
 
 ## 13. Publicação definitiva e conferência dos destinos
 
