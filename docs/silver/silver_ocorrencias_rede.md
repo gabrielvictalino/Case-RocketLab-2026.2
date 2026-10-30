@@ -21,16 +21,20 @@
 | `causa` | 6 causas + 4 formas de ausência (`''`, `-`, `N/A`, `NULL`) | 6 causas + **`NAO INFORMADA`** (5.400) |
 | Sobreposição na mesma UC | soma direta conta **43.527 min em dobro** | `flag_sobreposicao` (330) e **`duracao_efetiva_min`**, dentro de cada mês |
 | Evento de 2025-07 | misturado ao resto | **`flag_evento_atipico`** (12.836 ocorrências) |
-| Colunas de apoio | — | `sigla_municipio` (14 siglas) e `ano_mes` (48 meses) |
+| Colunas de apoio | — | `sigla_municipio` (14 siglas) e `competencia` (48 meses, `DATE`) |
 
 ---
 
 ## 2. Regras de transformação
 
 ### 2.1. Datas como `TIMESTAMP_NTZ` (achado 3.4)
-As datas chegam num formato único e limpo. A conversão usa `try_to_timestamp`, que transforma valor inválido em nulo (barrado pela validação) em vez de quebrar a execução, e grava como **`TIMESTAMP_NTZ`**.
+As datas chegam num formato único e limpo, `yyyy-MM-dd HH:mm:ss`. O valor nesse formato (`PADRAO_DATA_HORA`) é convertido com `try_cast(... AS TIMESTAMP_NTZ)` e gravado como **`TIMESTAMP_NTZ`**. Outro formato, ou uma data inexistente como `2023-02-29`, vira nulo e é barrado pela validação, sem quebrar a execução.
 
-> **Por que sem fuso:** os horários são locais de Recife e a origem não informa fuso. Com o `TIMESTAMP` comum, o Spark interpreta o horário no fuso da sessão, e uma sessão configurada com outro fuso, ou uma exportação para outro banco, pode deslocar as horas. Com `NTZ`, `2022-07-01 16:33` é sempre `2022-07-01 16:33`. Isso foi testado trocando o fuso da sessão.
+> **Por que sem fuso:** os horários são locais de Recife e a origem não informa fuso. Com o `TIMESTAMP` comum, o Spark interpreta o horário no fuso da sessão, e uma sessão configurada com outro fuso, ou uma exportação para outro banco, pode deslocar as horas. O cast de texto direto para `TIMESTAMP_NTZ` não passa por fuso nenhum, então `2022-07-01 16:33` é sempre `2022-07-01 16:33`, em qualquer sessão.
+>
+> **Por que o cast e não `try_to_timestamp`:** a versão anterior convertia com `try_to_timestamp` e depois para `NTZ`. Esse caminho interpreta o texto no fuso da sessão, e num fuso com horário de verão um horário que cai no salto do relógio anda 1 hora (apontado na review do PR #23). O padrão restringe ao formato da origem porque o cast sozinho aceita outros (só a data, ou com `T`), e o `to_timestamp_ntz` com formato quebra a execução numa data inexistente em vez de devolver nulo.
+>
+> **Contas de minutos:** pelo mesmo motivo, a duração conferida na validação e os minutos não cobertos da sobreposição usam `minutos_entre()`, a diferença entre os dois horários locais (`CAST(fim - inicio AS INTERVAL MINUTE)`). O `timestampdiff` converte os dois horários para o fuso da sessão antes de subtrair. Com a sessão em `America/New_York`, 28 ocorrências da base real têm abertura ou encerramento entre 02:00 e 03:00 dos domingos de março em que o relógio adianta. A versão anterior era barrada, com 5 encerramentos antes da abertura e 28 durações divergentes; a atual grava a mesma Silver que em UTC. O Serverless, em UTC, não era afetado.
 
 ### 2.2. `duracao_min` como inteiro (achado 3.1)
 A expressão `^\s*(\d+)\s*(min)?\s*$`, sem diferenciar maiúsculas, aceita `"217"`, `"217 min"` e `"217 MIN"`. Depois vem `try_cast` para inteiro. Os 16.200 valores com sufixo (1.946.610 minutos) entram corretamente. Um `cast` direto os transformaria em nulo e subestimaria o DEC em 9% das ocorrências. Qualquer outro formato (ex.: `"75 minutos"`) é barrado.
@@ -51,7 +55,7 @@ As 4 formas de ausência (`''`, `-`, `N/A`, `NULL`, num total de 5.400) viram **
 > **Decisão:** usei a categoria explícita em vez de `null` (a auditoria deixou a escolha para o time). Com isso, `GROUP BY causa` mostra a ausência como uma linha legível, e consultas como `WHERE causa <> 'CLIMATICA'` não perdem linhas por causa de nulo. Isso importa para o agente de IA, que escreve SQL sozinho. `NAO INFORMADA` (sem registro) continua separada de `NAO IDENTIFICADA` (causa investigada e não encontrada). Para usar `null`, basta trocar `CAUSA_NAO_INFORMADA` na configuração.
 
 ### 2.4. Interrupções sobrepostas na mesma UC (achado 4.2)
-Para cada ocorrência, o notebook calcula o **maior encerramento entre as ocorrências anteriores da mesma UC abertas no mesmo mês** (`max(data_encerramento)` numa janela por UC, alimentador e `ano_mes`, ordenada por abertura). Comparar só com a ocorrência imediatamente anterior deixaria passar 2 casos.
+Para cada ocorrência, o notebook calcula o **maior encerramento entre as ocorrências anteriores da mesma UC abertas no mesmo mês** (`max(data_encerramento)` numa janela por UC e `competencia`, ordenada por abertura). Comparar só com a ocorrência imediatamente anterior deixaria passar 2 casos.
 
 * **`flag_sobreposicao`:** a ocorrência começou enquanto a UC já estava sem energia (330 casos, 268 em 2025-07).
 * **`duracao_efetiva_min`:** minutos desta ocorrência que **ainda não** estavam cobertos (`encerramento − maior_fim_anterior`, ou zero).
@@ -67,9 +71,17 @@ Exemplo real, a `UC107537`:
 
 Em toda a base, `SUM(duracao_min)` = 21.392.087 min e **`SUM(duracao_efetiva_min)` = 21.348.560 min**, que é a união dos intervalos de cada UC dentro de cada mês. São 43.527 min que uma soma direta contaria em dobro.
 
-> **Por que dentro do mês:** a Gold soma por mês e escolhe se inclui o evento atípico. Se a sobreposição fosse calculada sobre toda a série da UC, uma ocorrência de outro mês, ou de um mês de evento atípico, poderia cobrir esta, e os minutos ficariam com a outra. Quando a Gold tirasse aquele mês da conta, eles sumiriam. Exemplo: uma ocorrência atípica de 31/07 a 02/08 cobriria uma normal de 01/08, que ficaria com 0 min; sem o evento, as 4 horas da normal desapareceriam do DEC de agosto. Com a janela por UC, alimentador e mês, e o flag valendo para o alimentador no mês inteiro, nenhuma janela mistura ocorrências com e sem o flag, e qualquer conjunto de meses soma certo (apontado na review do PR #23).
+> **Por que dentro do mês:** a Gold soma por mês e escolhe se inclui o evento atípico. Se a sobreposição fosse calculada sobre toda a série da UC, uma ocorrência de outro mês, ou de um mês de evento atípico, poderia cobrir esta, e os minutos ficariam com a outra. Quando a Gold tirasse aquele mês da conta, eles sumiriam. Exemplo: uma ocorrência atípica de 31/07 a 02/08 cobriria uma normal de 01/08, que ficaria com 0 min; sem o evento, as 4 horas da normal desapareceriam do DEC de agosto. A janela é por UC e competência, e uma regra crítica (seção 3) garante que a UC está num único alimentador na competência. Como o flag vale para o alimentador na competência inteira, nenhuma janela mistura ocorrências com e sem o flag, e qualquer conjunto de meses soma certo (apontado na review do PR #23).
 >
-> **O custo:** uma interrupção que atravessa a virada do mês e cobre outra do mês seguinte conta nos dois meses. Na base atual é 1 caso, com 34 min (com a sobreposição sobre toda a série eram 331 casos e 43.561 min em dobro).
+> **Um alimentador por UC na competência:** sem essa regra, uma UC que aparecesse em dois alimentadores no mesmo mês teria as sobreposições entre eles contadas em dobro sem reprovar a carga (apontado na review do PR #23). Hoje nenhuma UC aparece em mais de um alimentador, nem ao longo dos 48 meses.
+>
+> **O custo:** uma interrupção que atravessa a virada do mês e cobre outra do mês seguinte conta nos dois meses. Os minutos em comum entram nos dois, e a ocorrência coberta conta como uma interrupção a mais no FEC do mês seguinte. Na base atual é 1 caso, a `OC00169819` (`ALM-REC-044`, 2026-03): 34 min e 1 interrupção a mais (com a sobreposição sobre toda a série eram 331 casos e 43.561 min em dobro).
+
+**Por causa:** os minutos em comum ficam com a interrupção que já estava em curso, a que deixou a UC sem energia primeiro. Assim, `SUM(duracao_efetiva_min)` por causa reparte o tempo sem energia e fecha com o total, como num Pareto de causas. A consequência é que filtrar uma causa não recalcula o tempo das outras sem ela (apontado na review do PR #23). Exemplo: `CLIMATICA` das 08h às 12h e `VEGETACAO` das 09h às 11h na mesma UC. A `VEGETACAO` fica com 0 min, porque a UC já estava sem energia, e some de um `WHERE causa <> 'CLIMATICA'`.
+
+* **Tamanho na base atual:** 66 das 330 sobreposições são cobertas só por interrupções de outra causa. Calculado sozinho (união dos intervalos de cada causa), o tempo de cada causa passaria o atribuído em 403 a 1.381 min, num total de 4.976 min (0,02% dos 21,3 milhões).
+* **Por que repartir:** no contrato da Gold, `causa` é um atributo e não um recorte do DEC. É uma por linha em `continuidade_alimentador_mensal` (grão alimentador × competência) e a de cada ocorrência em `ocorrencias_uc`. O DEC e o FEC do contrato são o total do alimentador, que a repartição mantém exato. Uma união por UC e causa faria a soma das causas passar do total.
+* **Se o portal precisar do recorte** "sem esta causa", dá para acrescentar uma coluna com a união por UC, competência e causa, ao lado de `duracao_efetiva_min`.
 
 ### 2.5. Evento atípico por alimentador e mês (achado 4.1)
 O termo segue o glossário (**evento atípico**), e a coluna tem o mesmo nome do contrato da Gold de continuidade (`flag_evento_atipico`).
@@ -90,28 +102,31 @@ Fora esses 3, nenhum mês de nenhum alimentador passa de **2,3×** a base, nem o
 
 > **Por que limitar ao período do alimentador:** se um alimentador entrar ou sair no meio do período, os meses em que ele não existia entrariam com zero e puxariam a mediana dele para baixo. Hoje os 122 alimentadores aparecem nos 48 meses, então o resultado é o mesmo. O limite protege as próximas cargas (apontado na review do PR #23).
 
-> **Por que uma regra e não a data fixa:** `WHERE ano_mes = '2025-07'` resolveria hoje, mas o case prevê cargas mensais. A regra marca sozinha o próximo evento parecido. O flag **não remove nada**: a Gold decide se calcula DEC/FEC com ou sem esses meses.
+> **Por que uma regra e não a data fixa:** `WHERE competencia = '2025-07-01'` resolveria hoje, mas o case prevê cargas mensais. A regra marca sozinha o próximo evento parecido. O flag **não remove nada**: a Gold decide se calcula DEC/FEC com ou sem esses meses.
 
 ### 2.6. Colunas de apoio e duplicatas
 * **`sigla_municipio`:** extraída do código do alimentador (`ALM-REC-008` → `REC`). São 14 siglas, coerentes 100% com o município do cadastro (auditoria, seção 6).
-* **`ano_mes`:** mês de abertura em `yyyy-MM`, para agregações mensais.
-* **Duplicatas exatas:** linhas iguais nas colunas da Bronze, removidas depois da padronização. A Bronze atual não tem nenhuma, mas a regra protege as próximas cargas. O mesmo id com conteúdo diferente bloqueia a carga.
+* **`competencia`:** mês de abertura como `DATE`, no primeiro dia do mês (`2022-07-01`). É o eixo de tempo do glossário e o mesmo nome e tipo dos contratos da Gold, que assim não precisa renomear nem converter (apontado na review do PR #23). Sai da data local da abertura (`trunc(CAST(data_abertura AS DATE), 'month')`), sem passar por fuso. Antes era `ano_mes`, texto `yyyy-MM`.
+* **Duplicatas exatas:** linhas iguais nas colunas da Bronze, removidas depois da padronização. Entre elas fica a da carga mais antiga (`ingestion_datetime` e, no empate, `source_file`), então a linhagem gravada é a mesma em toda execução; com o `dropDuplicates`, qualquer uma podia ficar (apontado na review do PR #23). A Bronze atual não tem nenhuma, mas a regra protege as próximas cargas. O mesmo id com conteúdo diferente bloqueia a carga.
 
 ---
 
 ## 3. Validações (gate de qualidade)
 
-Antes de gravar, o notebook confere 12 regras críticas numa única passada pelos dados. Qualquer violação **interrompe a carga antes do `overwrite`** (a Silver anterior continua intacta), e o notebook mostra até 20 linhas que violam a regra.
+Antes de gravar, o notebook confere 13 regras críticas numa única passada pelos dados. Qualquer violação **interrompe a carga antes do `overwrite`** (a Silver anterior continua intacta), e o notebook mostra até 20 linhas que violam a regra.
 
-**Mesmos dados na validação e na escrita:** o notebook lê a Bronze por uma versão fixa (`VERSION AS OF`, a última no início da execução). Validação e escrita são ações separadas do Spark, e cada uma relê a Bronze. Sem a versão fixa, uma recarga da Bronze entre as duas faria o `overwrite` gravar linhas que não foram validadas. O `cache()` resolveria também o custo de recalcular, mas o Serverless não aceita `cache()`/`persist()` (apontado na review do PR #23).
+**Mesmos dados na validação e na escrita:** o notebook lê a Bronze por uma versão fixa (`VERSION AS OF`, a última no início da execução). Validação e escrita são ações separadas do Spark, e cada uma relê a Bronze. Sem a versão fixa, uma recarga da Bronze entre as duas faria o `overwrite` gravar linhas que não foram validadas. O `cache()` resolveria também o custo de recalcular, mas o Serverless não aceita `cache()`/`persist()` (apontado na review do PR #23). O plano é recalculado em 4 ações (mediana da rede, validação, tabela de evento atípico e escrita), o que com 180 mil linhas custa pouco. O id repetido é contado na mesma agregação da validação (`count − count distinct`), sem a ordenação que a janela por id fazia, e a regra de alimentador usa a mesma partição da sobreposição.
+
+**Depois de gravar:** o notebook confere se a tabela tem as colunas esperadas e o número de linhas validado. Se não tiver, volta a Silver para a versão anterior à carga (`RESTORE TABLE ... TO VERSION AS OF`), ou a remove se era a primeira carga, e para com o erro. Antes, essa conferência rodava depois do `overwrite` sem desfazer nada, e uma falha deixaria a tabela errada publicada (apontado na review do PR #23). A restauração cria uma versão Delta nova com o conteúdo anterior. O comentário da tabela só é atualizado depois da conferência.
 
 **"Agora"** é a hora atual em `America/Recife` (`FUSO_ORIGEM`), o mesmo fuso das datas da origem, como `TIMESTAMP_NTZ`. Comparar com `localtimestamp()` usaria o fuso da sessão, que no Serverless costuma ser UTC, 3 horas à frente, e uma abertura até 3 horas no futuro passaria.
 
 | Regra | Por que existe | Hoje |
 | :--- | :--- | :---: |
-| `id_ocorrencia` repetido após remover duplicatas exatas | Garante a chave da tabela | 0 |
+| `id_ocorrencia` repetido após remover duplicatas exatas (linhas a mais) | Garante a chave da tabela | 0 |
 | `id_ocorrencia`/`id_uc` fora do padrão `OC…`/`UC…` + dígitos | Ids malformados quebram cruzamentos | 0 |
 | `alimentador` fora do padrão `ALM-AAA-999` | DEC/FEC são calculados por alimentador | 0 |
+| `id_uc` em mais de um alimentador na mesma competência | A sobreposição é calculada por UC e competência dentro de um alimentador | 0 |
 | `tipo` fora do domínio (5 valores) | Categoria nova precisa de decisão | 0 |
 | `causa` fora do domínio (7 valores) | Idem | 0 |
 | `data_abertura` vazia ou não convertida | Formato novo ou data impossível | 0 |
@@ -122,7 +137,7 @@ Antes de gravar, o notebook confere 12 regras críticas numa única passada pelo
 | `duracao_min` ≠ encerramento − abertura | As duas fontes de duração precisam concordar | 0 |
 | `duracao_efetiva_min` fora de [0, `duracao_min`] | Sanidade do cálculo de sobreposição | 0 |
 
-O notebook também imprime os totais de sobreposição (330 ocorrências e 43.527 min em dobro), a mediana da rede e a lista de meses de evento atípico, com a contagem, a mediana do alimentador e a base de cada um.
+O notebook também imprime os totais de sobreposição (330 ocorrências e 43.527 min em dobro), a mediana da rede e a lista de competências de evento atípico, com a contagem, a mediana do alimentador e a base de cada um.
 
 ---
 
@@ -138,16 +153,16 @@ O notebook também imprime os totais de sobreposição (330 ocorrências e 43.52
 | `causa` | STRING | não | 6 causas ou `NAO INFORMADA` | `CLIMATICA` |
 | `data_abertura` | TIMESTAMP_NTZ | não | Início da interrupção (hora local) | 2022-07-01 16:33:00 |
 | `data_encerramento` | TIMESTAMP_NTZ | não | Fim da interrupção (hora local) | 2022-07-01 20:10:00 |
-| `ano_mes` | STRING | não | Mês de abertura (`yyyy-MM`) | `2022-07` |
+| `competencia` | DATE | não | Competência da abertura: primeiro dia do mês de `data_abertura` | 2022-07-01 |
 | `duracao_min` | INT | não | Duração registrada (= encerramento − abertura) | 217 |
-| `duracao_efetiva_min` | INT | não | Minutos não cobertos por ocorrência anterior da mesma UC no mesmo mês. **Use `SUM` desta coluna para o tempo sem energia** | 217 |
-| `flag_sobreposicao` | BOOLEAN | não | `true` se a UC já estava sem energia, por outra ocorrência aberta no mesmo mês, quando esta começou. **Para contar interrupções, use as linhas com `false`** | false |
-| `flag_evento_atipico` | BOOLEAN | não | `true` se a ocorrência foi aberta num mês de evento atípico do alimentador (mais de 5× a base mensal dele) | false |
+| `duracao_efetiva_min` | INT | não | Minutos não cobertos por ocorrência anterior da mesma UC na mesma competência. **Use `SUM` desta coluna para o tempo sem energia.** Por causa, os minutos em comum ficam com a interrupção que já estava em curso (seção 2.4) | 217 |
+| `flag_sobreposicao` | BOOLEAN | não | `true` se a UC já estava sem energia, por outra ocorrência aberta na mesma competência, quando esta começou. **Para contar interrupções, use as linhas com `false`** | false |
+| `flag_evento_atipico` | BOOLEAN | não | `true` se a ocorrência foi aberta numa competência de evento atípico do alimentador (mais de 5× a base mensal dele) | false |
 | `source_file` | STRING | não | Arquivo de origem na landing | `ocorrencias_rede.csv` |
 | `ingestion_datetime` | TIMESTAMP | não | Momento da carga na Bronze | — |
 | `silver_datetime` | TIMESTAMP | não | Momento da carga na Silver | — |
 
-As descrições também estão gravadas como comentários das colunas no Unity Catalog.
+As descrições também estão gravadas como comentários das colunas no Unity Catalog. O de `flag_evento_atipico` é montado a partir de `LIMIAR_EVENTO_ATIPICO` e `MESES_MINIMOS_SERIE`, então acompanha uma mudança na regra; antes trazia "5x" e o evento de 2025-07 escritos no texto (apontado na review do PR #23).
 
 ---
 
@@ -155,13 +170,17 @@ As descrições também estão gravadas como comentários das colunas no Unity C
 
 | Decisão | Alternativa descartada | Motivo |
 | :--- | :--- | :--- |
-| `TIMESTAMP_NTZ` | `TIMESTAMP` com fuso | Horário local sem fuso na origem; evita deslocamento de horas entre sessões e exportações |
+| `TIMESTAMP_NTZ` por cast direto do texto, e minutos pela diferença entre horários locais | `TIMESTAMP` com fuso; `try_to_timestamp` convertido para `NTZ`; `timestampdiff` | Horário local sem fuso na origem; nenhum fuso de sessão desloca as horas ou muda as durações, nem no horário de verão |
 | `NAO INFORMADA` explícita | `null` | Agrupamentos legíveis e SQL sem armadilhas de nulo; separada de `NAO IDENTIFICADA` |
 | Sobreposição por **maior encerramento acumulado** | Comparar com a ocorrência anterior imediata | A comparação simples perde 2 casos e deixa minutos em dobro (revisão do PR #9) |
-| Sobreposição **dentro do mês** | Sobre toda a série da UC | A Gold soma meses, com ou sem o evento atípico, sem perder minutos; custa 34 min contados em dois meses na base atual |
+| Sobreposição **dentro da competência**, com um alimentador por UC na competência | Sobre toda a série da UC | A Gold soma meses, com ou sem o evento atípico, sem perder minutos; custa 34 min e 1 interrupção contados em dois meses na base atual |
+| Minutos em comum com a interrupção que já estava em curso, qualquer que seja a causa | União por UC e causa | O tempo por causa fecha com o total do DEC; filtrar uma causa não recalcula as outras (4.976 min na base atual) |
+| `competencia` (`DATE`, primeiro dia do mês) | `ano_mes` (texto `yyyy-MM`) | Termo do glossário, com o nome e o tipo dos contratos da Gold |
+| Entre duplicatas exatas, a linha da carga mais antiga | `dropDuplicates` (qualquer uma) | A linhagem gravada é a mesma em toda execução |
 | `duracao_efetiva_min` por linha | Tabela separada de intervalos unidos | Mantém um grão só, e `SUM`/`COUNT_IF` resolvem DEC e FEC direto |
 | Evento atípico por **regra** (5× a base mensal do alimentador, com piso na mediana da rede) | Data fixa `2025-07` no código | Funciona nas próximas cargas mensais, inclusive com alimentadores novos, desativados, com série curta ou quase sem ocorrências; nada é removido |
 | Validação **antes** do `overwrite` | Validar depois de gravar | Uma carga reprovada nunca substitui a Silver boa |
+| Conferência depois da escrita com `RESTORE` da versão anterior | Gravar numa tabela de staging, validar e só então trocar | A conferência só falha num erro da própria escrita; a restauração desfaz a carga sem uma segunda tabela e uma segunda escrita |
 | Ler a Bronze por versão fixa (`VERSION AS OF`) | `cache()`/`persist()` do `df_tratado` | Garante que a escrita grava o que foi validado; o Serverless não aceita cache |
 | Silver sem dependência do cadastro | Cruzar com `unidades_consumidoras` aqui | O cadastro já está na Bronze unificada (PR #14), mas as UCs repetidas e as datas implausíveis são tratadas na Silver do cadastro (PR #24). Os cruzamentos estão na seção 9 |
 
@@ -181,11 +200,11 @@ Se a tabela não existir, rode antes a Bronze unificada, `data-engineering/Landi
 3. **Run all**. O schema `` `v-energy`.silver `` é criado se ainda não existir.
 
 ### 6.3. O que conferir
-* **Tabela de validação:** 12 regras com `violacoes = 0` e `status = OK`.
+* **Tabela de validação:** 13 regras com `violacoes = 0` e `status = OK`.
 * **Resumo:** `Bronze: 180000 linhas | Silver: 180000 linhas | duplicatas removidas: 0`.
 * **Leitura:** `` `v-energy`.bronze.tb_ocorrencias_rede (versão N): 180000 linhas ``, com a versão da Bronze usada na carga.
-* **Totais:** `Sobrepostas: 330 | minutos somados: 21392087 | minutos efetivos: 21348560 | em dobro: 43527`, `Ocorrências em evento atípico: 12836` e `Mediana da rede (alimentador × mês): 28.0`.
-* **Meses de evento atípico:** os 3 alimentadores de 2025-07, com contagem, mediana e base.
+* **Totais:** `Sobrepostas: 330 | minutos somados: 21392087 | minutos efetivos: 21348560 | em dobro: 43527`, `Ocorrências em evento atípico: 12836` e `Mediana da rede (alimentador × competência): 28.0`.
+* **Competências de evento atípico:** os 3 alimentadores de 2025-07, com contagem, mediana e base.
 * **Confirmação final:** `` OK: 180000 ocorrências carregadas em `v-energy`.silver.tb_ocorrencias_rede ``.
 * **Evidências:**
   * causa Bronze → Silver;
@@ -198,11 +217,13 @@ A mensagem lista cada regra crítica violada e a quantidade de linhas, e logo ac
 
 | Regra que falhou | Causa provável | O que fazer |
 | :--- | :--- | :--- |
-| `data_* não convertida` | Formato de data/hora novo | Ajustar `FORMATO_DATA_HORA` (ou tratar mais de um formato, como em medidores) |
+| `data_* não convertida` | Formato de data/hora novo ou data inexistente | Ajustar `PADRAO_DATA_HORA` (ou tratar mais de um formato, como em medidores) |
 | `duracao_min não convertida` | Unidade nova (ex.: `"75 minutos"`, `"1h15"`) | Ajustar a expressão regular da duração |
 | `duracao_min ≠ encerramento − abertura` | As fontes de duração divergem | Investigar a origem antes de escolher qual vale |
 | `causa`/`tipo` fora do domínio | Categoria nova | Confirmar com o negócio e incluir em `CAUSAS_VALIDAS`/`TIPOS_VALIDOS` |
 | `id_ocorrencia repetido` | Mesma ocorrência com dados diferentes | Decidir com o negócio qual versão vale |
+| `id_uc em mais de um alimentador` | UC transferida de alimentador no meio do mês, ou erro na origem | Confirmar com a operação; se a transferência for real, rever a janela de sobreposição e o evento atípico antes de liberar |
+| `A carga foi desfeita` (depois da escrita) | Erro na própria escrita | A Silver já voltou para a versão anterior; rodar de novo e, se repetir, olhar o histórico Delta |
 
 ### 6.5. No Workflow (Job)
 ```text
@@ -220,16 +241,16 @@ Pela definição do case, cada linha é uma UC interrompida. Para um alimentador
 
 O número de UCs por alimentador vem do cadastro (Silver de `unidades_consumidoras`).
 
-Como a sobreposição é calculada dentro do mês, os numeradores de qualquer período saem da soma dos meses dele, com ou sem os meses de evento atípico.
+Como a sobreposição é calculada dentro da competência, os numeradores de qualquer período saem da soma das competências dele, com ou sem as de evento atípico. Por causa, a soma reparte o total (seção 2.4).
 
 ```sql
 -- Numeradores de DEC/FEC por alimentador e mês, com a marcação de evento atípico
-SELECT alimentador, ano_mes,
+SELECT alimentador, competencia,
        SUM(duracao_efetiva_min) / 60.0                       AS horas_sem_energia,
        COUNT_IF(NOT flag_sobreposicao)                       AS interrupcoes,
        BOOL_OR(flag_evento_atipico)                          AS evento_atipico
 FROM `v-energy`.silver.tb_ocorrencias_rede
-GROUP BY alimentador, ano_mes;
+GROUP BY alimentador, competencia;
 ```
 
 Prévia com a base atual (soma dos 48 meses):
@@ -250,7 +271,7 @@ Sem o evento atípico, o ranking de "piores alimentadores" muda completamente. P
 
 O notebook foi executado sem modificações num Spark 4.0.1 + Delta 4.0.0 local (ANSI ligado), em cadeia com o notebook da Bronze. O resultado foi comparado com um cálculo independente feito em Python puro sobre o CSV:
 * contagens, distribuições de `tipo` e `causa`, as somas de duração (21.392.087 e 21.348.526), as 331 sobreposições (268 em 2025-07), as 179.669 interrupções distintas, os meses de evento atípico (os 3 de 2025-07, com 12.836 ocorrências) e os exemplos, na versão com a sobreposição sobre toda a série (hoje são 330 sobreposições, 21.348.560 min efetivos e 179.670 interrupções; ver abaixo) (`"217 min"` → 217; `OC00122507` → 80 min efetivos) bateram 100%;
-* os horários não mudam quando o fuso da sessão muda;
+* os horários não mudam quando o fuso da sessão muda, inclusive num fuso com horário de verão (ver abaixo);
 * as variações `" n/a "` e `"55 MIN"` são aceitas;
 * a reexecução produz o mesmo resultado e só uma versão Delta nova;
 * **5 defeitos injetados na Bronze** foram barrados pela regra certa, com a Silver intacta:
@@ -260,7 +281,7 @@ O notebook foi executado sem modificações num Spark 4.0.1 + Delta 4.0.0 local 
   * mesmo id com conteúdo diferente;
   * data impossível `2022-13-01`.
 * **Alimentador novo ou desativado:** simulando o `ALM-CAM-003` só a partir de 2026-01 e o `ALM-REC-014` só até 2022-12, só os 3 meses de 2025-07 continuam marcados. Sem o limite de período, 6 meses normais de cada um seriam marcados.
-* **Cenários da review do muliroZ no PR #23**, com a Bronze alterada e a sessão em UTC, como no Serverless (versão anterior → versão atual):
+* **Cenários da primeira review do muliroZ no PR #23**, com a Bronze alterada e a sessão em UTC, como no Serverless (versão anterior → versão atual):
   * ocorrência de evento atípico de 31/07 a 02/08 cobrindo uma normal de 01/08 na mesma UC do `ALM-REC-008`: na anterior, a normal ficava com 0 min, e o agosto "sem evento" do alimentador tinha 2.898 min; agora ela conta 240 min, e o agosto tem 3.138 min;
   * Bronze recarregada com 170.000 linhas entre a validação e a escrita: a anterior gravou as 170.000, que não tinham sido validadas; agora grava as 180.000 validadas;
   * alimentadores com série curta, meses [30, 600] e [600]: a anterior não marcava nenhum mês; agora o mês de 600 é marcado nos dois. Alimentador esparso, com 24 meses e um mês de 7: a anterior marcava o mês de 7; agora não;
@@ -268,6 +289,14 @@ O notebook foi executado sem modificações num Spark 4.0.1 + Delta 4.0.0 local 
   * abertura 2 horas no futuro na hora de Recife: a anterior gravou; agora é barrada;
   * 1.000 ids em minúsculas e durações `"NNNMIN"` na Bronze: na anterior, a evidência 1 perdia as 1.000 ocorrências e a 2 contava `"NNNMIN"` como só dígitos; agora as duas cobrem as 180.000.
 * **Com a Bronze original**, só uma linha muda em relação à versão anterior: a `OC00169819` (`UC139797`, 01/03/2026 das 01:46 às 02:20), que era coberta por uma interrupção aberta em fevereiro e agora conta seus 34 min. As outras 179.999 linhas são idênticas, e os 3 meses de evento atípico e as 12.836 ocorrências marcadas não mudam. Os 5 defeitos e o cenário de alimentador novo ou desativado continuam com o mesmo resultado.
+* **Cenários da segunda review do muliroZ no PR #23** (versão anterior → versão atual):
+  * sessão em `America/New_York`, com horário de verão: a anterior era barrada na base real (5 encerramentos antes da abertura e 28 durações divergentes, nas ocorrências que caem no salto do relógio); a atual grava a mesma Silver que em UTC, linha por linha, e uma ocorrência das 02:10 às 02:50 de 09/03/2025 é gravada com esses horários;
+  * `UC133184` com uma interrupção das 08:00 às 12:00 no `ALM-REC-008` e outra das 09:00 às 11:00 no `ALM-REC-009`: a anterior gravou as duas sem sobreposição (360 min em vez de 240); agora a carga é barrada pela regra de alimentador;
+  * conferência depois da escrita forçada a falhar: a anterior parava com a tabela nova já publicada; agora a Silver volta ao conteúdo anterior (`RESTORE`) e, na primeira carga, a tabela é removida;
+  * duplicata exata da `OC00000010` reenviada num arquivo posterior: a anterior gravava a linhagem do arquivo que viesse primeiro na leitura; agora grava sempre a do original, a carga mais antiga;
+  * `LIMIAR_EVENTO_ATIPICO = 7`: o comentário de `flag_evento_atipico` no Unity Catalog passa a dizer "mais de 7x";
+  * datas `2022-07-01T10:00:00` (outro formato) e `2023-02-29 10:00:00` (inexistente): barradas como data não convertida.
+* **Com a Bronze original**, a Silver atual é igual à anterior em todas as 180.000 linhas, com `ano_mes` convertido para `competencia`: 48 competências, de 2022-07-01 a 2026-06-01, a mesma grade de 5.856 células e os mesmos 3 alimentadores de evento atípico. As 13 regras passam, e os 5 defeitos, o cenário de alimentador novo ou desativado e os cenários da primeira review continuam com o mesmo resultado.
 * `ruff check` e `ruff format --check`, com a configuração do `pyproject.toml`, passam no notebook. `spark` e `display` são globais do Databricks, liberados com `# ruff: noqa: F821` na primeira célula.
 
 **Databricks (Serverless):** o notebook também foi executado no Unity Catalog (na época em `venergy.silver`, antes da troca para os nomes da Bronze unificada), e a tabela de validação, os totais e as evidências deram os mesmos números do teste local.
