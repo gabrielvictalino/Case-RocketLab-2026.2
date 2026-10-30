@@ -12,7 +12,7 @@
 
 **Evidência de execução:** [bronze-to-silver-faturas-evidencia-2026-10-29.ipynb](../../data-engineering/bronze-to-silver-faturas-evidencia-2026-10-29.ipynb), anexo do autor com código e outputs históricos preservados, com 92 células e 42 células Python. A publicação de 29/10/2026 foi concluída entre 19h18min36s e 19h22min46s, no fuso America/Fortaleza.
 
-**Versão operacional:** [bronze-to-silver-faturas.ipynb](../../data-engineering/bronze-to-silver-faturas.ipynb), cópia sem outputs, com revisões em `v-energy.silver_revisoes`. Essa configuração ainda não foi executada no Databricks.
+**Versão operacional:** [bronze-to-silver-faturas.ipynb](../../data-engineering/bronze-to-silver-faturas.ipynb), versão operacional com outputs de 30/10/2026, com revisões em `v-energy.silver_revisoes`. O mesmo código foi executado com `false` e `true` em 30/10/2026; os anexos estão no registro de evidências operacionais.
 
 **Situação:** os dois destinos de `v-energy.silver` foram publicados e conferidos na execução anexada. A adoção de `silver_revisoes` está implementada na cópia operacional; a revisão documental não move nem recria tabelas existentes.
 
@@ -385,9 +385,7 @@ define `SCHEMA_REVISOES = "silver_revisoes"`: as futuras revisões ficam em
 `v-energy.silver_revisoes` e os destinos finais permanecem em `v-energy.silver`.
 Com o parâmetro `false`, nenhum dos schemas ou tabelas é gravado.
 
-Essa cópia está sem outputs e não foi executada no Databricks. O isolamento
-do schema foi validado localmente; a publicação comprovada acima corresponde
-ao anexo preservado. O versionamento não move, apaga ou republica as tabelas
+Essa cópia recebeu os outputs da execução com `true` de 30/10/2026. O mesmo código foi executado com `false` e `true` em 30/10/2026, incluindo publicação a partir de `silver_revisoes`. As tabelas acima registram a execução histórica de 29/10/2026; as novas evidências e versões Delta estão no registro operacional. O versionamento não move, apaga ou republica as tabelas
 já existentes. O procedimento está em [Operação e revisões](operacao_faturas.md).
 
 ---
@@ -423,7 +421,7 @@ As explorações e seus resultados são mantidos para apresentação e discussã
 5. **Semântica financeira:** não há validação externa de tarifas ou alíquotas, nem suporte suficiente para inventar kWh faturado, tarifa unitária ou posição atual de inadimplência.
 6. **CSV integral:** a preservação comprovada nesta reconstrução é Bronze de negócio → saídas Silver. Não repetir como nova evidência uma comparação CSV/Bronze que não foi reexecutada aqui.
 7. **Atomicidade:** Delta é atômico por tabela. As duas saídas não formam uma transação conjunta; uma execução parcial exige investigação. O consumo automatizado precisa depender da conclusão bem-sucedida do fluxo.
-8. **Rotina futura:** cada execução calcula e valida a candidata a partir de versões fixadas da Bronze, cria revisões próprias e publica os snapshots conferidos. A cópia operacional isola as revisões em `silver_revisoes` e ainda precisa de execução Databricks para validar essa configuração. A operação exige uma execução publicadora por vez.
+8. **Rotina futura:** cada execução calcula e valida a candidata a partir de versões fixadas da Bronze, cria revisões próprias e publica os snapshots conferidos. A cópia operacional isola as revisões em `silver_revisoes` e teve essa configuração validada no Databricks em 30/10/2026. A operação exige uma execução publicadora por vez.
 9. **Escopo de entrega:** a publicação de faturas não comprova conclusão das outras entidades Silver, da Gold, do portal ou de um Workflow integrado. Não se afirmou execução desses componentes.
 
 ---
@@ -439,9 +437,15 @@ O versionamento deste relatório e da correção não representa uma nova execu�
 ### Referências de evidência
 
 - [bronze-to-silver-faturas-evidencia-2026-10-29.ipynb](../../data-engineering/bronze-to-silver-faturas-evidencia-2026-10-29.ipynb): anexo preservado com as saídas da publicação de 29/10/2026.
-- [bronze-to-silver-faturas.ipynb](../../data-engineering/bronze-to-silver-faturas.ipynb): cópia com revisões em schema separado, sem outputs.
+- [bronze-to-silver-faturas.ipynb](../../data-engineering/bronze-to-silver-faturas.ipynb): versão com revisões em schema separado e outputs da execução com `true` de 30/10/2026.
 - [Operação e revisões](operacao_faturas.md): destinos, parâmetro e limites da execução.
 - CSVs de resultados exportados das Seções 2–13 e disponibilizados durante a revisão. Os nomes se repetem entre etapas; a associação é feita pelo conteúdo e pela seção correspondente.
 - Enunciado “Case Final - RocketLab Visagio 2026.2”: responsabilidades Silver, integridade referencial e documentação de suposições.
 - Commit-base `8381720b2bed81befcc95ba02ba9dc1b9cf75b8d`: `data-engineering/Landing_to_Bronze.ipynb` e `docs/auditoria_dados/decisoes_landing_to_bronze.md`.
 - Auditorias existentes de cadastro, medidores e leituras consultadas como referências do projeto; seus nomes antigos de catálogo não substituem os objetos `v-energy` efetivamente utilizados nesta execução.
+
+## Atualização operacional — 30/10/2026
+
+As execuções com `false` e `true` foram conferidas no mesmo código Python da versão operacional atual. A publicação com `true` criou revisões em `silver_revisoes` e publicou `silver.tb_faturas` na versão Delta **3** e `silver.tb_faturas_pendentes_cadastro` na versão **2**. As contagens e os valores foram mantidos. Tabelas referentes a 29/10/2026 neste documento permanecem como histórico.
+
+Consulte o [registro das novas evidências](evidencias_operacionais_faturas.md), com anexos originais, horários, hashes e limites da validação. Os anexos conservam os nomes anteriores à renomeação.

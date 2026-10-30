@@ -5,7 +5,7 @@
 | Arquivo | Finalidade | Revisões | Evidência Databricks |
 | :--- | :--- | :--- | :--- |
 | [bronze-to-silver-faturas-evidencia-2026-10-29.ipynb](../../data-engineering/bronze-to-silver-faturas-evidencia-2026-10-29.ipynb) | Anexo do autor, com código e outputs históricos preservados | `v-energy.silver` | Run All com `true`, concluído em 29/10/2026 |
-| [bronze-to-silver-faturas.ipynb](../../data-engineering/bronze-to-silver-faturas.ipynb) | Cópia para futuras execuções | `v-energy.silver_revisoes` | Sem execução Databricks desta configuração; outputs vazios |
+| [bronze-to-silver-faturas.ipynb](../../data-engineering/bronze-to-silver-faturas.ipynb) | Cópia para futuras execuções | `v-energy.silver_revisoes` | Execuções com `false` e `true` comprovadas em 30/10/2026; arquivo operacional com outputs da execução com `true` |
 
 O arquivo de evidência recebeu somente ajustes de apresentação e identificação após a renomeação. Código, outputs, widget e demais metadados históricos foram preservados. Nele,
 o widget exportado está em `true`. A versão operacional conserva as regras
@@ -80,9 +80,14 @@ rodada têm sufixo `1bb6358d020a4ca1b1148d09c87c2fc7` e foram criadas em
 
 As células 87 e 91 conferiram os schemas e conteúdos completos das revisões
 e dos destinos; a célula 92 reconciliou 2.184.621 faturas e R$ 676.675.147,58
-e registrou sucesso. Isso comprova o caminho de publicação do anexo. Não
-comprova uma execução da cópia com `silver_revisoes`, da Gold ou de um Job integrado.
+e registrou sucesso. Isso comprova o caminho de publicação do anexo. A execução da cópia com `silver_revisoes` foi comprovada separadamente em 30/10/2026. Não comprova execução da Gold ou de um Job integrado.
 
 As duas substituições são transações separadas. Se uma falhar depois da outra,
 preserve as revisões, os outputs e o registro `publicacoes_realizadas` para
 investigar o estado antes de continuar. Não há rollback automático conjunto.
+
+## Atualização operacional — 30/10/2026
+
+As execuções com `false` e `true` foram conferidas no mesmo código Python da versão operacional atual. A publicação com `true` criou revisões em `silver_revisoes` e publicou `silver.tb_faturas` na versão Delta **3** e `silver.tb_faturas_pendentes_cadastro` na versão **2**. As contagens e os valores foram mantidos. Tabelas referentes a 29/10/2026 neste documento permanecem como histórico.
+
+Consulte o [registro das novas evidências](evidencias_operacionais_faturas.md), com anexos originais, horários, hashes e limites da validação. Os anexos conservam os nomes anteriores à renomeação.
