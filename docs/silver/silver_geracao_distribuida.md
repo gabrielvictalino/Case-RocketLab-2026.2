@@ -43,8 +43,8 @@ A primeira regra que falha define o motivo. A linha sai da Silver.
 | Ordem | Motivo | Quando |
 | :--- | :--- | :--- |
 | 1 | `id_uc_nulo` | `id_uc` nulo ou vazio depois do `trim` |
-| 2 | `potencia_invalida` | potência que não converte em `decimal(10,2)`, ou menor ou igual a zero |
-| 3 | `energia_injetada_invalida` | injeção que não converte em `decimal(10,2)`, ou menor ou igual a zero |
+| 2 | `potencia_invalida` | potência que não converte em `decimal(10,2)`, menor ou igual a zero, ou com escala ambígua (acima de 75 kWp e razão bruta `<= 0,35`, mas que dividida por 1.000 não cai em `[1, 75]` kWp com rendimento `>= 1`) |
+| 3 | `energia_injetada_invalida` | injeção que não converte em `decimal(10,2)`, menor ou igual a zero, ou cujo rendimento calculado (`kwh_por_kwp_mes`) estoura `decimal(10,2)` / arredonda para zero |
 | 4 | `data_conexao_invalida` | data fora do padrão `yyyy-MM-dd` ou inexistente no calendário |
 | 5 | `modalidade_desconhecida` | texto fora do de-para |
 | 6 | `uc_inexistente` | `id_uc` sem cadastro depois de tirar o cabeçalho repetido |
@@ -66,7 +66,9 @@ A linha que fica recebe `fl_deduplicado` verdadeiro. A cópia descartada não en
 
 ## Escala da potência
 
-Potência convertida acima de 75 kWp cujo rendimento bruto (`injeção ÷ potência original`) é menor ou igual a `0,35` kWh por kWp por mês (`RAZAO_ESCALA_MAX = 0.35`) é dividida por 1.000, e `fl_correcao_escala` fica verdadeiro. O texto original permanece em `potencia_kwp_raw`.
+Potência convertida acima de 75 kWp cujo rendimento bruto (`injeção ÷ potência original`) é menor ou igual a `0,35` kWh por kWp por mês (`RAZAO_ESCALA_MAX = 0.35`) e cuja divisão por 1.000 resulta em `potencia_kwp` entre `1` e `75` kWp com rendimento corrigido `>= 1` é dividida por 1.000, e `fl_correcao_escala` fica verdadeiro. O texto original permanece em `potencia_kwp_raw`.
+
+Se uma linha tiver potência acima de 75 kWp e razão bruta `<= 0,35`, mas a divisão por 1.000 não cair em `[1, 75]` kWp com rendimento `>= 1` (por exemplo, `500` kWp com `100` kWh, que viraria `0,50` kWp), ela é encaminhada à quarentena como `potencia_invalida` (escala ambígua), em vez de derrubar a carga inteira na validação pós-transformação.
 
 Nesta entrega, as 3.475 linhas na escala certa vão de 1,50 a 75,00 kWp, com razão de 11,6 a 110,0 kWh/kWp/mês. As 35 linhas deslocadas (registradas em Wp, entre 3.049,99 e 8.994,91) têm razão bruta entre `0,014` e `0,328` kWh/kWp/mês; depois da divisão por 1.000, caem em 3,05 a 8,99 kWp, com rendimento mediano de 33,3 kWh/kWp/mês.
 
@@ -92,7 +94,7 @@ Nesta entrega: 3.042, 321 e 147.
 
 ## Rendimento
 
-`kwh_por_kwp_mes` é a injeção dividida pela potência já corrigida, em `decimal(10,2)`. Serve de auditoria. Não manda linha para a quarentena. O patamar em torno de 34 kWh por kWp por mês é o normal deste arquivo, porque a coluna de energia é excedente injetado, não geração bruta.
+`kwh_por_kwp_mes` é a injeção dividida pela potência já corrigida, convertido com `cast_decimal_10_2_seguro` (arredonda e verifica se cabe em `<= 99.999.999,99` antes de converter para `decimal(10,2)`, evitando exceção no modo ANSI ou `NULL` silencioso). Se a divisão estourar `decimal(10,2)` (como `1.000.000 / 0,01 = 100.000.000,00`) ou arredondar para `<= 0`, a linha vai para a quarentena na triagem (`energia_injetada_invalida`). O patamar em torno de 34 kWh por kWp por mês é o normal deste arquivo, porque a coluna de energia é excedente injetado, não geração bruta.
 
 ## Colunas gravadas na Silver
 
@@ -105,8 +107,8 @@ Nesta entrega: 3.042, 321 e 147.
 A transformação e a validação compartilham a mesma função `calcular_regras_gd`. As checagens rodam sobre `df_silver` **antes** do `overwrite` (junto com o fechamento `Bronze = Silver + quarentena + duplicatas descartadas`) e novamente sobre a tabela gravada. Se a validação pós-escrita ou a escrita falhar, `restaurar_tabela` desfaz a publicação nas duas tabelas via `RESTORE`.
 
 - Uma linha por `id_uc`.
-- `potencia_kwp` maior que 0 e `energia_injetada_kwh_media_mensal` maior que 0.
+- `potencia_kwp` maior que 0, `energia_injetada_kwh_media_mensal` maior que 0 e `kwh_por_kwp_mes` não nulo e maior que 0.
 - `modalidade` dentro dos três códigos.
-- `fl_correcao_escala`, `potencia_kwp`, `kwh_por_kwp_mes` e `fl_data_inconsistente` iguais ao retorno de `calcular_regras_gd` em `decimal(10,2)`.
+- `fl_correcao_escala`, `potencia_kwp`, `kwh_por_kwp_mes` e `fl_data_inconsistente` iguais ao retorno de `calcular_regras_gd` em `decimal(10,2)` (comparados com `eqNullSafe`, de modo que um `NULL` nunca passe despercebido).
 - Invariante independente pós-correção: toda linha com `fl_correcao_escala` verdadeiro fica com `potencia_kwp` entre `1` e `75` kWp e `kwh_por_kwp_mes >= 1`.
 - As cinco UCs conhecidas desta entrega são conferidas depois da gravação apenas como aviso da amostra histórica.

@@ -93,7 +93,7 @@ A `data_ligacao` usada na comparação vem de `tb_unidades_consumidoras`. Esse c
 Notebook: `data-engineering/bronze_to_silver/bronze-to-silver-geracao-distribuida.ipynb`. Documentação da camada: `docs/silver/silver_geracao_distribuida.md`. Tabela: `` `v-energy`.silver.tb_geracao_distribuida ``. Grão: uma linha por `id_uc`.
 
 1. Trocar a vírgula de `potencia_kwp` por ponto e converter para `decimal(10,2)`. Guardar o texto em `potencia_kwp_raw`.
-2. Se a potência convertida for maior que 75 e a razão bruta (injeção ÷ potência original) for menor ou igual a 0,35 kWh por kWp por mês, dividir por 1.000 e ligar `fl_correcao_escala`.
+2. Se a potência convertida for maior que 75, a razão bruta (injeção ÷ potência original) for menor ou igual a 0,35 kWh por kWp por mês e a divisão por 1.000 cair em `[1, 75]` kWp com rendimento `>= 1`, dividir por 1.000 e ligar `fl_correcao_escala` (casos ambíguos fora desse intervalo pós-divisão vão para a quarentena como `potencia_invalida`).
 3. Trocar eventual vírgula de `energia_injetada_kwh_media_mensal` por ponto e converter para `decimal(10,2)`.
 4. Validar o padrão ISO `yyyy-MM-dd` e converter `data_conexao` para `date`. Ligar `fl_data_inconsistente` quando a data é anterior a 2024-01-01, posterior a `current_date()` ou anterior à `data_ligacao`.
 5. Traduzir a modalidade para `PROPRIA_UC`, `AUTOCONSUMO_REMOTO` ou `COMPARTILHADA`. O texto de origem fica em `modalidade_origem`.
