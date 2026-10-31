@@ -58,19 +58,31 @@ continuam lendo seu par anterior, dentro da janela de retenção.
 
 ## Retenção
 
-Após confirmar uma publicação, o fluxo remove revisões de `silver_revisoes`
-com mais de sete dias, exceto as apontadas pelo marcador atual, preservadas
-independentemente da idade. Só nomes `tb_faturas[_pendentes_cadastro]_revisao_<uuid>`
-com UUID hexadecimal de 32 caracteres são elegíveis. Ausência ou estrutura
-inválida do marcador impede a limpeza. Falha de limpeza é informada sem desfazer
-uma publicação confirmada. Em `false` não há limpeza.
+Após confirmar uma publicação, o fluxo registra em
+`silver_revisoes.tb_faturas_retencao` a primeira observação de cada revisão
+fora do marcador, com `nome` e `aposentada_em`. O MERGE insere somente nomes
+novos, preservando o prazo em publicações seguintes e após reinícios.
+**A idade de criação (`createdAt`) não autoriza exclusão.** Uma revisão criada
+há 30 dias e retirada agora do marcador permanece por pelo menos mais sete dias.
+O registro pode ser posterior à retirada, o que apenas estende a proteção.
+
+A limpeza remove somente revisões com `aposentada_em` anterior ao limite de
+sete dias e que não estejam no marcador atual. Só nomes
+`tb_faturas[_pendentes_cadastro]_revisao_<uuid>` com UUID hexadecimal de
+32 caracteres são elegíveis. Ausência ou estrutura inválida do marcador
+impede a limpeza. Falha ao registrar a aposentadoria impede a exclusão nessa
+execução; falha de limpeza é informada sem desfazer a publicação confirmada.
+Em `false` não há escrita no registro nem limpeza. O pipeline nunca reutiliza
+UUIDs; reativar manualmente revisões antigas não é uma operação suportada.
+O registro de retenção é mantido como metadado de auditoria, mesmo após o DROP.
 
 Não há shallow clone: as revisões devem ter seus próprios arquivos, sem
 vínculo com arquivos de uma fonte sujeita a DROP/VACUUM. A remoção de tabelas
 segue a recuperação/retenção do catálogo; não equivale a liberação imediata
 de todos os bytes. Não execute leitores por sete dias ou mais; não reduza o
 VACUUM abaixo dessa janela. Revisões de execuções falhas ficam disponíveis
-por pelo menos sete dias e são recolhidas após um sucesso futuro. Se o Job
+por pelo menos sete dias após sua primeira observação fora do marcador,
+e são recolhidas após um sucesso futuro. Se o Job
 ficar sem sucessos, a limpeza não roda: investigue e execute manutenção após
 resolver a falha, preservando as fontes do marcador. Revisões antigas no schema
 `silver` exigem limpeza manual após auditoria e não são tocadas pelo fluxo.
@@ -87,5 +99,15 @@ As execuções de 29 e 30/10 comprovam o código anterior, não o protocolo novo
 As correções de 31/10 foram verificadas localmente com testes de falhas simuladas.
 Antes de produção, execute em catálogo de teste com `false`, depois `true`,
 simule falha na segunda escrita e confirme que a Gold mantém o par do marcador
-anterior. Confira também permissões de CREATE, INSERT, DROP e preservação dos
+anterior. Confira também permissões de CREATE, INSERT, MERGE e DROP e preservação dos
 metadados. Nenhuma tabela Databricks foi alterada por esta revisão.
+
+## Revisão de retenção e CI — 31/10/2026
+
+As proteções passaram a integrar o agregador `CI`, incluindo alterações em
+`data-engineering/` no detector. Os testes localizam células por marcadores
+estáveis e usam Java Matcher.find para validar os padrões rlike com `\z`.
+Treze testes locais passaram, incluindo duas publicações próximas após uma
+revisão antiga e tentativa de finalizar publicação após falha da segunda escrita.
+A nova retenção ainda precisa ser exercitada no Databricks; o export de execução
+com `true` anterior a esta correção não valida o registro de aposentadoria.
