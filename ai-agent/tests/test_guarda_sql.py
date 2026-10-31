@@ -1,6 +1,6 @@
 import pytest
 
-from venergy_ai.guarda_sql import LIMITE_MAXIMO, SQLRejeitado, validar_sql
+from venergy_ai.guarda_sql import SQLRejeitado, validar_sql
 
 VIEWS = {'ucs', 'inspecoes', 'receita_volume_mensal', 'continuidade_alimentador_mensal'}
 
@@ -41,14 +41,6 @@ def rejeita(sql, trecho):
             '(SELECT id_uc FROM ai_read.inspecoes) LIMIT 5000 OFFSET 20',
             'SELECT * FROM ai_read.ucs WHERE id_uc IN '
             '(SELECT id_uc FROM ai_read.inspecoes) LIMIT 1000 OFFSET 20',
-        ),
-        (
-            'SELECT * FROM ai_read.ucs LIMIT ALL',
-            'SELECT * FROM ai_read.ucs LIMIT 1000',
-        ),
-        (
-            'SELECT * FROM ai_read.ucs FETCH FIRST 5000 ROWS ONLY',
-            'SELECT * FROM ai_read.ucs LIMIT 1000',
         ),
         (
             'SELECT id_uc FROM ai_read.ucs UNION SELECT id_uc FROM ai_read.inspecoes',
@@ -242,7 +234,40 @@ def test_motivo_cita_as_views_para_a_nova_tentativa():
     )
 
 
-def test_limite_maximo():
-    assert LIMITE_MAXIMO == 1000
-    assert validar_sql('SELECT * FROM ucs LIMIT 1000', VIEWS).endswith('LIMIT 1000')
-    assert validar_sql('SELECT * FROM ucs LIMIT 1001', VIEWS).endswith('LIMIT 1000')
+@pytest.mark.parametrize(
+    'limite,esperado',
+    [
+        ('', 'LIMIT 1000'),
+        ('LIMIT 10', 'LIMIT 10'),
+        ('LIMIT 0', 'LIMIT 0'),
+        ('LIMIT 1000', 'LIMIT 1000'),
+        ('LIMIT 1001', 'LIMIT 1000'),
+        ('LIMIT ALL', 'LIMIT 1000'),
+        ('LIMIT NULL', 'LIMIT 1000'),
+        ('LIMIT 5 + 5', 'LIMIT 10'),
+        ("LIMIT '5'", 'LIMIT 5'),
+        ('LIMIT 5000 OFFSET 20', 'LIMIT 1000 OFFSET 20'),
+        ('FETCH FIRST 5 ROWS ONLY', 'LIMIT 5'),
+        ('FETCH FIRST ROW ONLY', 'LIMIT 1'),
+        ('FETCH FIRST 5000 ROWS ONLY', 'LIMIT 1000'),
+        ('OFFSET 5 ROWS FETCH NEXT 3 ROWS ONLY', 'LIMIT 3 OFFSET 5'),
+    ],
+)
+def test_mantem_o_limite_pedido_ate_o_maximo(limite, esperado):
+    sql = validar_sql(f'SELECT * FROM ai_read.ucs ORDER BY dec DESC {limite}', VIEWS)
+    assert sql == f'SELECT * FROM ai_read.ucs ORDER BY dec DESC {esperado}'
+
+
+@pytest.mark.parametrize(
+    'limite,trecho',
+    [
+        ('FETCH FIRST 5 ROWS WITH TIES', 'WITH TIES'),
+        ('FETCH FIRST 5 PERCENT ROWS ONLY', 'PERCENT'),
+        ('LIMIT -1', 'inteiro não negativo'),
+        ('LIMIT 2.5', 'inteiro não negativo'),
+        ('LIMIT 10 / 3', 'inteiro não negativo'),
+        ('LIMIT (SELECT count(*) FROM ai_read.ucs)', 'inteiro não negativo'),
+    ],
+)
+def test_rejeita_limite_que_nao_e_inteiro(limite, trecho):
+    rejeita(f'SELECT * FROM ai_read.ucs ORDER BY dec DESC {limite}', trecho)

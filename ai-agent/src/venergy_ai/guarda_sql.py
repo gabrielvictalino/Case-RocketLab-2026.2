@@ -13,6 +13,7 @@ from sqlglot import exp
 from sqlglot.errors import ParseError, SqlglotError
 from sqlglot.optimizer.normalize_identifiers import normalize_identifiers
 from sqlglot.optimizer.scope import traverse_scope
+from sqlglot.optimizer.simplify import simplify
 
 DIALETO = 'postgres'
 SCHEMA = 'ai_read'
@@ -147,7 +148,42 @@ def _conferir_tabelas(arvore: exp.Expression, views: Collection[str]) -> None:
 
 
 def _impor_limite(arvore: exp.Expression) -> None:
-    limite = arvore.args.get('limit')
-    valor = limite.expression if isinstance(limite, exp.Limit) else None
-    if not (isinstance(valor, exp.Literal) and valor.is_int and valor.to_py() <= LIMITE_MAXIMO):
-        arvore.set('limit', exp.Limit(expression=exp.Literal.number(LIMITE_MAXIMO)))
+    linhas = _linhas_pedidas(arvore.args.get('limit'))
+    if linhas is None or linhas > LIMITE_MAXIMO:
+        linhas = LIMITE_MAXIMO
+    arvore.set('limit', exp.Limit(expression=exp.Literal.number(linhas)))
+
+
+def _linhas_pedidas(limite: exp.Expression | None) -> int | None:
+    """Linhas pedidas no LIMIT ou no FETCH; None quando a consulta não tem limite."""
+    if limite is None:
+        return None
+    if isinstance(limite, exp.Fetch):
+        opcoes = limite.args.get('limit_options')
+        if opcoes and opcoes.args.get('with_ties'):
+            raise SQLRejeitado(
+                'FETCH ... WITH TIES pode passar do limite de linhas e não é permitido. '
+                'Use LIMIT n, ou rank() OVER (...) <= n para manter os empates.'
+            )
+        if opcoes and opcoes.args.get('percent'):
+            raise SQLRejeitado('FETCH ... PERCENT não existe no Postgres. Use LIMIT n.')
+        valor = limite.args.get('count')
+        if valor is None:
+            return 1  # FETCH FIRST ROW ONLY
+    elif isinstance(limite, exp.Limit):
+        valor = limite.expression
+        # LIMIT ALL e LIMIT NULL equivalem a não ter limite.
+        if isinstance(valor, exp.Null) or (isinstance(valor, exp.Var) and valor.name == 'ALL'):
+            return None
+    else:
+        raise SQLRejeitado(f'Limite não suportado: {limite.sql(dialect=DIALETO)}. Use LIMIT n.')
+    valor = simplify(valor.copy(), dialect=DIALETO)
+    # O Postgres aceita LIMIT '5', convertendo o texto em número.
+    if valor.is_string and valor.name.isascii() and valor.name.isdigit():
+        return int(valor.name)
+    if valor.is_int and valor.to_py() >= 0:
+        return valor.to_py()
+    raise SQLRejeitado(
+        f'O limite precisa ser um inteiro não negativo, como LIMIT 10: '
+        f'{valor.sql(dialect=DIALETO)}.'
+    )
