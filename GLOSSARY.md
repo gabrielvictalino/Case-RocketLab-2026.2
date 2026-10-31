@@ -152,4 +152,3 @@ _Evitar_: análise, resumo, recomendação
 **Cargo**:
 Papel do usuário no portal (diretoria, comercial, atendimento, perdas, operação), que define as telas que ele vê.
 _Evitar_: perfil, permissão
-
