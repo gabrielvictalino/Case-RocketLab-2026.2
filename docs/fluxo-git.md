@@ -84,25 +84,40 @@ em repositórios privados depende do plano GitHub.
 
 ### CI da aplicação
 
-O workflow `ci.yml` executa Ruff (lint e formatação) e pytest do workspace Python,
-incluindo os testes existentes do fluxo Git. Usa Python 3.12, uv com lockfile
-congelado e PostgreSQL 17/Redis 7 reais via Testcontainers. O workflow roda em
-todas as PRs/pushes para `dev` e `main`. Um detector compara as revisões e o job
-de backend roda quando mudam os pacotes Python, contratos, infraestrutura Postgres,
-testes, scripts ou arquivos compartilhados (lockfile, Compose, CI e configuração).
-O agregador `CI` sempre executa: aceita backend pulado apenas quando o detector
-confirma ausência de mudanças relevantes; falha se o detector ou backend falhar
-ou for cancelado. O workflow obrigatório não usa filtros de evento por caminho.
+O workflow `.github/workflows/ci.yml` (`Aplicação`) roda em todas as PRs e pushes
+para `dev` e `main`, sem filtros de caminho no evento (`on:`). Um detector
+(`changes`) compara `base` e `head` (usando `git ls-files` quando a base é vazia
+ou zerada) e define se cada módulo precisa rodar:
 
-Os rulesets versionados exigem `Fluxo Git` e `CI`. Sua ativação continua sendo
-administrativa: depois da integração/revisão, reaplique
-`bash scripts/configurar-github.sh`. A implementação local do backend não altera
-proteções remotas. `fluxo-git.yml` permanece independente e obrigatório.
+- **`backend`**: dispara quando mudam `backend/`, `ai-agent/`, `importador/`,
+  `contracts/`, `infra/postgres/`, `tests/`, `scripts/` ou arquivos compartilhados
+  da raiz (`pyproject.toml`, `uv.lock`, `.python-version`, `conftest.py`,
+  `docker-compose.yml`, `docker-compose.override.yml`, `.dockerignore`,
+  `.github/workflows/ci.yml`, `.env.example`). Executa `uv sync --frozen --all-packages`,
+  Ruff (`check` e `format --check`) e `pytest` com Python 3.12 e PostgreSQL 17 /
+  Redis 7 reais via Testcontainers, incluindo os testes do fluxo Git.
+- **`frontend`**: dispara quando mudam `frontend/` ou `.github/workflows/ci.yml`.
+  Usa a versão do Node.js de `frontend/.nvmrc` (Node 24) com cache do `npm` sobre
+  `frontend/package-lock.json` e executa `npm ci`, `npm run lint` (ESLint),
+  `npm run typecheck` (`tsc --noEmit`), `npm test` (Vitest) e `npm run build`
+  (`tsc -b && vite build`).
 
-Frontend ainda não foi implementado. Quando for introduzido, inclua seu build,
-lint e testes e faça o agregador depender também desse job. Evite filtros que
-deixem checks obrigatórios pendentes. Comandos locais estão no
-[README do backend](../backend/README.md).
+O agregador `CI` (`if: always()`, `needs: [changes, backend, frontend]`) sempre
+executa e avalia os dois módulos antes de terminar: exige `changes == success` e,
+para cada módulo, exige `success` quando houve mudança relevante (`changed == true`)
+ou `skipped` quando não houve (`changed != true`). Qualquer `failure`, `cancelled`
+ou `skipped` indevido emite `::error::` indicando o módulo, o valor esperado e o
+obtido, e reprova o check.
+
+Os rulesets versionados (`dev.json` e `main.json`) exigem `Fluxo Git` e `CI`;
+`fluxo-git.yml` permanece independente e obrigatório. A aplicação ou reaplicação
+dos rulesets no GitHub continua sendo tarefa administrativa via
+`bash scripts/configurar-github.sh`. Ficam como pendências de evolução da CI o job
+`e2e` com Playwright (previsto para o M4) e a verificação automatizada de drift de
+`frontend/src/lib/api/schema.d.ts` contra o OpenAPI do backend (`npm run gen:api`,
+que requer o ambiente Python junto ao Node). Comandos locais estão no
+[README do backend](../backend/README.md) e no
+[README do frontend](../frontend/README.md).
 
 ## Verificação local
 

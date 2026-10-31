@@ -23,6 +23,10 @@ npm run build          # tsc -b && vite build (saída em dist/)
 npm run preview        # pré-visualiza o build de produção
 ```
 
+Na CI (`.github/workflows/ci.yml`), o job `frontend` usa a versão do Node.js de
+`.nvmrc` e executa `npm ci`, `npm run lint`, `npm run typecheck`, `npm test` e
+`npm run build`.
+
 ## Proxy de desenvolvimento e Nginx (produção/Compose)
 
 No `npm run dev`, chamadas para `/api` são redirecionadas pelo Vite para
