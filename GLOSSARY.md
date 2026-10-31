@@ -59,6 +59,10 @@ _Evitar_: último ano, ano atual
 
 ### Receita
 
+**Pendência cadastral**:
+Fatura cuja unidade consumidora não foi encontrada na versão do cadastro consultada.
+_Evitar_: fatura órfã
+
 **Receita**:
 Valor total faturado nas competências do período, com tributos. Sem qualificativo, receita é sempre a faturada.
 _Evitar_: faturamento, receita bruta
