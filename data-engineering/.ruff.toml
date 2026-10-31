@@ -1,11 +1,4 @@
-line-length = 100
-target-version = "py312"
-
-[format]
-quote-style = "single"
-
-[lint]
-select = ["E", "F"]
+extend = "../pyproject.toml"
 
 [lint.per-file-ignores]
 # spark/dbutils/display e as funções de %run são globais do Databricks.

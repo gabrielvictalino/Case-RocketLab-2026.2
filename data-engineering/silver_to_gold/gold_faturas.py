@@ -11,6 +11,11 @@ from pyspark.sql import functions as F
 
 VERSAO_REGRAS = 'GOLD_FATURAS_V1'
 DIMENSOES = ['municipio', 'bairro', 'classe']
+FLAGS_LEITURAS = [
+    'flag_troca_medidor',
+    'flag_sem_leitura_anterior',
+    'flag_sinal_nao_confirmado',
+]
 DINHEIRO = ['valor_energia', 'tributos', 'valor_total']
 COLUNAS_FATURAS = [
     'id_fatura',
@@ -78,7 +83,12 @@ def construir_faturas(
         raise ValueError('data_referencia deve usar AAAA-MM-DD')
     _exigir_colunas(faturas, COLUNAS_FATURAS, 'faturas')
     _exigir_colunas(cadastro, ['id_uc', *DIMENSOES], 'cadastro')
-    _exigir_colunas(leituras, ['id_uc', 'mes_referencia', 'consumo_kwh'], 'leituras')
+    _exigir_colunas(
+        leituras, ['id_uc', 'mes_referencia', 'consumo_kwh', *FLAGS_LEITURAS], 'leituras'
+    )
+    for flag in FLAGS_LEITURAS:
+        if leituras.schema[flag].dataType.simpleString() != 'boolean':
+            raise ValueError(f'leituras: {flag} precisa ser boolean')
     tipos = {c: 'decimal(18,2)' for c in DINHEIRO}
     tipos.update({c: 'date' for c in ['data_emissao', 'data_vencimento', 'data_pagamento']})
     tipos.update(
@@ -180,11 +190,8 @@ def construir_faturas(
     excluidas = base.filter(F.col('motivo_exclusao').isNotNull())
     elegiveis = base.filter(F.col('motivo_exclusao').isNull()).drop('motivo_exclusao')
     leitura_bloqueada = F.lit(False)
-    for flag in ['flag_troca_medidor', 'flag_sem_leitura_anterior', 'flag_sinal_nao_confirmado']:
-        if flag in leituras.columns:
-            if leituras.schema[flag].dataType.simpleString() != 'boolean':
-                raise ValueError(f'leituras: {flag} precisa ser boolean')
-            leitura_bloqueada = leitura_bloqueada | F.coalesce(F.col(flag), F.lit(True))
+    for flag in FLAGS_LEITURAS:
+        leitura_bloqueada = leitura_bloqueada | F.coalesce(F.col(flag), F.lit(True))
     volume = F.when(~leitura_bloqueada & (F.col('consumo_kwh') >= 0), F.col('consumo_kwh'))
     leitura = leituras.select(
         'id_uc',
@@ -462,3 +469,67 @@ def exportar_csv(tabelas: dict[str, DataFrame], diretorio: str, metadados: dict)
     temporario.write_text(json.dumps(manifesto, ensure_ascii=False, indent=2), encoding='utf-8')
     temporario.replace(pasta_lote / 'manifest.json')
     return pasta_lote
+
+
+def publicar_delta(spark, tabelas, destinos, validar):
+    """Publica e confere as tabelas; recupera os destinos afetados na falha.
+
+    Exige exclusividade de escrita durante publicação e recuperação. RESTORE é
+    compensação, sem isolamento/atomicidade entre tabelas para leitores externos.
+    """
+    anteriores = {}
+    for nome in tabelas:
+        destino = destinos[nome]
+        if spark.catalog.tableExists(destino):
+            detalhe = spark.sql(f'DESCRIBE DETAIL {destino}').first()
+            if detalhe['format'] != 'delta':
+                raise ValueError(f'O destino precisa ser Delta: {destino}')
+            anteriores[nome] = spark.sql(f'DESCRIBE HISTORY {destino} LIMIT 1').first()['version']
+        else:
+            anteriores[nome] = None
+
+    afetadas = []
+    persistidas, versoes = {}, {}
+    try:
+        for nome, df in tabelas.items():
+            destino = destinos[nome]
+            # Incluir antes da escrita: ela pode efetivar o commit e depois falhar.
+            afetadas.append(nome)
+            (
+                df.write.format('delta')
+                .mode('overwrite')
+                .option('overwriteSchema', 'true')
+                .saveAsTable(destino)
+            )
+            versao = spark.sql(f'DESCRIBE HISTORY {destino} LIMIT 1').first()['version']
+            persistido = spark.read.option('versionAsOf', versao).table(destino)
+            esperado = [(c.name, c.dataType.simpleString()) for c in df.schema]
+            gravado = [(c.name, c.dataType.simpleString()) for c in persistido.schema]
+            if esperado != gravado:
+                raise ValueError(f'Schema persistido divergente: {destino}')
+            if (
+                df.exceptAll(persistido).limit(1).count()
+                or persistido.exceptAll(df).limit(1).count()
+            ):
+                raise ValueError(f'Conteúdo persistido divergente: {destino}')
+            persistidas[nome] = persistido
+            versoes[nome] = {'tabela': destino, 'versao_delta': versao}
+        validar(persistidas)
+    except Exception as erro:
+        falhas = []
+        for nome in reversed(afetadas):
+            destino = destinos[nome]
+            try:
+                versao = anteriores[nome]
+                if versao is None:
+                    spark.sql(f'DROP TABLE IF EXISTS {destino}')
+                else:
+                    spark.sql(f'RESTORE TABLE {destino} TO VERSION AS OF {versao}')
+            except Exception as falha:
+                falhas.append(RuntimeError(f'Falha ao recuperar {destino}: {falha}'))
+        if falhas:
+            raise ExceptionGroup(
+                'Publicação falhou e a recuperação ficou incompleta', [erro, *falhas]
+            ) from erro
+        raise
+    return persistidas, versoes

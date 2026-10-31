@@ -15,6 +15,7 @@ from pyspark.sql import functions as F
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'silver_to_gold'))
 from gold_faturas import (  # noqa: E402
+    FLAGS_LEITURAS,
     construir_faturas,
     comparar_periodos,
     validar_reconciliacao,
@@ -83,6 +84,8 @@ class GoldFaturasTest(unittest.TestCase):
             [('UC100001', '2024-01', 100), ('UC100001', '2025-01', 150)],
             'id_uc string, mes_referencia string, consumo_kwh int',
         )
+        for flag in FLAGS_LEITURAS:
+            leituras = leituras.withColumn(flag, F.lit(False))
         return faturas, cadastro, leituras
 
     def construir(self, faturas=None, cadastro=None, leituras=None):
@@ -96,6 +99,28 @@ class GoldFaturasTest(unittest.TestCase):
 
     def comparar(self, mensal):
         return comparar_periodos(mensal, '2024-01-01', '2024-01-01', '2025-01-01', '2025-01-01')
+
+    def test_flags_ausentes_e_tipos_invalidos_bloqueiam(self):
+        _, _, leituras = self.fontes()
+        for flag in FLAGS_LEITURAS:
+            with self.subTest(flag=flag):
+                with self.assertRaisesRegex(ValueError, 'colunas ausentes'):
+                    self.construir(leituras=leituras.drop(flag))
+                with self.assertRaisesRegex(ValueError, 'precisa ser boolean'):
+                    self.construir(leituras=leituras.withColumn(flag, F.lit('false')))
+
+    def test_flags_impeditivas_e_nulas_bloqueiam_volume_positivo(self):
+        _, _, leituras = self.fontes()
+        for flag in FLAGS_LEITURAS:
+            for valor in [True, None]:
+                with self.subTest(flag=flag, valor=valor):
+                    tabelas = self.construir(
+                        leituras=leituras.withColumn(flag, F.lit(valor).cast('boolean'))
+                    )
+                    self.assertEqual(tabelas['faturas'].count(), 2)
+                    self.assertEqual(
+                        tabelas['faturas'].filter('volume_analise_kwh IS NOT NULL').count(), 0
+                    )
 
     def test_competencia_receita_status_e_reconciliacao(self):
         faturas, _, _ = self.fontes()

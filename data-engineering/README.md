@@ -21,9 +21,9 @@ provisório do portal.
 2. Use compute com Unity Catalog e acesso às quatro fontes Delta e ao Volume
    de exportação. O bundle usa Jobs serverless; para um workspace sem esse
    recurso, configure compute na tarefa antes da execução.
-3. Abra o notebook e confira os widgets das fontes. Os padrões refletem os nomes
-   físicos encontrados nos notebooks Silver do projeto; os catálogos ainda não
-   estão unificados. São parâmetros independentes para evitar renomear fontes.
+3. Abra o notebook e confira os widgets das fontes. Os padrões seguem a convenção
+   `v-energy.silver.tb_*`. Confirme que as Silvers foram publicadas nesses destinos;
+   para ambientes legados, informe os nomes físicos nos parâmetros do Job/widgets.
 4. Informe `data_referencia` como `AAAA-MM-DD`, correspondente ao retrato de status
    da extração e igual ou posterior às emissões e pagamentos observados. A fonte
    não informa a data oficial da extração; ela precisa ser fornecida pelo operador.
@@ -40,8 +40,15 @@ com ponto e datas ISO. Uma tabela pode ter várias partes: leia todos os
 Delta de origem/destino, tipos, contagens, totais de controle e SHA-256 das partes.
 Consuma apenas lotes com manifesto final e valide seus hashes e totais.
 
-As tabelas Delta são transações independentes. Se houver falha na publicação,
-inspecione os destinos e reexecute o notebook inteiro antes de consumir o lote.
+Antes da primeira escrita, a publicação registra as versões anteriores dos quatro
+destinos. Se a escrita ou conferência falhar, tenta restaurar cada tabela afetada
+com `RESTORE TABLE` ou removê-la se for a primeira carga. A recuperação tenta todos
+os destinos, mesmo se uma restauração falhar, e informa as falhas junto do erro
+original. Uma falha de recuperação exige intervenção antes de consumir a Gold.
+As tabelas Delta são transações independentes: leitores diretos podem observar
+estados intermediários. A recuperação não fornece atomicidade entre tabelas.
+Se somente a exportação falhar, a Gold já conferida permanece publicada; o lote
+sem manifesto deve ser ignorado e a execução pode ser repetida.
 O manifesto só aparece após todas as escritas e conferências; um diretório sem
 manifesto está incompleto e deve ser ignorado. O Job limita a concorrência a 1;
 não publique manualmente ao mesmo tempo que ele.

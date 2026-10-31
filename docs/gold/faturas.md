@@ -10,13 +10,16 @@ tratamentos Silver nem implementa DEC/FEC, GD, inspeções ou atendimento.
 | --- | --- |
 | `v-energy.silver.tb_faturas` | Faturas com referência cadastral na Silver de faturas |
 | `v-energy.silver.tb_faturas_pendentes_cadastro` | Faturas preservadas fora da receita |
-| `workspace.default.silver_unidades_consumidoras` | Uma linha por UC; município, bairro e classe |
-| `venergy.silver.leituras` | Uma leitura por UC e competência; consumo e flags Silver |
+| `v-energy.silver.tb_unidades_consumidoras` | Uma linha por UC; município, bairro e classe |
+| `v-energy.silver.tb_leituras` | Uma leitura por UC e competência; consumo e flags Silver |
 
-Os nomes vêm das versões de trabalho de `feat/silver-faturas-revisada`,
-`feat/silver-unidades-consumidoras` e `feat/17-silver-leituras`, consultadas em
-30/10/2026. Todas as referências são configuráveis. O notebook fixa as versões
-Delta e registra as identidades no manifesto. Não lê Bronze nem CSV bruto.
+Os padrões seguem a convenção de catálogo `v-energy`, schema `silver` e prefixo
+`tb_`. As Silvers de cadastro e leituras precisam ser publicadas nesses destinos
+antes da execução com os padrões. Nos ambientes que ainda usam
+`workspace.default.silver_unidades_consumidoras` ou `venergy.silver.leituras`,
+informe esses nomes nos parâmetros. Todas as referências são configuráveis.
+O notebook fixa as versões Delta e registra as identidades no manifesto.
+Não lê Bronze nem CSV bruto.
 
 - Competência é `mes_referencia`, convertida para o primeiro dia do mês. Receita
   pertence à competência, mesmo quando a emissão ou o pagamento ocorrer em outro mês.
@@ -42,6 +45,8 @@ Delta e registra as identidades no manifesto. Não lê Bronze nem CSV bruto.
   classe. Os recortes históricos usam esses atributos atuais, sem inventar uma SCD.
 - Leituras faltantes ou negativas não eliminam receita. Não usamos `abs()`, não
   estimamos consumo de troca e não substituímos consumo desconhecido por zero.
+  As três flags booleanas de troca, ausência de leitura anterior e sinal não
+  confirmado são obrigatórias; sua ausência ou tipo inválido bloqueia a carga.
   Flags de troca, ausência de leitura anterior ou sinal não confirmado impedem o uso
   do consumo. Uma flag existente mas nula também impede o uso. Uma correção de sinal
   já confirmada pela Silver pode ser utilizada.

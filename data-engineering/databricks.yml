@@ -11,9 +11,9 @@ variables:
   tabela_pendentes:
     default: v-energy.silver.tb_faturas_pendentes_cadastro
   tabela_cadastro:
-    default: workspace.default.silver_unidades_consumidoras
+    default: v-energy.silver.tb_unidades_consumidoras
   tabela_leituras:
-    default: venergy.silver.leituras
+    default: v-energy.silver.tb_leituras
   schema_gold:
     default: v-energy.gold
 
