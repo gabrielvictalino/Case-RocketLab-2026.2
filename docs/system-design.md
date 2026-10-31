@@ -310,11 +310,11 @@ Os períodos chegam como `periodo=2025-07..2026-06&comparacao=2024-07..2025-06`.
 | `POST /api/v1/ordens-inspecao` | Gerar em lote (`{"ucs": [...]}`) | Invalida fila |
 | `POST /api/v1/ordens-inspecao/{id}/despachar` | `ABERTA → EM_CAMPO` | — |
 | `POST /api/v1/ordens-inspecao/{id}/tentativas` | `EM_CAMPO → ABERTA` | — |
-| `POST /api/v1/ordens-inspecao/{id}/resultado` | `EM_CAMPO → CONCLUIDA` | Invalida fila |
+| `POST /api/v1/ordens-inspecao/{id}/resultado` | `EM_CAMPO → CONCLUIDA` | Invalida fila, KPIs e insight da Visão Geral |
 | `POST /api/v1/ordens-inspecao/{id}/cancelar` | `→ CANCELADA` | Invalida fila |
 | `GET /api/v1/ordens-inspecao/export` | Planilha de campo | — |
 | `POST /api/v1/ordens-inspecao/importacoes` | Envio e prévia | — |
-| `POST /api/v1/ordens-inspecao/importacoes/{id}/confirmar` | Aplica as linhas válidas | Invalida fila |
+| `POST /api/v1/ordens-inspecao/importacoes/{id}/confirmar` | Aplica as linhas válidas | Invalida fila, KPIs e insight da Visão Geral |
 | `GET /api/v1/continuidade/serie` | DEC/FEC por competência | Sim |
 | `GET /api/v1/continuidade/ranking?ordem=chi\|dec\|fec` | Piores alimentadores | Sim |
 | `GET /api/v1/insights/{tela}` | Insight de `visao-geral` ou `receita` | Sim |
@@ -381,8 +381,11 @@ separados.
 | `ai_read` | Views sobre `analytics`, sem nome, CPF e endereço | importador, a cada carga | role `ai_read` |
 
 Role `ai_read`: só `SELECT` em `ai_read`, `default_transaction_read_only = on`,
-`statement_timeout = 5s`. A auditoria do agente é gravada pela conexão do
-portal, nunca pela do agente.
+`statement_timeout = 5s` e sem `EXECUTE` em `set_config` e na família
+`pg_sleep`. Como a própria sessão pode mudar o timeout e o modo só leitura com
+`SET`, o agente roda cada consulta numa transação encerrada com `ROLLBACK`, e a
+mudança não sobrevive na conexão do pool. A auditoria do agente é gravada pela
+conexão do portal, nunca pela do agente.
 
 Role `importador`: cria e substitui `analytics` e `analytics_staging`, faz
 `INSERT` em `operations.cargas` (criada pelo `init.sql` e depois gerida pelo
@@ -432,7 +435,7 @@ no CI. A Gold real fica para a demo.
 
 | Uso | Chave | Regra |
 |---|---|---|
-| Cache (cache-aside) | `cache:{versao_carga}:{rota}:{sha1(filtros)}` | TTL de 24 h como rede de segurança. Uma carga nova muda a versão e invalida tudo sem ação manual. Escrita de ordem apaga as chaves da fila |
+| Cache (cache-aside) | `cache:{versao_carga}:{rota}:{sha1(filtros)}` | TTL de 24 h como rede de segurança. Uma carga nova muda a versão e invalida tudo sem ação manual. Escrita de ordem apaga as chaves da fila; a que gera inspeção apaga também as de `kpis` e `insights/visao-geral`, por causa da taxa de acerto |
 | Rate limit por usuário | `rl:{usuario}:{rota}` | Assistente: 20 perguntas/min e cota diária de tokens. Insights: dentro do cache, o limite só conta as chamadas ao LLM |
 | Conversas do agente | `conversa:{id}` | Últimas trocas, TTL de 2 h; o histórico permanente fica na auditoria |
 
