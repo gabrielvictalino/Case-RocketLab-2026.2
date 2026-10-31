@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       backend: ${{ steps.paths.outputs.backend }}
+      frontend: ${{ steps.paths.outputs.frontend }}
       faturas: ${{ steps.paths.outputs.faturas }}
     steps:
       - uses: actions/checkout@v4
@@ -30,18 +31,22 @@ jobs:
           if not base or set(base) == {'0'}:
               args = ['git', 'ls-files']
           paths = subprocess.check_output(args, text=True).splitlines()
-          prefixes = ('backend/', 'ai-agent/', 'importador/', 'contracts/',
-                      'infra/postgres/', 'tests/', 'scripts/')
-          files = {'pyproject.toml', 'uv.lock', '.python-version', 'conftest.py',
-                   'docker-compose.yml', 'docker-compose.override.yml', '.dockerignore',
-                   '.github/workflows/ci.yml', '.env.example'}
-          changed = any(p.startswith(prefixes) or p in files for p in paths)
+          backend_prefixes = ('backend/', 'ai-agent/', 'importador/', 'contracts/',
+                              'infra/postgres/', 'tests/', 'scripts/')
+          backend_files = {'pyproject.toml', 'uv.lock', '.python-version', 'conftest.py',
+                           'docker-compose.yml', 'docker-compose.override.yml', '.dockerignore',
+                           '.github/workflows/ci.yml', '.env.example'}
+          frontend_prefixes = ('frontend/',)
+          frontend_files = {'.github/workflows/ci.yml'}
+          backend = any(p.startswith(backend_prefixes) or p in backend_files for p in paths)
+          frontend = any(p.startswith(frontend_prefixes) or p in frontend_files for p in paths)
+          faturas_prefixes = ('data-engineering/',)
+          faturas_files = {'tests/test_publicacao_faturas.py', 'tests/RegexFaturas.java',
+                           '.github/workflows/ci.yml', '.github/workflows/faturas.yml'}
+          faturas = any(p.startswith(faturas_prefixes) or p in faturas_files for p in paths)
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              output.write(f'backend={str(changed).lower()}\n')
-              faturas = any(p.startswith('data-engineering/') or p in {
-                  'tests/test_publicacao_faturas.py', 'tests/RegexFaturas.java',
-                  '.github/workflows/ci.yml',
-                  '.github/workflows/faturas.yml'} for p in paths)
+              output.write(f'backend={str(backend).lower()}\n')
+              output.write(f'frontend={str(frontend).lower()}\n')
               output.write(f'faturas={str(faturas).lower()}\n')
           PY
   backend:
@@ -58,6 +63,26 @@ jobs:
       - run: uv run ruff check backend ai-agent importador contracts conftest.py
       - run: uv run ruff format --check backend ai-agent importador contracts conftest.py
       - run: uv run pytest -q
+  frontend:
+    needs: [changes]
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
   faturas:
     needs: [changes]
     if: needs.changes.outputs.faturas == 'true'
@@ -75,25 +100,38 @@ jobs:
   ci:
     name: CI
     if: always()
-    needs: [changes, backend, faturas]
+    needs: [changes, backend, frontend, faturas]
     runs-on: ubuntu-latest
     steps:
       - name: Conferir resultado
         env:
-          FATURAS_RESULT: ${{ needs.faturas.result }}
-          FATURAS_CHANGED: ${{ needs.changes.outputs.faturas }}
-          BACKEND_RESULT: ${{ needs.backend.result }}
           CHANGES_RESULT: ${{ needs.changes.result }}
           BACKEND_CHANGED: ${{ needs.changes.outputs.backend }}
+          BACKEND_RESULT: ${{ needs.backend.result }}
+          FRONTEND_CHANGED: ${{ needs.changes.outputs.frontend }}
+          FRONTEND_RESULT: ${{ needs.frontend.result }}
+          FATURAS_CHANGED: ${{ needs.changes.outputs.faturas }}
+          FATURAS_RESULT: ${{ needs.faturas.result }}
         run: |
-          test "$CHANGES_RESULT" = success
-          if [ "$BACKEND_CHANGED" = true ]; then
-            test "$BACKEND_RESULT" = success
-          else
-            test "$BACKEND_RESULT" = skipped
+          failed=0
+          if [ "$CHANGES_RESULT" != "success" ]; then
+            echo "::error::Job 'changes': esperado 'success', obtido '$CHANGES_RESULT'."
+            failed=1
           fi
-          if [ "$FATURAS_CHANGED" = true ]; then
-            test "$FATURAS_RESULT" = success
-          else
-            test "$FATURAS_RESULT" = skipped
-          fi
+          check_module() {
+            local mod="$1"
+            local changed="$2"
+            local result="$3"
+            local expected="skipped"
+            if [ "$changed" = "true" ]; then
+              expected="success"
+            fi
+            if [ "$result" != "$expected" ]; then
+              echo "::error::Job '$mod' (changed=$changed): esperado '$expected', obtido '$result'."
+              failed=1
+            fi
+          }
+          check_module "backend" "$BACKEND_CHANGED" "$BACKEND_RESULT"
+          check_module "frontend" "$FRONTEND_CHANGED" "$FRONTEND_RESULT"
+          check_module "faturas" "$FATURAS_CHANGED" "$FATURAS_RESULT"
+          exit "$failed"

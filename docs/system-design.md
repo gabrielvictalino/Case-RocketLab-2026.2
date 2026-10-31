@@ -503,9 +503,9 @@ das roles) ficam só no `.env`.
 
 | Job | Roda quando o PR toca | Conteúdo |
 |---|---|---|
-| backend | `backend/**`, `ai-agent/**`, `importador/**`, `contracts/**`, `uv.lock` | `ruff`; pytest com Postgres via Testcontainers, carregando `contracts/samples/` |
-| frontend | `frontend/**` | `eslint`, `tsc --noEmit`, Vitest, `vite build` |
-| `CI` (agregador) | sempre | Falha se o job de backend ou de frontend falhou; obrigatório junto com o `Fluxo Git` |
+| backend | `backend/**`, `ai-agent/**`, `importador/**`, `contracts/**`, `infra/postgres/**`, `tests/**`, `scripts/**` e arquivos compartilhados da raiz (`pyproject.toml`, `uv.lock`, `.python-version`, `conftest.py`, `docker-compose*.yml`, `.dockerignore`, `.env.example`, `.github/workflows/ci.yml`) | `ruff`; pytest com Postgres e Redis via Testcontainers, carregando `contracts/samples/` |
+| frontend | `frontend/**`, `.github/workflows/ci.yml` | `npm ci`, `eslint`, `tsc --noEmit`, Vitest, `vite build` |
+| `CI` (agregador) | sempre | Falha se `changes`, `backend` ou `frontend` falhar/cancelar ou pular indevidamente; obrigatório junto com o `Fluxo Git` |
 | e2e | PR para `main` | Compose completo + um teste de fumaça com Playwright (login → abrir UC → gerar ordem) |
 
 Os jobs de módulo pulam o trabalho quando o PR não toca o módulo, mas o
