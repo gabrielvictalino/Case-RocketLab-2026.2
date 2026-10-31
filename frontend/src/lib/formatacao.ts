@@ -196,3 +196,100 @@ export function formatarCompetencia(valor: string | null | undefined): string {
   const nomeMes = MESES[mesNumero - 1]
   return `${nomeMes}/${ano}`
 }
+
+export function formatarNumero(valor: ValorNumerico, casas = 2): string {
+  const numero = converterNumero(valor)
+  if (numero === null) {
+    return AUSENTE
+  }
+  return obterFormatadorDecimal(casas).format(numero)
+}
+
+export function formatarPontosPercentuais(
+  pontos: ValorNumerico,
+  casas = 1,
+  opcoes?: { sinal?: boolean },
+): string {
+  const numero = converterNumero(pontos)
+  if (numero === null) {
+    return AUSENTE
+  }
+  const formatado = obterFormatadorDecimal(casas).format(Math.abs(numero))
+  const arredondadoZero = Number(Math.abs(numero).toFixed(casas)) === 0
+  let prefixo = ''
+  if (!arredondadoZero) {
+    if (numero < 0) {
+      prefixo = '-'
+    } else if (opcoes?.sinal) {
+      prefixo = '+'
+    }
+  }
+  return `${prefixo}${formatado}${NBSP}p.p.`
+}
+
+const REGEX_DATA_PURA = /^(\d{4})-(\d{2})-(\d{2})$/
+
+const formatadorDataRecife = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: 'America/Recife',
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+})
+
+const formatadorHoraRecife = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: 'America/Recife',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+})
+
+export function formatarDataPtBr(iso: string | null | undefined): string {
+  if (!iso) {
+    return AUSENTE
+  }
+  const limpo = iso.trim()
+  const match = REGEX_DATA_PURA.exec(limpo)
+  if (match) {
+    return `${match[3]}/${match[2]}/${match[1]}`
+  }
+  const data = new Date(limpo)
+  if (Number.isNaN(data.getTime())) {
+    return AUSENTE
+  }
+  return formatadorDataRecife.format(data)
+}
+
+export function formatarDataHoraPtBr(iso: string | null | undefined): string {
+  if (!iso) {
+    return AUSENTE
+  }
+  const limpo = iso.trim()
+  const match = REGEX_DATA_PURA.exec(limpo)
+  if (match) {
+    return `${match[3]}/${match[2]}/${match[1]}`
+  }
+  const data = new Date(limpo)
+  if (Number.isNaN(data.getTime())) {
+    return AUSENTE
+  }
+  return `${formatadorDataRecife.format(data)} ${formatadorHoraRecife.format(data)}`
+}
+
+export function formatarIntervaloPeriodo(
+  periodo: { inicio: string; fim: string } | null | undefined,
+): string {
+  if (!periodo) {
+    return AUSENTE
+  }
+  if (periodo.inicio === periodo.fim) {
+    return formatarCompetencia(periodo.inicio)
+  }
+  const anoInicio = periodo.inicio.slice(0, 4)
+  const anoFim = periodo.fim.slice(0, 4)
+  const mesInicio = MESES[Number(periodo.inicio.slice(5, 7)) - 1]
+  const mesFim = MESES[Number(periodo.fim.slice(5, 7)) - 1]
+  if (anoInicio === anoFim && mesInicio && mesFim) {
+    return `${mesInicio}–${mesFim}/${anoFim}`
+  }
+  return `${formatarCompetencia(periodo.inicio)}–${formatarCompetencia(periodo.fim)}`
+}

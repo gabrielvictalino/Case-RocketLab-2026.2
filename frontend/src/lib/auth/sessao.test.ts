@@ -2,9 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { api, desembrulhar, ErroApi } from '@/lib/api/cliente'
 import {
   assinarSessao,
+  cargoDaSessao,
   CHAVE_SESSAO,
   encerrarSessao,
   lerSessao,
+  ROTULO_CARGO,
   salvarSessao,
 } from '@/lib/auth/sessao'
 
@@ -131,5 +133,37 @@ describe('sessao e cliente da API', () => {
     })
 
     expect(lerSessao()?.token).toBe('sessao-anterior')
+  })
+
+  it('decodifica cargoDaSessao para token válido, malformado e sem claim', () => {
+    const codificarPayload = (obj: unknown) => {
+      const b64 = btoa(JSON.stringify(obj))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '')
+      return `eyJhbGciOiJIUzI1NiJ9.${b64}.assinatura`
+    }
+
+    expect(cargoDaSessao(codificarPayload({ sub: '1', cargo: 'perdas' }))).toBe(
+      'perdas',
+    )
+    expect(
+      cargoDaSessao(codificarPayload({ sub: '2', cargo: 'operacao' })),
+    ).toBe('operacao')
+    expect(ROTULO_CARGO.operacao).toBe('Operação')
+    expect(ROTULO_CARGO.diretoria).toBe('Diretoria')
+
+    // Sem claim cargo ou cargo desconhecido
+    expect(cargoDaSessao(codificarPayload({ sub: '1' }))).toBeNull()
+    expect(
+      cargoDaSessao(codificarPayload({ sub: '1', cargo: 'admin' })),
+    ).toBeNull()
+
+    // Malformados / vazios
+    expect(cargoDaSessao('token-sem-pontos')).toBeNull()
+    expect(cargoDaSessao('a.%%%invalido%%%.c')).toBeNull()
+    expect(cargoDaSessao('')).toBeNull()
+    expect(cargoDaSessao(null)).toBeNull()
+    expect(cargoDaSessao(undefined)).toBeNull()
   })
 })

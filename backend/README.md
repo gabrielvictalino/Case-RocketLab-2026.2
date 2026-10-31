@@ -17,17 +17,17 @@ Requisitos: Docker com Compose v2. Comandos executados na raiz do repositório:
 ```bash
 cp .env.example .env
 docker compose up -d postgres redis
-docker compose build backend
+docker compose build backend nginx
 docker compose run --rm migracoes
 docker compose run --rm importador --origem contracts/samples
 docker compose run --rm backend python -m app.seed
-docker compose up -d backend
-curl http://localhost:8000/api/v1/health
+docker compose up -d
+curl http://localhost/api/v1/health
 ```
 
-O override de desenvolvimento publica somente em `127.0.0.1`: backend 8000,
-Postgres 5432 e Redis 6379. O Compose base (`docker compose -f docker-compose.yml`)
-não publica portas. O frontend e o Nginx não fazem parte desta etapa.
+No Compose base (`docker compose -f docker-compose.yml`), **apenas o serviço `nginx` publica porta** (`${PORTAL_PORT:-80}:80`), servindo a SPA do portal em `http://localhost` e atuando como proxy reverso para `/api/v1/` com propagação de `X-Request-ID`, `client_max_body_size 10m` e limites de taxa (`20 req/s` com `burst=40` em `/api/v1/` e `2 req/s` com `burst=5` e `proxy_read_timeout 120s` em `/api/v1/assistente/` e `/api/v1/insights/`, retornando HTTP `429` JSON com cabeçalho `Retry-After`).
+
+O `docker-compose.override.yml` é exclusivo para desenvolvimento local e publica apenas em `127.0.0.1`: backend (`8000`), Postgres (`5432`) e Redis (`6379`), permitindo usar `npm run dev` no frontend e inspecionar banco/API diretamente no host.
 
 No ambiente gerenciado com CA própria, gere a imagem com a CA combinada do
 executor e reutilize-a nos comandos seguintes:
