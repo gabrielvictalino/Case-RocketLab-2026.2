@@ -3,7 +3,7 @@ name = "ai-agent"
 description = "Módulo Agêntico do projeto V-Energy"
 version = "0.1.0"
 requires-python = ">=3.12,<3.13"
-dependencies = []
+dependencies = ["sqlglot>=30.23,<31"]
 
 [build-system]
 requires = ["hatchling"]
