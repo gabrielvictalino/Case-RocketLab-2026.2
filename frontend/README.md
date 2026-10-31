@@ -75,4 +75,3 @@ O período e o período de comparação globais ficam sincronizados na URL no
 formato `?periodo=AAAA-MM..AAAA-MM&comparacao=AAAA-MM..AAAA-MM` (por padrão, os
 últimos 12 meses contra os mesmos 12 meses do ano anterior, segundo os limites
 de `GET /api/v1/meta/carga`) e são expostos às telas pelo hook `usePeriodo()`.
-
