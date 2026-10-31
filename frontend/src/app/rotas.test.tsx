@@ -52,7 +52,11 @@ describe('rotas do portal', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: titulo }),
     ).toBeInTheDocument()
-    expect(screen.getByText('Em construção')).toBeInTheDocument()
+    if (caminho === '/operacao') {
+      expect(screen.getByText('Indicadores de continuidade')).toBeInTheDocument()
+    } else {
+      expect(screen.getByText('Em construção')).toBeInTheDocument()
+}
   })
 
   it('lista os 5 links na navegação lateral e marca a rota ativa', async () => {
