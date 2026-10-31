@@ -1,3 +1,4 @@
+
 import {
   createBrowserRouter,
   Navigate,
@@ -30,6 +31,10 @@ export const rotas: RouteObject[] = [
       },
       {
         path: 'unidade-consumidora',
+        element: <PaginaUnidadeConsumidora />,
+      },
+      {
+        path: 'ucs/:id',
         element: <PaginaUnidadeConsumidora />,
       },
       {
