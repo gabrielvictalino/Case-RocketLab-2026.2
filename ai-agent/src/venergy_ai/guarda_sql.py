@@ -93,11 +93,12 @@ def validar_sql(sql: str, views: Collection[str]) -> str:
     views = frozenset(view.lower() for view in views)
     try:
         arvore = _uma_instrucao(sql)
-        _conferir(arvore, views)
+        for tabela in _conferir(arvore, views):
+            tabela.set('db', exp.to_identifier(SCHEMA))
         _impor_limite(arvore)
         seguro = arvore.sql(dialect=DIALETO, comments=False)
         # Confere também o texto regenerado, que é o que o Postgres vai executar.
-        _conferir(_uma_instrucao(seguro), views)
+        _conferir_regenerado(_uma_instrucao(seguro), views)
     except RecursionError as erro:
         raise SQLRejeitado(
             'A consulta tem aninhamento demais. Simplifique as subconsultas e expressões.'
@@ -124,10 +125,12 @@ def _uma_instrucao(sql: str) -> exp.Expression:
     return instrucoes[0]
 
 
-def _conferir(arvore: exp.Expression, views: Collection[str]) -> None:
+def _conferir(arvore: exp.Expression, views: frozenset[str]) -> list[exp.Table]:
+    """Levanta `SQLRejeitado` no que não é permitido e devolve as views lidas."""
     if not isinstance(arvore, (exp.Select, exp.SetOperation)):
         raise SQLRejeitado('Só é permitido SELECT, com ou sem WITH.')
     normalize_identifiers(arvore, dialect=DIALETO)
+    tabelas = []
     for no in arvore.walk():
         # Dentro de um SELECT, o Postgres só aceita escrita num WITH:
         # WITH d AS (DELETE ... RETURNING *) SELECT ...
@@ -149,60 +152,63 @@ def _conferir(arvore: exp.Expression, views: Collection[str]) -> None:
             raise SQLRejeitado(
                 f'Conversão para tipo do catálogo não é permitida: {no.sql(dialect=DIALETO)}.'
             )
-    _conferir_funcoes(arvore)
-    _conferir_tabelas(arvore, views)
+        if isinstance(no, exp.Func):
+            _conferir_funcao(no)
+        elif isinstance(no, exp.Table):
+            tabelas.append(no)
+    # As tabelas ficam por último: uma escrita num WITH chegaria aqui como tabela
+    # desconhecida, e o motivo devolvido ao agente deve ser a escrita.
+    ctes = _referencias_a_cte(arvore)
+    return [tabela for tabela in tabelas if id(tabela) not in ctes and _e_view(tabela, views)]
 
 
-def _conferir_funcoes(arvore: exp.Expression) -> None:
-    for funcao in arvore.find_all(exp.Func):
-        if isinstance(funcao.parent, exp.Dot) and funcao.arg_key == 'expression':
-            raise SQLRejeitado(
-                f'Função com schema não é permitida: {funcao.parent.sql(dialect=DIALETO)}.'
-            )
-        if not isinstance(funcao, (exp.Anonymous, exp.AnonymousAggFunc)):
-            continue
-        nome = funcao.name.lower()
-        if nome not in FUNCOES_ANONIMAS_PERMITIDAS and nome not in CONSTRUCOES_ANONIMAS:
-            raise SQLRejeitado(
-                f'Função não permitida: {funcao.name}. '
-                'Use funções SQL de agregação, data, texto e janela.'
-            )
-        # Entre aspas o nome não vira minúsculas, e o sqlglot o regenera em maiúsculas.
-        if isinstance(funcao.this, exp.Identifier) and funcao.this.quoted:
-            raise SQLRejeitado(f'Escreva o nome da função sem aspas: {funcao.name}.')
-
-
-def _conferir_tabelas(arvore: exp.Expression, views: Collection[str]) -> None:
+def _referencias_a_cte(arvore: exp.Expression) -> set[int]:
     try:
         escopos = traverse_scope(arvore)
     except SqlglotError as erro:
         raise SQLRejeitado(f'Não foi possível identificar as tabelas: {erro}.') from erro
     # Uma referência sem schema só é CTE se o nome estiver no escopo dela; fora
     # dele, o Postgres procuraria uma tabela com esse nome.
-    ctes = {
+    return {
         id(tabela)
         for escopo in escopos
         for tabela in escopo.tables
         if not tabela.db and tabela.name in escopo.cte_sources
     }
-    for tabela in arvore.find_all(exp.Table):
-        if id(tabela) in ctes:
-            continue
-        if isinstance(tabela.this, exp.Func):
-            # A função de um FROM (generate_series, unnest) é conferida como as demais.
-            if tabela.catalog or tabela.db:
-                raise SQLRejeitado(
-                    f'Função com schema não é permitida: {tabela.sql(dialect=DIALETO)}.'
-                )
-            continue
-        if not isinstance(tabela.this, exp.Identifier):
-            raise SQLRejeitado(f'Origem de dados não suportada: {tabela.sql(dialect=DIALETO)}.')
-        if tabela.catalog or tabela.db not in ('', SCHEMA) or tabela.name not in views:
-            raise SQLRejeitado(
-                f'Tabela fora do catálogo do agente: {tabela.sql(dialect=DIALETO)}. '
-                f'Use só as views de {SCHEMA}: {", ".join(sorted(views))}.'
-            )
-        tabela.set('db', exp.to_identifier(SCHEMA))
+
+
+def _conferir_funcao(funcao: exp.Func) -> None:
+    if isinstance(funcao.parent, exp.Dot) and funcao.arg_key == 'expression':
+        raise SQLRejeitado(
+            f'Função com schema não é permitida: {funcao.parent.sql(dialect=DIALETO)}.'
+        )
+    if not isinstance(funcao, (exp.Anonymous, exp.AnonymousAggFunc)):
+        return
+    nome = funcao.name.lower()
+    if nome not in FUNCOES_ANONIMAS_PERMITIDAS and nome not in CONSTRUCOES_ANONIMAS:
+        raise SQLRejeitado(
+            f'Função não permitida: {funcao.name}. '
+            'Use funções SQL de agregação, data, texto e janela.'
+        )
+    # Entre aspas o nome não vira minúsculas, e o sqlglot o regenera em maiúsculas.
+    if isinstance(funcao.this, exp.Identifier) and funcao.this.quoted:
+        raise SQLRejeitado(f'Escreva o nome da função sem aspas: {funcao.name}.')
+
+
+def _e_view(tabela: exp.Table, views: frozenset[str]) -> bool:
+    if isinstance(tabela.this, exp.Func):
+        # A função de um FROM (generate_series, unnest) é conferida como as demais.
+        if tabela.catalog or tabela.db:
+            raise SQLRejeitado(f'Função com schema não é permitida: {tabela.sql(dialect=DIALETO)}.')
+        return False
+    if not isinstance(tabela.this, exp.Identifier):
+        raise SQLRejeitado(f'Origem de dados não suportada: {tabela.sql(dialect=DIALETO)}.')
+    if tabela.catalog or tabela.db not in ('', SCHEMA) or tabela.name not in views:
+        raise SQLRejeitado(
+            f'Tabela fora do catálogo do agente: {tabela.sql(dialect=DIALETO)}. '
+            f'Use só as views de {SCHEMA}: {", ".join(sorted(views))}.'
+        )
+    return True
 
 
 def _impor_limite(arvore: exp.Expression) -> None:
@@ -245,3 +251,13 @@ def _linhas_pedidas(limite: exp.Expression | None) -> int | None:
         f'O limite precisa ser um inteiro não negativo, como LIMIT 10: '
         f'{valor.sql(dialect=DIALETO)}.'
     )
+
+
+def _conferir_regenerado(arvore: exp.Expression, views: frozenset[str]) -> None:
+    tabelas = _conferir(arvore, views)
+    if any(tabela.db != SCHEMA for tabela in tabelas):
+        raise SQLRejeitado(f'Não foi possível qualificar as views com {SCHEMA}.')
+    limite = arvore.args.get('limit')
+    valor = limite.expression if isinstance(limite, exp.Limit) else None
+    if not (isinstance(valor, exp.Literal) and valor.is_int and valor.to_py() <= LIMITE_MAXIMO):
+        raise SQLRejeitado(f'Não foi possível garantir o LIMIT {LIMITE_MAXIMO}.')
