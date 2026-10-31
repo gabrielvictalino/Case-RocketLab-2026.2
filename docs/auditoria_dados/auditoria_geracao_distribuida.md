@@ -82,20 +82,20 @@ A correção de escala é essa divisão por 1.000, com a marca `fl_correcao_esca
 | `UC110560` | 2024-09-12 | 2024-12-09 | Recife |
 | `UC119180` | 2024-09-18 | 2024-11-12 | Olinda |
 
-Data inconsistente é essa marca, `fl_data_inconsistente`. A linha permanece na Silver. Apagar a UC esconderia o sistema solar da visão 360. A flag também cobre uma `data_conexao` anterior a 2024-01-01 ou no futuro (`> current_date()`). Nesta entrega nenhuma data cai fora dessa faixa, então as 5 linhas acima são o conjunto inteiro.
+Data inconsistente é essa marca, `fl_data_inconsistente`. A linha permanece na Silver. Apagar a UC esconderia o sistema solar da visão 360. A flag também cobre uma `data_conexao` anterior a 2024-01-01 ou no futuro (`> DATA_EXECUCAO`, onde `DATA_EXECUCAO` captura `current_date()` uma única vez no início do job). Nesta entrega nenhuma data cai fora dessa faixa, então as 5 linhas acima são o conjunto inteiro.
 
-A `data_ligacao` usada na comparação vem de `tb_unidades_consumidoras`. Esse cadastro repete o cabeçalho numa linha (`id_uc` vale `id_uc` e `data_ligacao` vale o texto `data_ligacao`). Essa linha fica de fora da consulta. Cem UCs com solar aparecem mais de uma vez no cadastro, e as cópias concordam em `data_ligacao`, `classe` e `municipio`.
+A `data_ligacao` usada na comparação vem de `tb_unidades_consumidoras`. Esse cadastro repete o cabeçalho numa linha (`id_uc` vale `id_uc` e `data_ligacao` vale o texto `data_ligacao`). Essa linha fica de fora da consulta. Cem UCs com solar aparecem mais de uma vez no cadastro, e as cópias concordam em `data_ligacao`. `classe` e `municipio` permanecem apenas na dimensão de UC.
 
 ---
 
 ## 4. Plano aplicado na Silver
 
-Notebook: `data-engineering/bronze_to_silver/bronze-to-silver-geracao-distribuida.ipynb`. Documentação da camada: `docs/silver/silver_geracao_distribuida.md`. Tabela: `` `v-energy`.silver.tb_geracao_distribuida ``. Grão: uma linha por `id_uc`.
+Notebook: `data-engineering/bronze_to_silver/bronze-to-silver-geracao-distribuida.ipynb`. Documentação da camada: `docs/silver/silver_geracao_distribuida.md`. Tabela: `` `v-energy`.silver.tb_geracao_distribuida ``. Grão: uma linha por `id_uc` (no padrão `^UC\d{6}$`).
 
 1. Trocar a vírgula de `potencia_kwp` por ponto e converter para `decimal(10,2)`. Guardar o texto em `potencia_kwp_raw`.
-2. Se a potência convertida for maior que 75, a razão bruta (injeção ÷ potência original) for menor ou igual a 0,35 kWh por kWp por mês e a divisão por 1.000 cair em `[1, 75]` kWp com rendimento `>= 1`, dividir por 1.000 e ligar `fl_correcao_escala` (casos ambíguos fora desse intervalo pós-divisão vão para a quarentena como `potencia_invalida`).
+2. Se a potência convertida for maior que 75, a razão bruta (injeção ÷ potência original) for menor ou igual a 0,35 kWh por kWp por mês e a divisão por 1.000 cair em `[1, 75]` kWp com rendimento `>= 1`, dividir por 1.000 e ligar `fl_correcao_escala` (casos ambíguos fora desse intervalo pós-divisão vão para a quarentena como `escala_ambigua`).
 3. Trocar eventual vírgula de `energia_injetada_kwh_media_mensal` por ponto e converter para `decimal(10,2)`.
-4. Validar o padrão ISO `yyyy-MM-dd` e converter `data_conexao` para `date`. Ligar `fl_data_inconsistente` quando a data é anterior a 2024-01-01, posterior a `current_date()` ou anterior à `data_ligacao`.
+4. Validar o padrão ISO `yyyy-MM-dd` e converter `data_conexao` para `date`. Ligar `fl_data_inconsistente` quando a data é anterior a 2024-01-01, posterior a `DATA_EXECUCAO` (`current_date()` capturado uma única vez no início) ou anterior à `data_ligacao`.
 5. Traduzir a modalidade para `PROPRIA_UC`, `AUTOCONSUMO_REMOTO` ou `COMPARTILHADA`. O texto de origem fica em `modalidade_origem`.
 6. Calcular `kwh_por_kwp_mes` depois da correção de escala, só como auditoria. O patamar perto de 34 kWh por kWp por mês é o normal deste arquivo e não reprova linha.
 
