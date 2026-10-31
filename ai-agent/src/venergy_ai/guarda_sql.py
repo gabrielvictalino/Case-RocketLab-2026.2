@@ -10,12 +10,13 @@ from collections.abc import Collection
 
 import sqlglot
 from sqlglot import exp
+from sqlglot.dialects.dialect import rename_func
+from sqlglot.dialects.postgres import Postgres
 from sqlglot.errors import ParseError, SqlglotError
 from sqlglot.optimizer.normalize_identifiers import normalize_identifiers
 from sqlglot.optimizer.scope import traverse_scope
 from sqlglot.optimizer.simplify import simplify
 
-DIALETO = 'postgres'
 SCHEMA = 'ai_read'
 LIMITE_MAXIMO = 1000
 
@@ -26,11 +27,23 @@ LIMITE_MAXIMO = 1000
 FUNCOES_ANONIMAS_PERMITIDAS = frozenset(
     {
         'age',
+        'array_lower',
+        'array_upper',
         'cardinality',
+        'clock_timestamp',
         'every',
         'gcd',
         'isfinite',
+        'json_array_length',
+        'json_build_array',
+        'json_build_object',
+        'json_typeof',
         'jsonb_agg',
+        'jsonb_array_length',
+        'jsonb_build_array',
+        'jsonb_build_object',
+        'jsonb_extract_path_text',
+        'jsonb_typeof',
         'lcm',
         'make_date',
         'num_nonnulls',
@@ -40,9 +53,29 @@ FUNCOES_ANONIMAS_PERMITIDAS = frozenset(
         'regexp_matches',
         'regexp_split_to_array',
         'scale',
+        'statement_timestamp',
+        'timezone',
+        'to_json',
+        'to_jsonb',
+        'transaction_timestamp',
         'trim_scale',
     }
 )
+
+# Em `x = ALL(ARRAY[...])` o sqlglot lê ALL e SOME como função. No Postgres são
+# palavras reservadas, e nenhuma função pode ser chamada por esses nomes sem aspas.
+CONSTRUCOES_ANONIMAS = frozenset({'all', 'some'})
+
+
+class PostgresDaGuarda(Postgres):
+    """Dialeto Postgres com as correções de que o SQL regenerado precisa."""
+
+    class Generator(Postgres.Generator):
+        # O sqlglot gera to_hex como HEX, que não existe no Postgres.
+        TRANSFORMS = {**Postgres.Generator.TRANSFORMS, exp.Hex: rename_func('TO_HEX')}
+
+
+DIALETO = PostgresDaGuarda
 
 
 class SQLRejeitado(ValueError):
@@ -56,6 +89,8 @@ def validar_sql(sql: str, views: Collection[str]) -> str:
     Nomes sem schema são qualificados com `ai_read`, e o `LIMIT` fica em no máximo
     `LIMITE_MAXIMO`. Levanta `SQLRejeitado` com o motivo, para a nova tentativa.
     """
+    # O Postgres guarda em minúsculas os nomes criados sem aspas.
+    views = frozenset(view.lower() for view in views)
     try:
         arvore = _uma_instrucao(sql)
         _conferir(arvore, views)
@@ -102,6 +137,12 @@ def _conferir(arvore: exp.Expression, views: Collection[str]) -> None:
             raise SQLRejeitado('SELECT INTO cria uma tabela e não é permitido.')
         if isinstance(no, exp.Lock):
             raise SQLRejeitado('FOR UPDATE/FOR SHARE trava linhas e não é permitido.')
+        # O sqlglot regenera :x e @x em formas que o Postgres não aceita.
+        if isinstance(no, (exp.Parameter, exp.Placeholder)):
+            raise SQLRejeitado(
+                'Parâmetros (:nome, $1, @nome, ?) não são permitidos. Escreva os valores '
+                'na própria consulta; para valor absoluto, use abs().'
+            )
         # 'operations.usuarios'::regclass consulta o catálogo do Postgres por fora das views.
         catalogo = isinstance(no, exp.DataType) and no.this == exp.DataType.Type.USERDEFINED
         if isinstance(no, exp.ObjectIdentifier) or catalogo:
@@ -118,12 +159,17 @@ def _conferir_funcoes(arvore: exp.Expression) -> None:
             raise SQLRejeitado(
                 f'Função com schema não é permitida: {funcao.parent.sql(dialect=DIALETO)}.'
             )
-        anonima = isinstance(funcao, (exp.Anonymous, exp.AnonymousAggFunc))
-        if anonima and funcao.name.lower() not in FUNCOES_ANONIMAS_PERMITIDAS:
+        if not isinstance(funcao, (exp.Anonymous, exp.AnonymousAggFunc)):
+            continue
+        nome = funcao.name.lower()
+        if nome not in FUNCOES_ANONIMAS_PERMITIDAS and nome not in CONSTRUCOES_ANONIMAS:
             raise SQLRejeitado(
                 f'Função não permitida: {funcao.name}. '
                 'Use funções SQL de agregação, data, texto e janela.'
             )
+        # Entre aspas o nome não vira minúsculas, e o sqlglot o regenera em maiúsculas.
+        if isinstance(funcao.this, exp.Identifier) and funcao.this.quoted:
+            raise SQLRejeitado(f'Escreva o nome da função sem aspas: {funcao.name}.')
 
 
 def _conferir_tabelas(arvore: exp.Expression, views: Collection[str]) -> None:

@@ -60,6 +60,18 @@ def rejeita(sql, trecho):
             'SELECT * FROM ai_read.ucs /* ; DELETE FROM ai_read.ucs */ LIMIT 5;',
             'SELECT * FROM ai_read.ucs LIMIT 5',
         ),
+        (
+            'SELECT * FROM ucs WHERE id_uc <> ALL(ARRAY(SELECT id_uc FROM inspecoes))',
+            'SELECT * FROM ai_read.ucs WHERE id_uc <> '
+            'ALL(ARRAY(SELECT id_uc FROM ai_read.inspecoes)) LIMIT 1000',
+        ),
+        (
+            "SELECT json_build_object('uc', id_uc), array_upper(ARRAY[1, 2], 1) FROM ucs",
+            "SELECT JSON_BUILD_OBJECT('uc', id_uc), ARRAY_UPPER(ARRAY[1, 2], 1) FROM ai_read.ucs "
+            'LIMIT 1000',
+        ),
+        # O sqlglot gera to_hex como HEX, que o Postgres não tem.
+        ('SELECT to_hex(255)', 'SELECT TO_HEX(255) LIMIT 1000'),
     ],
 )
 def test_aceita_consultas_de_leitura(sql, esperado):
@@ -184,6 +196,23 @@ def test_rejeita_funcao_com_schema(sql):
     rejeita(sql, 'Função com schema')
 
 
+def test_rejeita_funcao_permitida_entre_aspas():
+    rejeita('SELECT "age"(now())', 'sem aspas')
+
+
+@pytest.mark.parametrize(
+    'sql',
+    [
+        'SELECT * FROM ai_read.ucs WHERE id_uc = :id',
+        'SELECT * FROM ai_read.ucs WHERE id_uc = $1',
+        'SELECT * FROM ai_read.ucs WHERE id_uc = ?',
+        'SELECT @kwh FROM ai_read.ucs',
+    ],
+)
+def test_rejeita_parametro(sql):
+    rejeita(sql, 'Parâmetros')
+
+
 @pytest.mark.parametrize(
     'sql',
     [
@@ -238,6 +267,11 @@ def test_motivo_cita_as_views_para_a_nova_tentativa():
 
 def test_rejeita_aninhamento_excessivo():
     rejeita('SELECT ' + '(' * 3000 + '1' + ')' * 3000, 'aninhamento demais')
+
+
+def test_views_com_maiusculas_no_catalogo():
+    sql = validar_sql('SELECT * FROM receita_volume_mensal', {'Receita_Volume_Mensal'})
+    assert sql == 'SELECT * FROM ai_read.receita_volume_mensal LIMIT 1000'
 
 
 @pytest.mark.parametrize(
