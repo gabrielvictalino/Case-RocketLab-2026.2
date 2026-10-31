@@ -23,11 +23,25 @@ npm run build          # tsc -b && vite build (saída em dist/)
 npm run preview        # pré-visualiza o build de produção
 ```
 
-## Proxy de desenvolvimento
+## Proxy de desenvolvimento e Nginx (produção/Compose)
 
 No `npm run dev`, chamadas para `/api` são redirecionadas pelo Vite para
-`process.env.BACKEND_URL ?? 'http://localhost:8000'` (porta publicada pelo
-`docker-compose.override.yml` do backend).
+`process.env.BACKEND_URL ?? 'http://localhost:8000'` (porta publicada em
+`127.0.0.1:8000` exclusivamente pelo `docker-compose.override.yml` para
+desenvolvimento).
+
+Na subida completa via Docker Compose (`docker compose up -d`), o `infra/nginx/Dockerfile`
+compila o bundle (`dist/`) em multi-stage (`node:24-alpine` → `nginx:1.28-alpine`) e o
+serviço `nginx` é o único que publica porta no `docker-compose.yml` base
+(`${PORTAL_PORT:-80}:80`, acessível em `http://localhost`):
+
+- Serve a SPA com fallback `try_files $uri /index.html` (`Cache-Control: no-cache` no
+  `index.html` e `immutable` por 1 ano em `/assets/`).
+- Faz proxy reverso de `/api/v1/` para `http://backend:8000` propagando `X-Request-ID`,
+  com `client_max_body_size 10m` e retorno `404` JSON para rotas `/api/` fora de `/api/v1/`.
+- Aplica rate limit por IP: `20 req/s` (`burst=40 nodelay`) em `/api/v1/` e `2 req/s`
+  (`burst=5 nodelay`, `proxy_read_timeout 120s`) em `/api/v1/assistente/` e
+  `/api/v1/insights/`, respondendo `429` em JSON com cabeçalho `Retry-After: 1`.
 
 ## Cliente da API e `gen:api`
 

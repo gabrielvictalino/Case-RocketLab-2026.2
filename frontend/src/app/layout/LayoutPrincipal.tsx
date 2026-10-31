@@ -1,45 +1,60 @@
-import { useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 import { Outlet } from 'react-router'
 import { NavegacaoLateral } from '@/app/layout/NavegacaoLateral'
 import { BarraPeriodo } from '@/app/periodo/BarraPeriodo'
-import { Button } from '@/components/ui/button'
-import { encerrarSessao, useSessao } from '@/lib/auth/sessao'
+import { PainelAgente } from '@/features/assistente/PainelAgente'
 
 export function LayoutPrincipal() {
-  const sessao = useSessao()
-  const queryClient = useQueryClient()
-
-  function aoSair() {
-    queryClient.clear()
-    encerrarSessao()
-  }
+  const [agenteAberto, setAgenteAberto] = useState(false)
 
   return (
-    <div className="flex min-h-screen bg-background text-foreground">
-      <NavegacaoLateral />
-      <div className="flex flex-1 flex-col">
-        <header className="sticky top-0 z-10 flex min-h-14 flex-wrap items-center justify-between gap-4 border-b bg-card px-6 py-2">
-          <BarraPeriodo />
-          <div className="flex items-center gap-3 border-l pl-4">
-            {sessao ? (
-              <span className="text-muted-foreground text-xs font-medium">
-                {sessao.login}
-              </span>
-            ) : null}
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={aoSair}
-            >
-              Sair
-            </Button>
-          </div>
-        </header>
-        <main className="flex-1 p-6">
+    <div
+      className="ve-root"
+      data-theme="light"
+      style={{
+        position: 'relative',
+        display: 'flex',
+        flexWrap: 'nowrap',
+        alignItems: 'stretch',
+        height: '100vh',
+        overflow: 'hidden',
+        background: 'var(--surface)',
+        color: 'var(--ink)',
+      }}
+    >
+      <NavegacaoLateral
+        agenteAberto={agenteAberto}
+        aoAlternarAgente={() => setAgenteAberto((aberto) => !aberto)}
+      />
+      <div
+        style={{
+          flex: '1 1 auto',
+          minWidth: 0,
+          height: '100%',
+          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        <BarraPeriodo />
+        <main
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '24px',
+            padding: '24px',
+            maxWidth: '1400px',
+            width: '100%',
+            flex: 1,
+          }}
+        >
           <Outlet />
         </main>
       </div>
+      <PainelAgente
+        aberto={agenteAberto}
+        aoFechar={() => setAgenteAberto(false)}
+      />
     </div>
   )
 }

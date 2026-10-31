@@ -35,6 +35,20 @@ const CARGA_AMOSTRA: Carga = {
   competencia_mais_recente: '2026-06-01',
 }
 
+const FILTROS_AMOSTRA = {
+  municipios: ['Recife', 'Olinda'],
+  bairros: { Recife: ['Boa Viagem'], Olinda: ['Casa Caiada'] },
+  classes: ['Residencial', 'Comercial'],
+  alimentadores: ['AL-01'],
+}
+
+const ORDENS_VAZIA = {
+  items: [],
+  total: 0,
+  page: 1,
+  size: 25,
+}
+
 beforeEach(() => {
   localStorage.clear()
   encerrarSessao()
@@ -44,12 +58,18 @@ beforeEach(() => {
   )
   vi.stubGlobal(
     'fetch',
-    vi.fn(async () =>
-      new Response(JSON.stringify(CARGA_AMOSTRA), {
+    vi.fn(async (req: Request | string | URL) => {
+      const url = typeof req === 'string' ? req : req instanceof URL ? req.href : req.url
+      const corpo = url.includes('/api/v1/meta/filtros')
+        ? FILTROS_AMOSTRA
+        : url.includes('/api/v1/ordens-inspecao')
+          ? ORDENS_VAZIA
+          : CARGA_AMOSTRA
+      return new Response(JSON.stringify(corpo), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
-      }),
-    ),
+      })
+    }),
   )
 })
 
@@ -107,7 +127,6 @@ describe('rotas do portal', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: titulo }),
     ).toBeInTheDocument()
-    expect(screen.getByText('Em construção')).toBeInTheDocument()
   })
 
   it('lista os 5 links na navegação lateral preservando periodo/comparacao e marca a rota ativa', async () => {

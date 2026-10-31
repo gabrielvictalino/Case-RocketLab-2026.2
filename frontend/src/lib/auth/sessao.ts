@@ -3,6 +3,52 @@ import type { components } from '@/lib/api/schema'
 
 export type Token = components['schemas']['Token']
 
+export type Cargo =
+  | 'diretoria'
+  | 'comercial'
+  | 'atendimento'
+  | 'perdas'
+  | 'operacao'
+
+export const ROTULO_CARGO: Record<Cargo, string> = {
+  diretoria: 'Diretoria',
+  comercial: 'Comercial',
+  atendimento: 'Atendimento',
+  perdas: 'Perdas',
+  operacao: 'Operação',
+}
+
+export function cargoDaSessao(token: string | null | undefined): Cargo | null {
+  if (!token || typeof token !== 'string') {
+    return null
+  }
+  const partes = token.split('.')
+  if (partes.length !== 3 || !partes[1]) {
+    return null
+  }
+  try {
+    const b64 = partes[1].replace(/-/g, '+').replace(/_/g, '/')
+    const comPadding = b64.padEnd(b64.length + ((4 - (b64.length % 4)) % 4), '=')
+    const binario = globalThis.atob(comPadding)
+    const bytes = new Uint8Array(binario.length)
+    for (let i = 0; i < binario.length; i++) {
+      bytes[i] = binario.charCodeAt(i)
+    }
+    const json = new TextDecoder().decode(bytes)
+    const payload: unknown = JSON.parse(json)
+    if (payload === null || typeof payload !== 'object') {
+      return null
+    }
+    const cargo = (payload as Record<string, unknown>).cargo
+    if (typeof cargo === 'string' && Object.prototype.hasOwnProperty.call(ROTULO_CARGO, cargo)) {
+      return cargo as Cargo
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 export interface Sessao {
   token: string
   login: string

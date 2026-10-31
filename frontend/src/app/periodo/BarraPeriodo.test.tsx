@@ -34,6 +34,20 @@ const CARGA_AMOSTRA: Carga = {
   competencia_mais_recente: '2026-06-01',
 }
 
+const FILTROS_AMOSTRA = {
+  municipios: ['Recife', 'Olinda'],
+  bairros: { Recife: ['Boa Viagem'], Olinda: ['Casa Caiada'] },
+  classes: ['Residencial', 'Comercial'],
+  alimentadores: ['AL-01'],
+}
+
+const ORDENS_VAZIA = {
+  items: [],
+  total: 0,
+  page: 1,
+  size: 25,
+}
+
 beforeEach(() => {
   localStorage.clear()
   encerrarSessao()
@@ -43,12 +57,18 @@ beforeEach(() => {
   )
   vi.stubGlobal(
     'fetch',
-    vi.fn(async () =>
-      new Response(JSON.stringify(CARGA_AMOSTRA), {
+    vi.fn(async (req: Request | string | URL) => {
+      const url = typeof req === 'string' ? req : req instanceof URL ? req.href : req.url
+      const corpo = url.includes('/api/v1/meta/filtros')
+        ? FILTROS_AMOSTRA
+        : url.includes('/api/v1/ordens-inspecao')
+          ? ORDENS_VAZIA
+          : CARGA_AMOSTRA
+      return new Response(JSON.stringify(corpo), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
-      }),
-    ),
+      })
+    }),
   )
 })
 
@@ -82,10 +102,14 @@ describe('BarraPeriodo', () => {
       '/receita?periodo=invalido&municipio=Recife',
     )
 
-    expect(await screen.findByText('Dados até jun/2026')).toBeInTheDocument()
     expect(
-      screen.getByText('gold_synthetic_v0_2_0 (0.2.0-provisional)'),
+      await screen.findByText('Competência mais recente jun/2026'),
     ).toBeInTheDocument()
+    const elVersao = screen.getByText(
+      'Carga gold_synthetic_v0_2_0 · 30/06/2026',
+    )
+    expect(elVersao).toBeInTheDocument()
+    expect(elVersao).toHaveAttribute('title', '0.2.0-provisional')
     expect(screen.getByText('amostra sintética')).toBeInTheDocument()
 
     await waitFor(() => {
@@ -109,7 +133,7 @@ describe('BarraPeriodo', () => {
   it('aplica atalho Primeiro ano × Últimos 12 meses, volta ao Padrão e ajusta extremos quando início > fim', async () => {
     const { router } = renderizarApp('/visao-geral')
 
-    await screen.findByText('Dados até jun/2026')
+    await screen.findByText('Competência mais recente jun/2026')
 
     fireEvent.click(
       screen.getByRole('button', { name: 'Primeiro ano × Últimos 12 meses' }),
@@ -120,7 +144,9 @@ describe('BarraPeriodo', () => {
       expect(params.get('comparacao')).toBe('2022-07..2023-06')
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Padrão' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Mesmo intervalo do ano anterior' }),
+    )
     await waitFor(() => {
       const params = new URLSearchParams(router.state.location.search)
       expect(params.get('periodo')).toBe('2025-07..2026-06')
@@ -134,6 +160,12 @@ describe('BarraPeriodo', () => {
       const params = new URLSearchParams(router.state.location.search)
       expect(params.get('periodo')).toBe('2025-03..2025-03')
       expect(params.get('comparacao')).toBe('2024-03..2024-03')
+      expect(
+        screen.getByRole('button', { name: 'Mesmo intervalo do ano anterior' }),
+      ).toHaveAttribute('aria-pressed', 'false')
+      expect(
+        screen.getByRole('button', { name: 'Primeiro ano × Últimos 12 meses' }),
+      ).toHaveAttribute('aria-pressed', 'false')
     })
   })
 

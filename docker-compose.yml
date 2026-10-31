@@ -52,6 +52,15 @@ services:
       interval: 10s
       timeout: 5s
       retries: 6
+  nginx:
+    build:
+      context: .
+      dockerfile: infra/nginx/Dockerfile
+    ports:
+      - '${PORTAL_PORT:-80}:80'
+    depends_on:
+      backend:
+        condition: service_healthy
   migracoes:
     <<: *python
     profiles: [tools]

@@ -1,18 +1,20 @@
 import { useEffect, useMemo } from 'react'
+import { Calendar, ChevronDown } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import { usePeriodo } from '@/app/periodo/usePeriodo'
-import { Button } from '@/components/ui/button'
-import { formatarCompetencia } from '@/lib/formatacao'
+import {
+  formatarCompetencia,
+  formatarDataPtBr,
+} from '@/lib/formatacao'
 import {
   ajustarFimPeriodo,
   ajustarInicioPeriodo,
+  atalhoPrimeiroAno,
   listarCompetencias,
+  periodoPadrao,
   resolverPeriodos,
   serializarPeriodo,
 } from '@/lib/periodos'
-
-const CLASSES_SELECT =
-  'border-input bg-background text-foreground focus-visible:border-ring focus-visible:ring-ring/50 h-8 rounded-md border px-2 text-xs font-medium shadow-xs outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50'
 
 export function BarraPeriodo() {
   const {
@@ -60,37 +62,82 @@ export function BarraPeriodo() {
         ? 'Nenhuma carga publicada'
         : erro.message
     return (
-      <div
-        role="status"
-        className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs"
+      <header
+        aria-label="Período global e metadados da carga"
+        className="ve-period"
       >
-        <span className="font-medium">{mensagemErro}</span>
-      </div>
+        <div role="status" className="ve-muted" style={{ fontSize: '12px' }}>
+          <span style={{ fontWeight: 500 }}>{mensagemErro}</span>
+        </div>
+      </header>
     )
   }
 
   if (carregando || !carga || !limites || !periodo) {
     return (
-      <div className="text-muted-foreground flex items-center gap-2 text-xs">
-        <span>Carregando período...</span>
-      </div>
+      <header
+        aria-label="Período global e metadados da carga"
+        className="ve-period"
+      >
+        <div className="ve-muted" style={{ fontSize: '12px' }}>
+          <span>Carregando período...</span>
+        </div>
+      </header>
     )
   }
 
+  const padraoEsperado = periodoPadrao(limites)
+  const padraoAtivo =
+    periodo.inicio === padraoEsperado.periodo.inicio &&
+    periodo.fim === padraoEsperado.periodo.fim &&
+    (comparacao?.inicio ?? null) ===
+      (padraoEsperado.comparacao?.inicio ?? null) &&
+    (comparacao?.fim ?? null) === (padraoEsperado.comparacao?.fim ?? null)
+
+  const atalhoEsperado = atalhoPrimeiroAno(limites)
+  const atalhoAtivo =
+    periodo.inicio === atalhoEsperado.periodo.inicio &&
+    periodo.fim === atalhoEsperado.periodo.fim &&
+    comparacao?.inicio === atalhoEsperado.comparacao.inicio &&
+    comparacao?.fim === atalhoEsperado.comparacao.fim
+
   return (
-    <div className="flex flex-1 flex-wrap items-center justify-between gap-3">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-1.5">
-          <span className="text-muted-foreground text-xs font-medium">
-            Período
-          </span>
+    <header
+      aria-label="Período global e metadados da carga"
+      className="ve-period"
+    >
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          gap: 'var(--space-2)',
+        }}
+      >
+        <div className="ve-period-field">
+          <Calendar
+            size={14}
+            className="ve-icon"
+            style={{ color: 'var(--ink-muted)' }}
+            aria-hidden="true"
+          />
+          <small>Período</small>
           <select
             aria-label="Início do período"
-            className={CLASSES_SELECT}
             value={periodo.inicio}
             onChange={(e) =>
               definirPeriodo(ajustarInicioPeriodo(periodo, e.target.value))
             }
+            style={{
+              border: 0,
+              background: 'transparent',
+              font: 'inherit',
+              fontSize: '13px',
+              fontWeight: 600,
+              color: 'var(--ink)',
+              cursor: 'pointer',
+              appearance: 'none',
+            }}
           >
             {opcoesCompetencia.map((comp) => (
               <option key={comp} value={comp}>
@@ -98,14 +145,25 @@ export function BarraPeriodo() {
               </option>
             ))}
           </select>
-          <span className="text-muted-foreground text-xs">até</span>
+          <span aria-hidden="true" style={{ fontWeight: 600 }}>
+            –
+          </span>
           <select
             aria-label="Fim do período"
-            className={CLASSES_SELECT}
             value={periodo.fim}
             onChange={(e) =>
               definirPeriodo(ajustarFimPeriodo(periodo, e.target.value))
             }
+            style={{
+              border: 0,
+              background: 'transparent',
+              font: 'inherit',
+              fontSize: '13px',
+              fontWeight: 600,
+              color: 'var(--ink)',
+              cursor: 'pointer',
+              appearance: 'none',
+            }}
           >
             {opcoesCompetencia.map((comp) => (
               <option key={comp} value={comp}>
@@ -113,15 +171,20 @@ export function BarraPeriodo() {
               </option>
             ))}
           </select>
+          <ChevronDown
+            size={14}
+            className="ve-icon"
+            style={{ color: 'var(--ink-muted)' }}
+            aria-hidden="true"
+          />
         </div>
 
-        <div className="flex items-center gap-1.5">
-          <span className="text-muted-foreground text-xs font-medium">
-            Comparação
-          </span>
+        <span className="ve-period-vs">vs</span>
+
+        <div className="ve-period-field">
+          <small>Comparação</small>
           <select
             aria-label="Início da comparação"
-            className={CLASSES_SELECT}
             value={comparacao?.inicio ?? ''}
             onChange={(e) => {
               const valor = e.target.value
@@ -129,28 +192,15 @@ export function BarraPeriodo() {
               const baseComp = comparacao ?? { inicio: valor, fim: valor }
               definirComparacao(ajustarInicioPeriodo(baseComp, valor))
             }}
-          >
-            {!comparacao ? (
-              <option value="" disabled>
-                Sem comparação
-              </option>
-            ) : null}
-            {opcoesCompetencia.map((comp) => (
-              <option key={comp} value={comp}>
-                {formatarCompetencia(comp)}
-              </option>
-            ))}
-          </select>
-          <span className="text-muted-foreground text-xs">até</span>
-          <select
-            aria-label="Fim da comparação"
-            className={CLASSES_SELECT}
-            value={comparacao?.fim ?? ''}
-            onChange={(e) => {
-              const valor = e.target.value
-              if (!valor) return
-              const baseComp = comparacao ?? { inicio: valor, fim: valor }
-              definirComparacao(ajustarFimPeriodo(baseComp, valor))
+            style={{
+              border: 0,
+              background: 'transparent',
+              font: 'inherit',
+              fontSize: '13px',
+              fontWeight: 600,
+              color: 'var(--ink)',
+              cursor: 'pointer',
+              appearance: 'none',
             }}
           >
             {!comparacao ? (
@@ -164,40 +214,84 @@ export function BarraPeriodo() {
               </option>
             ))}
           </select>
+          <span aria-hidden="true" style={{ fontWeight: 600 }}>
+            –
+          </span>
+          <select
+            aria-label="Fim da comparação"
+            value={comparacao?.fim ?? ''}
+            onChange={(e) => {
+              const valor = e.target.value
+              if (!valor) return
+              const baseComp = comparacao ?? { inicio: valor, fim: valor }
+              definirComparacao(ajustarFimPeriodo(baseComp, valor))
+            }}
+            style={{
+              border: 0,
+              background: 'transparent',
+              font: 'inherit',
+              fontSize: '13px',
+              fontWeight: 600,
+              color: 'var(--ink)',
+              cursor: 'pointer',
+              appearance: 'none',
+            }}
+          >
+            {!comparacao ? (
+              <option value="" disabled>
+                Sem comparação
+              </option>
+            ) : null}
+            {opcoesCompetencia.map((comp) => (
+              <option key={comp} value={comp}>
+                {formatarCompetencia(comp)}
+              </option>
+            ))}
+          </select>
+          <ChevronDown
+            size={14}
+            className="ve-icon"
+            style={{ color: 'var(--ink-muted)' }}
+            aria-hidden="true"
+          />
         </div>
 
-        <div className="flex items-center gap-1.5">
-          <Button
+        <div className="ve-seg" role="group" aria-label="Atalhos de período">
+          <button
             type="button"
-            variant="outline"
-            size="sm"
+            aria-pressed={padraoAtivo}
             onClick={aplicarPadrao}
           >
-            Padrão
-          </Button>
-          <Button
+            Mesmo intervalo do ano anterior
+          </button>
+          <button
             type="button"
-            variant="outline"
-            size="sm"
+            aria-pressed={atalhoAtivo}
             onClick={aplicarPrimeiroAno}
           >
             Primeiro ano × Últimos 12 meses
-          </Button>
+          </button>
         </div>
       </div>
 
-      <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">
-        <span>Dados até {formatarCompetencia(limites.maisRecente)}</span>
-        <span aria-hidden="true">·</span>
-        <span title={`Contrato ${carga.versao_contrato}`}>
-          {carga.batch_id} ({carga.versao_contrato})
-        </span>
-        {carga.sintetica ? (
-          <span className="bg-secondary text-secondary-foreground rounded px-1.5 py-0.5 text-[11px] font-medium">
-            amostra sintética
+      <div className="ve-period-meta">
+        <div className="ve-row" style={{ gap: 'var(--space-2)' }}>
+          <span style={{ color: 'var(--ink)', fontWeight: 500 }}>
+            Competência mais recente {formatarCompetencia(limites.maisRecente)}
           </span>
-        ) : null}
+          {carga.sintetica ? (
+            <span className="ve-badge ve-badge-attention">
+              amostra sintética
+            </span>
+          ) : null}
+        </div>
+        <span
+          title={carga.versao_contrato}
+          style={{ fontFamily: 'var(--font-mono)', fontSize: '11.5px' }}
+        >
+          Carga {carga.batch_id} · {formatarDataPtBr(carga.carregado_em)}
+        </span>
       </div>
-    </div>
+    </header>
   )
 }

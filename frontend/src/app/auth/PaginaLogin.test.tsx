@@ -34,6 +34,32 @@ const CARGA_AMOSTRA: Carga = {
   competencia_mais_recente: '2026-06-01',
 }
 
+const FILTROS_AMOSTRA = {
+  municipios: ['Recife', 'Olinda'],
+  bairros: { Recife: ['Boa Viagem'], Olinda: ['Casa Caiada'] },
+  classes: ['Residencial', 'Comercial'],
+  alimentadores: ['AL-01'],
+}
+
+const ORDENS_VAZIA = {
+  items: [],
+  total: 0,
+  page: 1,
+  size: 25,
+}
+
+function respostaPorUrl(url: string): Response {
+  const corpo = url.includes('/api/v1/meta/filtros')
+    ? FILTROS_AMOSTRA
+    : url.includes('/api/v1/ordens-inspecao')
+      ? ORDENS_VAZIA
+      : CARGA_AMOSTRA
+  return new Response(JSON.stringify(corpo), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
 beforeEach(() => {
   localStorage.clear()
   encerrarSessao()
@@ -78,10 +104,7 @@ describe('PaginaLogin e fluxo de autenticação', () => {
             { status: 200, headers: { 'Content-Type': 'application/json' } },
           )
         }
-        return new Response(JSON.stringify(CARGA_AMOSTRA), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        })
+        return respostaPorUrl(req.url)
       }),
     )
 
@@ -121,10 +144,7 @@ describe('PaginaLogin e fluxo de autenticação', () => {
             { status: 200, headers: { 'Content-Type': 'application/json' } },
           )
         }
-        return new Response(JSON.stringify(CARGA_AMOSTRA), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        })
+        return respostaPorUrl(req.url)
       }),
     )
 
@@ -181,12 +201,7 @@ describe('PaginaLogin e fluxo de autenticação', () => {
     )
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () =>
-        new Response(JSON.stringify(CARGA_AMOSTRA), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      ),
+      vi.fn(async (req: Request) => respostaPorUrl(req.url)),
     )
 
     const { router } = renderizarApp('/perdas')
