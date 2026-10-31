@@ -286,6 +286,9 @@ def test_views_com_maiusculas_no_catalogo():
         ('LIMIT NULL', 'LIMIT 1000'),
         ('LIMIT 5 + 5', 'LIMIT 10'),
         ("LIMIT '5'", 'LIMIT 5'),
+        ("LIMIT ' 5 '", 'LIMIT 5'),
+        ('LIMIT 5::int', 'LIMIT 5'),
+        ("LIMIT CAST('5' AS bigint)", 'LIMIT 5'),
         ('LIMIT 5000 OFFSET 20', 'LIMIT 1000 OFFSET 20'),
         ('FETCH FIRST 5 ROWS ONLY', 'LIMIT 5'),
         ('FETCH FIRST ROW ONLY', 'LIMIT 1'),
@@ -305,9 +308,48 @@ def test_mantem_o_limite_pedido_ate_o_maximo(limite, esperado):
         ('FETCH FIRST 5 PERCENT ROWS ONLY', 'PERCENT'),
         ('LIMIT -1', 'inteiro não negativo'),
         ('LIMIT 2.5', 'inteiro não negativo'),
+        ('LIMIT 2.5::int', 'inteiro não negativo'),
+        ("LIMIT '5'::text", 'inteiro não negativo'),
         ('LIMIT 10 / 3', 'inteiro não negativo'),
         ('LIMIT (SELECT count(*) FROM ai_read.ucs)', 'inteiro não negativo'),
     ],
 )
 def test_rejeita_limite_que_nao_e_inteiro(limite, trecho):
     rejeita(f'SELECT * FROM ai_read.ucs ORDER BY dec DESC {limite}', trecho)
+
+
+@pytest.mark.parametrize(
+    'sql,esperado',
+    [
+        ('(SELECT * FROM ucs) LIMIT 5', 'SELECT * FROM ai_read.ucs LIMIT 5'),
+        (
+            '((SELECT id_uc FROM ucs)) ORDER BY 1',
+            'SELECT id_uc FROM ai_read.ucs ORDER BY 1 LIMIT 1000',
+        ),
+        ('(SELECT * FROM ucs LIMIT 3) OFFSET 2', 'SELECT * FROM ai_read.ucs LIMIT 3 OFFSET 2'),
+        (
+            '(SELECT id_uc FROM ucs UNION SELECT id_uc FROM inspecoes) LIMIT 5',
+            'SELECT id_uc FROM ai_read.ucs UNION SELECT id_uc FROM ai_read.inspecoes LIMIT 5',
+        ),
+        (
+            '(WITH u AS (SELECT id_uc FROM ucs) SELECT * FROM u) LIMIT 5',
+            'WITH u AS (SELECT id_uc FROM ai_read.ucs) SELECT * FROM u LIMIT 5',
+        ),
+    ],
+)
+def test_aceita_consulta_entre_parenteses(sql, esperado):
+    assert validar_sql(sql, VIEWS) == esperado
+
+
+@pytest.mark.parametrize(
+    'sql,trecho',
+    [
+        ('(SELECT * FROM ucs LIMIT 2) LIMIT 3', 'sem os parênteses'),
+        ('(SELECT * FROM ucs ORDER BY 1) ORDER BY 2', 'sem os parênteses'),
+        ('(SELECT * FROM ucs) WHERE dec > 1', 'sem os parênteses'),
+        ('(SELECT * FROM ucs) FOR UPDATE', 'FOR UPDATE'),
+        ('(SELECT * FROM pg_catalog.pg_user) LIMIT 2', 'fora do catálogo'),
+    ],
+)
+def test_rejeita_consulta_entre_parenteses(sql, trecho):
+    rejeita(sql, trecho)
