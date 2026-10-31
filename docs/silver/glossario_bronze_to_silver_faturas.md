@@ -6,13 +6,13 @@ incluindo [pendência cadastral](../../GLOSSARY.md#receita) e
 dos campos e as regras específicas da implementação; não mantém um glossário
 paralelo de termos gerais como JSON, tabela ou Git.
 
-**Evidência de execução:** [bronze-to-silver-faturas-evidencia-2026-10-29.ipynb](../../data-engineering/bronze-to-silver-faturas-evidencia-2026-10-29.ipynb).
+**Evidência de execução:** [publicacao.html](../auditoria_dados/evidencias/faturas-2026-10-29/publicacao.html).
 
 **Versão operacional:** [bronze-to-silver-faturas.ipynb](../../data-engineering/bronze-to-silver-faturas.ipynb).
 
 O anexo mantém o código e os outputs históricos e contém o Run All com publicação de
-29/10/2026. A cópia operacional contém os outputs de 30/10/2026 e isola as futuras revisões
-em `v-energy.silver_revisoes`; essa configuração foi executada com `false` e `true` em 30/10/2026.
+29/10/2026. A cópia operacional está sem outputs e isola as futuras revisões
+em `v-energy.silver_revisoes`; a versão anterior foi executada com `false` e `true` em 30/10/2026.
 
 ## Contrato e verificações
 
@@ -98,6 +98,15 @@ transação separada; falhas entre as duas podem produzir publicação parcial.
 
 ## Atualização operacional — 30/10/2026
 
-As execuções com `false` e `true` foram conferidas no mesmo código Python da versão operacional atual. A publicação com `true` criou revisões em `silver_revisoes` e publicou `silver.tb_faturas` na versão Delta **3** e `silver.tb_faturas_pendentes_cadastro` na versão **2**. As contagens e os valores foram mantidos. Tabelas referentes a 29/10/2026 neste documento permanecem como histórico.
+As execuções com `false` e `true` foram conferidas no código Python da versão operacional no commit `d88ebeb`. A publicação com `true` criou revisões em `silver_revisoes` e publicou `silver.tb_faturas` na versão Delta **3** e `silver.tb_faturas_pendentes_cadastro` na versão **2**. As contagens e os valores foram mantidos. Tabelas referentes a 29/10/2026 neste documento permanecem como histórico.
 
 Consulte o [registro das novas evidências](../auditoria_dados/evidencias_operacionais_faturas.md), com anexos originais, horários, hashes e limites da validação. Os anexos conservam os nomes anteriores à renomeação.
+
+
+## Correções de publicação — 31/10/2026
+
+O notebook operacional agora inicia com widget salvo em `false`, sem outputs.
+Bloqueia divergências de schema, valida IDs das pendências e confirma o par
+de snapshots via marcador Delta. Evidências HTML registram somente as execuções
+anteriores. O novo código ainda precisa ser executado em catálogo de teste.
+Consulte [operação de faturas](../auditoria_dados/operacao_faturas.md).

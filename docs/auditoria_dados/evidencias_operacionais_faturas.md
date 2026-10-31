@@ -1,13 +1,15 @@
 # Evidências da versão operacional — 30/10/2026
 
-Os dois arquivos foram enviados pelo autor após execuções no Databricks. Foram preservados byte a byte, inclusive nomes antigos, metadados, widgets e outputs. A comparação das 42 células Python de cada anexo com `data-engineering/bronze-to-silver-faturas.ipynb` do commit `ef4d870c99130118b8b037b84d2acc01a79597c7` confirmou igualdade integral das fontes de código. A renomeação anterior alterou somente apresentação e identificação; os anexos ainda usam o nome `bronze-to-silver-faturas-operacional`.
-
-O notebook operacional com o nome atual recebeu os outputs e metadados da execução com true; somente a apresentação e a identificação foram conciliadas com a versão renomeada. O código Python permaneceu idêntico. Os anexos abaixo conservam os exports originais para auditoria.
+Os exports de 30/10/2026 são referenciados pelo commit histórico imutável,
+sem cópias no estado atual do repositório. A evidência de 29/10 foi convertida
+em HTML estático, com o JSON escapado como texto. O operacional foi limpo e modificado;
+essas execuções não comprovam o protocolo implementado em 31/10/2026.
+Os exports originais continuam disponíveis no [commit auditado](https://github.com/gabrielvictalino/Case-RocketLab-2026.2/tree/d88ebebd13acb08c9ef06e4c6e4871ad96721f72/docs/auditoria_dados/evidencias/faturas-2026-10-30).
 
 | Parâmetro | Arquivo original | Intervalo em America/Fortaleza |
 | :--- | :--- | :--- |
-| `false` | [bronze-to-silver-faturas-operacional (1).ipynb](evidencias/faturas-2026-10-30/bronze-to-silver-faturas-operacional%20%281%29.ipynb) | 18:47:28 às 18:51:25 |
-| `true` | [bronze-to-silver-faturas-operacional (2).ipynb](evidencias/faturas-2026-10-30/bronze-to-silver-faturas-operacional%20%282%29.ipynb) | 18:52:15 às 18:56:30 |
+| `false` | [Export histórico — false](https://github.com/gabrielvictalino/Case-RocketLab-2026.2/blob/d88ebebd13acb08c9ef06e4c6e4871ad96721f72/docs/auditoria_dados/evidencias/faturas-2026-10-30/bronze-to-silver-faturas-operacional%20%281%29.ipynb) | 18:47:28 às 18:51:25 |
+| `true` | [Export histórico — true](https://github.com/gabrielvictalino/Case-RocketLab-2026.2/blob/d88ebebd13acb08c9ef06e4c6e4871ad96721f72/docs/auditoria_dados/evidencias/faturas-2026-10-30/bronze-to-silver-faturas-operacional%20%282%29.ipynb) | 18:52:15 às 18:56:30 |
 
 Nos dois anexos, as 42 células Python têm início e fim registrados em sequência, sem outputs de erro ou `Command skipped`. As validações de tipos, chaves, regras por registro, preservação dos originais e metadados, separação cadastral e conservação financeira passaram.
 
@@ -35,5 +37,14 @@ O anexo com true conserva esse valor no widget. Para novas execuções, use o no
 
 SHA-256 calculado sobre os bytes originais enviados pelo autor:
 
-- `bronze-to-silver-faturas-operacional (1).ipynb`: `13370dddf986965ce14852a2ba7931780ca94957aceab3a675fa44307bf604b7`
-- `bronze-to-silver-faturas-operacional (2).ipynb`: `4f028d5b903ba77db0969cb948feb29f94c3e90523884f04ce7f6f6d33bcaae1`
+- `bronze-to-silver-faturas-operacional (1).ipynb` original: `13370dddf986965ce14852a2ba7931780ca94957aceab3a675fa44307bf604b7`
+- `bronze-to-silver-faturas-operacional (2).ipynb` original: `4f028d5b903ba77db0969cb948feb29f94c3e90523884f04ce7f6f6d33bcaae1`
+
+
+## Correções de publicação — 31/10/2026
+
+O notebook operacional agora inicia com widget salvo em `false`, sem outputs.
+Bloqueia divergências de schema, valida IDs das pendências e confirma o par
+de snapshots via marcador Delta. Evidências HTML registram somente as execuções
+anteriores. O novo código ainda precisa ser executado em catálogo de teste.
+Consulte [operação de faturas](operacao_faturas.md).

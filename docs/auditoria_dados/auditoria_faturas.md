@@ -10,9 +10,9 @@
 
 **Base de código:** commit `8381720b2bed81befcc95ba02ba9dc1b9cf75b8d` — ingestão Bronze unificada.
 
-**Evidência de execução:** [bronze-to-silver-faturas-evidencia-2026-10-29.ipynb](../../data-engineering/bronze-to-silver-faturas-evidencia-2026-10-29.ipynb), anexo do autor com código e outputs históricos preservados, com 92 células e 42 células Python. A publicação de 29/10/2026 foi concluída entre 19h18min36s e 19h22min46s, no fuso America/Fortaleza.
+**Evidência de execução:** [publicacao.html](evidencias/faturas-2026-10-29/publicacao.html), anexo do autor com código e outputs históricos preservados, com 92 células e 42 células Python. A publicação de 29/10/2026 foi concluída entre 19h18min36s e 19h22min46s, no fuso America/Fortaleza.
 
-**Versão operacional:** [bronze-to-silver-faturas.ipynb](../../data-engineering/bronze-to-silver-faturas.ipynb), versão operacional com outputs de 30/10/2026, com revisões em `v-energy.silver_revisoes`. O mesmo código foi executado com `false` e `true` em 30/10/2026; os anexos estão no registro de evidências operacionais.
+**Versão operacional:** [bronze-to-silver-faturas.ipynb](../../data-engineering/bronze-to-silver-faturas.ipynb), versão operacional sem outputs históricos, com revisões em `v-energy.silver_revisoes`. A versão anterior às correções de 31/10/2026 foi executada com `false` e `true` em 30/10/2026; os anexos estão no registro de evidências operacionais.
 
 **Situação:** os dois destinos de `v-energy.silver` foram publicados e conferidos na execução anexada. A adoção de `silver_revisoes` está implementada na cópia operacional; a revisão documental não move nem recria tabelas existentes.
 
@@ -385,7 +385,7 @@ define `SCHEMA_REVISOES = "silver_revisoes"`: as futuras revisões ficam em
 `v-energy.silver_revisoes` e os destinos finais permanecem em `v-energy.silver`.
 Com o parâmetro `false`, nenhum dos schemas ou tabelas é gravado.
 
-Essa cópia recebeu os outputs da execução com `true` de 30/10/2026. O mesmo código foi executado com `false` e `true` em 30/10/2026, incluindo publicação a partir de `silver_revisoes`. As tabelas acima registram a execução histórica de 29/10/2026; as novas evidências e versões Delta estão no registro operacional. O versionamento não move, apaga ou republica as tabelas
+Os outputs de 30/10/2026 foram retirados da cópia operacional e preservados apenas nas evidências estáticas. A versão anterior às correções de 31/10/2026 foi executada com `false` e `true` em 30/10/2026, incluindo publicação a partir de `silver_revisoes`. As tabelas acima registram a execução histórica de 29/10/2026; as novas evidências e versões Delta estão no registro operacional. O versionamento não move, apaga ou republica as tabelas
 já existentes. O procedimento está em [Operação e revisões](operacao_faturas.md).
 
 ---
@@ -436,8 +436,8 @@ O versionamento deste relatório e da correção não representa uma nova execu�
 
 ### Referências de evidência
 
-- [bronze-to-silver-faturas-evidencia-2026-10-29.ipynb](../../data-engineering/bronze-to-silver-faturas-evidencia-2026-10-29.ipynb): anexo preservado com as saídas da publicação de 29/10/2026.
-- [bronze-to-silver-faturas.ipynb](../../data-engineering/bronze-to-silver-faturas.ipynb): versão com revisões em schema separado e outputs da execução com `true` de 30/10/2026.
+- [publicacao.html](evidencias/faturas-2026-10-29/publicacao.html): anexo preservado com as saídas da publicação de 29/10/2026.
+- [bronze-to-silver-faturas.ipynb](../../data-engineering/bronze-to-silver-faturas.ipynb): versão com revisões em schema separado e publicação confirmada por marcador Delta.
 - [Operação e revisões](operacao_faturas.md): destinos, parâmetro e limites da execução.
 - CSVs de resultados exportados das Seções 2–13 e disponibilizados durante a revisão. Os nomes se repetem entre etapas; a associação é feita pelo conteúdo e pela seção correspondente.
 - Enunciado “Case Final - RocketLab Visagio 2026.2”: responsabilidades Silver, integridade referencial e documentação de suposições.
@@ -446,6 +446,15 @@ O versionamento deste relatório e da correção não representa uma nova execu�
 
 ## Atualização operacional — 30/10/2026
 
-As execuções com `false` e `true` foram conferidas no mesmo código Python da versão operacional atual. A publicação com `true` criou revisões em `silver_revisoes` e publicou `silver.tb_faturas` na versão Delta **3** e `silver.tb_faturas_pendentes_cadastro` na versão **2**. As contagens e os valores foram mantidos. Tabelas referentes a 29/10/2026 neste documento permanecem como histórico.
+As execuções com `false` e `true` foram conferidas no código Python da versão operacional no commit `d88ebeb`. A publicação com `true` criou revisões em `silver_revisoes` e publicou `silver.tb_faturas` na versão Delta **3** e `silver.tb_faturas_pendentes_cadastro` na versão **2**. As contagens e os valores foram mantidos. Tabelas referentes a 29/10/2026 neste documento permanecem como histórico.
 
 Consulte o [registro das novas evidências](evidencias_operacionais_faturas.md), com anexos originais, horários, hashes e limites da validação. Os anexos conservam os nomes anteriores à renomeação.
+
+
+## Correções de publicação — 31/10/2026
+
+O notebook operacional agora inicia com widget salvo em `false`, sem outputs.
+Bloqueia divergências de schema, valida IDs das pendências e confirma o par
+de snapshots via marcador Delta. Evidências HTML registram somente as execuções
+anteriores. O novo código ainda precisa ser executado em catálogo de teste.
+Consulte [operação de faturas](operacao_faturas.md).

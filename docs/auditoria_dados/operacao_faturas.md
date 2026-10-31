@@ -1,93 +1,91 @@
-# Operação e revisões da Silver de faturas
+# Operação e publicação da Silver de faturas
 
-## Arquivos e evidência
+Use somente [bronze-to-silver-faturas.ipynb](../../data-engineering/bronze-to-silver-faturas.ipynb).
+O arquivo versionado está sem outputs e com `confirmar_publicacao=false`.
+Um widget existente no workspace pode conservar outro valor: confira-o antes
+ de executar. Em Jobs, forneça o parâmetro explicitamente. Configure **On widget
+change → Do Nothing**, concorrência máxima **1** e uma única identidade com
+permissão de escrita nos destinos, revisões e marcador. As verificações de
+estado não constituem lock contra escritores externos.
 
-| Arquivo | Finalidade | Revisões | Evidência Databricks |
-| :--- | :--- | :--- | :--- |
-| [bronze-to-silver-faturas-evidencia-2026-10-29.ipynb](../../data-engineering/bronze-to-silver-faturas-evidencia-2026-10-29.ipynb) | Anexo do autor, com código e outputs históricos preservados | `v-energy.silver` | Run All com `true`, concluído em 29/10/2026 |
-| [bronze-to-silver-faturas.ipynb](../../data-engineering/bronze-to-silver-faturas.ipynb) | Cópia para futuras execuções | `v-energy.silver_revisoes` | Execuções com `false` e `true` comprovadas em 30/10/2026; arquivo operacional com outputs da execução com `true` |
+## Contratos e execução
 
-O arquivo de evidência recebeu somente ajustes de apresentação e identificação após a renomeação. Código, outputs, widget e demais metadados históricos foram preservados. Nele,
-o widget exportado está em `true`. A versão operacional conserva as regras
-de negócio e separa o schema das revisões; os destinos definitivos continuam
-em `v-energy.silver.tb_faturas` e `v-energy.silver.tb_faturas_pendentes_cadastro`.
+`false` valida a candidata e o contrato dos destinos, sem gravar ou limpar tabelas.
+`true` exige executar desde o início: valida, cria revisões exclusivas em
+`v-energy.silver_revisoes`, confere seu conteúdo e publica os destinos em `silver`.
+Mudanças de nome, tipo ou ordem das colunas de destinos existentes bloqueiam
+antes das gravações. Migrações exigem procedimento separado, revisado.
+`INSERT OVERWRITE` mantém o contrato e os metadados dos destinos existentes;
+novos destinos usam `CREATE TABLE ... AS SELECT`. Não há substituição de tabela
+existente por CTAS.
 
-O notebook unificado de ingestão continua em
-[Landing_to_Bronze.ipynb](../../data-engineering/Landing_to_Bronze.ipynb),
-com seu conteúdo preservado. Ele atende às várias fontes Bronze.
+IDs da principal seguem `^FT[0-9]{9}$`. Nas pendências, são aceitos esse padrão
+ou `^FTX[0-9]{7}$`, conforme os IDs da extração auditada. `FT12`, cabeçalhos e
+espaços são recusados. Um futuro formato exige revisão explícita do contrato.
+A classificação cadastral depende do join, nunca apenas do prefixo.
 
-## Antes de executar
+## Confirmação e consumo pela Gold
 
-Uma execução completa com `confirmar_publicacao=true` cria revisões e substitui
-as duas tabelas finais configuradas. A configuração padrão aponta para os
-destinos do projeto em `v-energy.silver`. Confirme os destinos antes de iniciar;
-um teste isolado precisa de configuração própria de destino. Alterar somente
-`CATALOGO` também altera as referências Bronze e exige essas fontes no outro catálogo.
+As duas tabelas finais continuam sendo escritas em transações separadas.
+Só depois da conferência integral de ambas, uma transação Delta substitui
+`v-energy.silver.tb_faturas_publicacao` com exatamente duas linhas:
+`id_execucao`, `destino`, `fonte`, `versao_fonte`, `versao_destino`, `confirmado_em`.
+Uma falha anterior mantém o marcador anterior. Na primeira carga, sua ausência
+significa que nenhuma publicação foi confirmada. Não há rollback conjunto.
 
-Configure primeiro **On widget change → Do Nothing** no painel de widgets.
-Isso evita que uma mudança de valor reexecute somente as células que acessam
-o widget e invalide os marcadores sem refazer as validações intermediárias.
-Um widget existente pode conservar o valor `true`, mesmo que o código defina
-`false` como padrão de criação.
+**A Gold deve ler o marcador uma única vez por execução e consumir as revisões
+imutáveis indicadas por `fonte` e `versao_fonte`.** Ler diretamente os nomes
+finais continua sujeito a publicação parcial. Exemplo de contrato do consumidor:
 
-Depois de conferir esses pontos, uma execução em `false` valida somente a
-candidata e não grava schemas, revisões ou destinos. Uma publicação intencional
-usa `true` e executa desde o início, em uma única execução publicadora por vez.
-Em um Job, forneça o parâmetro de notebook explicitamente; este PR não cria
-nem agenda um Job no workspace.
-
-Não defina `VALIDACOES_CANDIDATA_OK`, `REVISAO_PERSISTIDA_OK` ou
-`PUBLICACAO_FATURAS_OK` manualmente. Esses marcadores resultam das conferências.
-Ao terminar uma publicação, preserve os outputs e volte o widget a `false`,
-com **Do Nothing** já configurado. Não é preciso reexecutar para voltar o seletor.
-
-## Schema das revisões
-
-Na cópia operacional, `SCHEMA_SILVER = "silver"` identifica os destinos finais
-e `SCHEMA_REVISOES = "silver_revisoes"` identifica as revisões. O código recusa
-a configuração dos dois nomes iguais. Com `true`, cria os schemas se necessário
-e usa nomes exclusivos por execução, sem sobrescrever revisões anteriores.
-
-Exemplos de nomes futuros:
-
-```text
-v-energy.silver_revisoes.tb_faturas_revisao_<uuid>
-v-energy.silver_revisoes.tb_faturas_pendentes_cadastro_revisao_<uuid>
+```python
+linhas = spark.table("`v-energy`.`silver`.`tb_faturas_publicacao`").collect()
+esperados = {
+    "`v-energy`.`silver`.`tb_faturas`",
+    "`v-energy`.`silver`.`tb_faturas_pendentes_cadastro`",
+}
+if (len(linhas) != 2 or {r["destino"] for r in linhas} != esperados
+        or len({r["id_execucao"] for r in linhas}) != 1):
+    raise ValueError("Publicação ausente ou incompleta")
+fontes = {
+    r["destino"]: spark.read.option("versionAsOf", r["versao_fonte"]).table(r["fonte"])
+    for r in linhas
+}
 ```
 
-As fontes são lidas em versões Delta fixadas. A conferência compara a
-persistência com a candidata da mesma execução, incluindo os metadados.
-O plano conserva a identidade Delta, a versão e o snapshot conferido;
-mudanças detectadas nas fontes ou destinos bloqueiam a publicação.
+O PR não contém uma integração Gold já executada. Adote esse contrato antes
+ de habilitar consumidores. Leitores iniciados antes da próxima publicação
+continuam lendo seu par anterior, dentro da janela de retenção.
 
-O isolamento organiza os objetos intermediários; não limita sozinho o volume
-armazenado. Este PR não implementa exclusão automática nem move as revisões
-antigas de `silver`. A limpeza deve ser uma operação separada, após auditoria
-e resolução de publicações parciais, com prazo de retenção acordado pela equipe.
-Nenhuma revisão deve ser apagada para contornar uma validação que falhou.
+## Retenção
 
-## Publicação comprovada e limites
+Após confirmar uma publicação, o fluxo remove revisões de `silver_revisoes`
+com mais de sete dias, exceto as apontadas pelo marcador atual, preservadas
+independentemente da idade. Só nomes `tb_faturas[_pendentes_cadastro]_revisao_<uuid>`
+com UUID hexadecimal de 32 caracteres são elegíveis. Ausência ou estrutura
+inválida do marcador impede a limpeza. Falha de limpeza é informada sem desfazer
+uma publicação confirmada. Em `false` não há limpeza.
 
-O anexo registra a execução de 29/10/2026, das 19h18min36s às 19h22min46s,
-no fuso America/Fortaleza, sem erros ou `Command skipped`. As revisões dessa
-rodada têm sufixo `1bb6358d020a4ca1b1148d09c87c2fc7` e foram criadas em
-`v-energy.silver`, antes da separação implementada na cópia operacional.
+Não há shallow clone: as revisões devem ter seus próprios arquivos, sem
+vínculo com arquivos de uma fonte sujeita a DROP/VACUUM. A remoção de tabelas
+segue a recuperação/retenção do catálogo; não equivale a liberação imediata
+de todos os bytes. Não execute leitores por sete dias ou mais; não reduza o
+VACUUM abaixo dessa janela. Revisões de execuções falhas ficam disponíveis
+por pelo menos sete dias e são recolhidas após um sucesso futuro. Se o Job
+ficar sem sucessos, a limpeza não roda: investigue e execute manutenção após
+resolver a falha, preservando as fontes do marcador. Revisões antigas no schema
+`silver` exigem limpeza manual após auditoria e não são tocadas pelo fluxo.
 
-| Destino | Versão | Faturas | Valor total |
-| :--- | ---: | ---: | ---: |
-| `v-energy.silver.tb_faturas` | 2 | 2.152.336 | R$ 666.482.773,76 |
-| `v-energy.silver.tb_faturas_pendentes_cadastro` | 1 | 32.285 | R$ 10.192.373,82 |
+## Evidências e validação pendente
 
-As células 87 e 91 conferiram os schemas e conteúdos completos das revisões
-e dos destinos; a célula 92 reconciliou 2.184.621 faturas e R$ 676.675.147,58
-e registrou sucesso. Isso comprova o caminho de publicação do anexo. A execução da cópia com `silver_revisoes` foi comprovada separadamente em 30/10/2026. Não comprova execução da Gold ou de um Job integrado.
+A evidência de 29/10 fica em HTML estático em
+`docs/auditoria_dados/evidencias/faturas-2026-10-29/`, sem cópia `.ipynb`
+executável. Os exports de 30/10 (false e true) são referenciados pelo commit
+histórico, sem duplicação no estado atual. Links e hashes estão no
+[registro de evidências](evidencias_operacionais_faturas.md).
 
-As duas substituições são transações separadas. Se uma falhar depois da outra,
-preserve as revisões, os outputs e o registro `publicacoes_realizadas` para
-investigar o estado antes de continuar. Não há rollback automático conjunto.
-
-## Atualização operacional — 30/10/2026
-
-As execuções com `false` e `true` foram conferidas no mesmo código Python da versão operacional atual. A publicação com `true` criou revisões em `silver_revisoes` e publicou `silver.tb_faturas` na versão Delta **3** e `silver.tb_faturas_pendentes_cadastro` na versão **2**. As contagens e os valores foram mantidos. Tabelas referentes a 29/10/2026 neste documento permanecem como histórico.
-
-Consulte o [registro das novas evidências](evidencias_operacionais_faturas.md), com anexos originais, horários, hashes e limites da validação. Os anexos conservam os nomes anteriores à renomeação.
+As execuções de 29 e 30/10 comprovam o código anterior, não o protocolo novo.
+As correções de 31/10 foram verificadas localmente com testes de falhas simuladas.
+Antes de produção, execute em catálogo de teste com `false`, depois `true`,
+simule falha na segunda escrita e confirme que a Gold mantém o par do marcador
+anterior. Confira também permissões de CREATE, INSERT, DROP e preservação dos
+metadados. Nenhuma tabela Databricks foi alterada por esta revisão.
