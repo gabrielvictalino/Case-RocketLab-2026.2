@@ -176,6 +176,8 @@ def test_rejeita_funcao_proibida(sql, funcao):
         'SELECT pg_catalog.pg_sleep(1)',
         "SELECT pg_catalog.current_setting('search_path')",
         'SELECT ai_read.age(now())',
+        'SELECT * FROM operations.age(now())',
+        'SELECT * FROM pg_catalog.generate_series(1, 3)',
     ],
 )
 def test_rejeita_funcao_com_schema(sql):
@@ -232,6 +234,10 @@ def test_motivo_cita_as_views_para_a_nova_tentativa():
         'Use só as views de ai_read: continuidade_alimentador_mensal, inspecoes, '
         'receita_volume_mensal, ucs.',
     )
+
+
+def test_rejeita_aninhamento_excessivo():
+    rejeita('SELECT ' + '(' * 3000 + '1' + ')' * 3000, 'aninhamento demais')
 
 
 @pytest.mark.parametrize(

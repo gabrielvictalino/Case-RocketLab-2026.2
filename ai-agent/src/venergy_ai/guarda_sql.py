@@ -56,12 +56,19 @@ def validar_sql(sql: str, views: Collection[str]) -> str:
     Nomes sem schema são qualificados com `ai_read`, e o `LIMIT` fica em no máximo
     `LIMITE_MAXIMO`. Levanta `SQLRejeitado` com o motivo, para a nova tentativa.
     """
-    arvore = _uma_instrucao(sql)
-    _conferir(arvore, views)
-    _impor_limite(arvore)
-    seguro = arvore.sql(dialect=DIALETO, comments=False)
-    # Confere também o texto regenerado, que é o que o Postgres vai executar.
-    _conferir(_uma_instrucao(seguro), views)
+    try:
+        arvore = _uma_instrucao(sql)
+        _conferir(arvore, views)
+        _impor_limite(arvore)
+        seguro = arvore.sql(dialect=DIALETO, comments=False)
+        # Confere também o texto regenerado, que é o que o Postgres vai executar.
+        _conferir(_uma_instrucao(seguro), views)
+    except RecursionError as erro:
+        raise SQLRejeitado(
+            'A consulta tem aninhamento demais. Simplifique as subconsultas e expressões.'
+        ) from erro
+    except SqlglotError as erro:
+        raise SQLRejeitado(f'SQL inválido: {erro}.') from erro
     return seguro
 
 
@@ -74,8 +81,6 @@ def _uma_instrucao(sql: str) -> exp.Expression:
             f'SQL inválido: {detalhe["description"]} '
             f'(linha {detalhe["line"]}, coluna {detalhe["col"]}).'
         ) from erro
-    except SqlglotError as erro:
-        raise SQLRejeitado(f'SQL inválido: {erro}.') from erro
     instrucoes = [a for a in arvores if a is not None and not isinstance(a, exp.Semicolon)]
     if len(instrucoes) != 1:
         raise SQLRejeitado(
@@ -135,7 +140,14 @@ def _conferir_tabelas(arvore: exp.Expression, views: Collection[str]) -> None:
         if not tabela.db and tabela.name in escopo.cte_sources
     }
     for tabela in arvore.find_all(exp.Table):
-        if id(tabela) in ctes or isinstance(tabela.this, exp.Func):
+        if id(tabela) in ctes:
+            continue
+        if isinstance(tabela.this, exp.Func):
+            # A função de um FROM (generate_series, unnest) é conferida como as demais.
+            if tabela.catalog or tabela.db:
+                raise SQLRejeitado(
+                    f'Função com schema não é permitida: {tabela.sql(dialect=DIALETO)}.'
+                )
             continue
         if not isinstance(tabela.this, exp.Identifier):
             raise SQLRejeitado(f'Origem de dados não suportada: {tabela.sql(dialect=DIALETO)}.')
