@@ -68,7 +68,7 @@ O rendimento (injeção ÷ potência) das 3.475 linhas na escala certa tem media
 
 Há 44 UCs que injetam mais de 2.000 kWh por mês. A potência delas está entre 22,78 e 75,00 kWp, na escala certa. São sistemas grandes. Não entram na correção.
 
-A correção de escala é essa divisão por 1.000, com a marca `fl_correcao_escala`. O texto original permanece em `potencia_kwp_raw`. A regra combina potência convertida acima de 75 kWp e rendimento bruto (injeção ÷ potência original) abaixo de 1 kWh por kWp por mês.
+A correção de escala é essa divisão por 1.000, com a marca `fl_correcao_escala`. O texto original permanece em `potencia_kwp_raw`. A regra combina potência convertida acima de 75 kWp e rendimento bruto (injeção ÷ potência original) menor ou igual a 0,35 kWh por kWp por mês (intervalo observado nas 35 linhas: 0,014 a 0,328).
 
 ### 3.3. Data de conexão anterior à ligação
 
@@ -90,12 +90,12 @@ A `data_ligacao` usada na comparação vem de `tb_unidades_consumidoras`. Esse c
 
 ## 4. Plano aplicado na Silver
 
-Notebook: `data-engineering/Bronze_to_Silver.ipynb`. Tabela: `` `v-energy`.silver.tb_geracao_distribuida ``. Grão: uma linha por `id_uc`.
+Notebook: `data-engineering/bronze_to_silver/bronze-to-silver-geracao-distribuida.ipynb`. Documentação da camada: `docs/silver/silver_geracao_distribuida.md`. Tabela: `` `v-energy`.silver.tb_geracao_distribuida ``. Grão: uma linha por `id_uc`.
 
 1. Trocar a vírgula de `potencia_kwp` por ponto e converter para `decimal(10,2)`. Guardar o texto em `potencia_kwp_raw`.
-2. Se a potência convertida for maior que 75 e a razão bruta (injeção ÷ potência original) for menor que 1 kWh por kWp por mês, dividir por 1.000 e ligar `fl_correcao_escala`.
+2. Se a potência convertida for maior que 75 e a razão bruta (injeção ÷ potência original) for menor ou igual a 0,35 kWh por kWp por mês, dividir por 1.000 e ligar `fl_correcao_escala`.
 3. Trocar eventual vírgula de `energia_injetada_kwh_media_mensal` por ponto e converter para `decimal(10,2)`.
-4. Converter `data_conexao` para `date`. Ligar `fl_data_inconsistente` quando a data é anterior a 2024-01-01, posterior a `current_date()` ou anterior à `data_ligacao`.
+4. Validar o padrão ISO `yyyy-MM-dd` e converter `data_conexao` para `date`. Ligar `fl_data_inconsistente` quando a data é anterior a 2024-01-01, posterior a `current_date()` ou anterior à `data_ligacao`.
 5. Traduzir a modalidade para `PROPRIA_UC`, `AUTOCONSUMO_REMOTO` ou `COMPARTILHADA`. O texto de origem fica em `modalidade_origem`.
 6. Calcular `kwh_por_kwp_mes` depois da correção de escala, só como auditoria. O patamar perto de 34 kWh por kWp por mês é o normal deste arquivo e não reprova linha.
 
