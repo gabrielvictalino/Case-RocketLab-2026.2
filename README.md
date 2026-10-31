@@ -13,3 +13,13 @@ autenticado como administrador. Os JSONs em `.github/rulesets/` não ativam regr
 por conta própria.
 
 Build, lint e testes da aplicação devem ser definidos quando a stack for adicionada.
+
+## Camada Gold de faturas
+
+O [guia de execução](data-engineering/README.md) descreve o notebook PySpark,
+a publicação Delta, a exportação CSV e o Job Databricks da Gold de faturas.
+As regras, os grãos e as limitações das métricas estão no
+[dicionário de dados](docs/gold/faturas.md). O volume usado nas análises é um
+proxy de leituras utilizáveis; as fontes não comprovam kWh faturado nem parcelas
+isoladas de tarifa/bandeira. A referência do status de pagamento é um parâmetro
+explícito da carga. Os testes locais e a CI usam Spark com dados sintéticos.
