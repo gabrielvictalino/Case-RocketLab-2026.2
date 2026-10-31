@@ -1,0 +1,301 @@
+id_uc,titular,documento_mascarado,endereco,municipio,bairro,classe,alimentador,flag_gd,flag_irregularidade_confirmada
+UC100000,Titular sintético 000,***.000.000-**,"Rua fictícia, 0",Recife,Bairro sintético 1,Residencial,ALM-REC-001,true,false
+UC100001,Titular sintético 001,***.000.000-**,"Rua fictícia, 1",Recife,Bairro sintético 2,Residencial,ALM-REC-002,false,true
+UC100002,Titular sintético 002,***.000.000-**,"Rua fictícia, 2",Jaboatão,Bairro sintético 3,Residencial,ALM-JAB-003,false,false
+UC100003,Titular sintético 003,***.000.000-**,"Rua fictícia, 3",Jaboatão,Bairro sintético 4,Residencial,ALM-JAB-004,false,false
+UC100004,Titular sintético 004,***.000.000-**,"Rua fictícia, 4",Olinda,Bairro sintético 5,Residencial,ALM-OLI-005,false,false
+UC100005,Titular sintético 005,***.000.000-**,"Rua fictícia, 5",Recife,Bairro sintético 1,Comercial,ALM-REC-001,false,false
+UC100006,Titular sintético 006,***.000.000-**,"Rua fictícia, 6",Recife,Bairro sintético 2,Comercial,ALM-REC-002,false,false
+UC100007,Titular sintético 007,***.000.000-**,"Rua fictícia, 7",Jaboatão,Bairro sintético 3,Comercial,ALM-JAB-003,false,false
+UC100008,Titular sintético 008,***.000.000-**,"Rua fictícia, 8",Jaboatão,Bairro sintético 4,Comercial,ALM-JAB-004,false,false
+UC100009,Titular sintético 009,***.000.000-**,"Rua fictícia, 9",Olinda,Bairro sintético 5,Comercial,ALM-OLI-005,false,false
+UC100010,Titular sintético 010,***.000.000-**,"Rua fictícia, 10",Recife,Bairro sintético 1,Industrial,ALM-REC-001,false,false
+UC100011,Titular sintético 011,***.000.000-**,"Rua fictícia, 11",Recife,Bairro sintético 2,Industrial,ALM-REC-002,false,false
+UC100012,Titular sintético 012,***.000.000-**,"Rua fictícia, 12",Jaboatão,Bairro sintético 3,Industrial,ALM-JAB-003,false,false
+UC100013,Titular sintético 013,***.000.000-**,"Rua fictícia, 13",Jaboatão,Bairro sintético 4,Industrial,ALM-JAB-004,false,false
+UC100014,Titular sintético 014,***.000.000-**,"Rua fictícia, 14",Olinda,Bairro sintético 5,Industrial,ALM-OLI-005,false,false
+UC100015,Titular sintético 015,***.000.000-**,"Rua fictícia, 15",Recife,Bairro sintético 1,Rural,ALM-REC-001,false,false
+UC100016,Titular sintético 016,***.000.000-**,"Rua fictícia, 16",Recife,Bairro sintético 2,Rural,ALM-REC-002,false,false
+UC100017,Titular sintético 017,***.000.000-**,"Rua fictícia, 17",Jaboatão,Bairro sintético 3,Rural,ALM-JAB-003,false,false
+UC100018,Titular sintético 018,***.000.000-**,"Rua fictícia, 18",Jaboatão,Bairro sintético 4,Rural,ALM-JAB-004,false,false
+UC100019,Titular sintético 019,***.000.000-**,"Rua fictícia, 19",Olinda,Bairro sintético 5,Rural,ALM-OLI-005,false,false
+UC100020,Titular sintético 020,***.000.000-**,"Rua fictícia, 20",Recife,Bairro sintético 1,Poder Público,ALM-REC-001,false,false
+UC100021,Titular sintético 021,***.000.000-**,"Rua fictícia, 21",Recife,Bairro sintético 2,Poder Público,ALM-REC-002,false,false
+UC100022,Titular sintético 022,***.000.000-**,"Rua fictícia, 22",Jaboatão,Bairro sintético 3,Poder Público,ALM-JAB-003,false,false
+UC100023,Titular sintético 023,***.000.000-**,"Rua fictícia, 23",Jaboatão,Bairro sintético 4,Poder Público,ALM-JAB-004,false,false
+UC100024,Titular sintético 024,***.000.000-**,"Rua fictícia, 24",Olinda,Bairro sintético 5,Poder Público,ALM-OLI-005,false,false
+UC100025,Titular sintético 025,***.000.000-**,"Rua fictícia, 25",Recife,Bairro sintético 1,Residencial,ALM-REC-001,false,false
+UC100026,Titular sintético 026,***.000.000-**,"Rua fictícia, 26",Recife,Bairro sintético 2,Residencial,ALM-REC-002,false,false
+UC100027,Titular sintético 027,***.000.000-**,"Rua fictícia, 27",Jaboatão,Bairro sintético 3,Residencial,ALM-JAB-003,false,false
+UC100028,Titular sintético 028,***.000.000-**,"Rua fictícia, 28",Jaboatão,Bairro sintético 4,Residencial,ALM-JAB-004,false,false
+UC100029,Titular sintético 029,***.000.000-**,"Rua fictícia, 29",Olinda,Bairro sintético 5,Residencial,ALM-OLI-005,false,false
+UC100030,Titular sintético 030,***.000.000-**,"Rua fictícia, 30",Recife,Bairro sintético 1,Comercial,ALM-REC-001,false,false
+UC100031,Titular sintético 031,***.000.000-**,"Rua fictícia, 31",Recife,Bairro sintético 2,Comercial,ALM-REC-002,false,false
+UC100032,Titular sintético 032,***.000.000-**,"Rua fictícia, 32",Jaboatão,Bairro sintético 3,Comercial,ALM-JAB-003,false,false
+UC100033,Titular sintético 033,***.000.000-**,"Rua fictícia, 33",Jaboatão,Bairro sintético 4,Comercial,ALM-JAB-004,false,false
+UC100034,Titular sintético 034,***.000.000-**,"Rua fictícia, 34",Olinda,Bairro sintético 5,Comercial,ALM-OLI-005,false,false
+UC100035,Titular sintético 035,***.000.000-**,"Rua fictícia, 35",Recife,Bairro sintético 1,Industrial,ALM-REC-001,false,false
+UC100036,Titular sintético 036,***.000.000-**,"Rua fictícia, 36",Recife,Bairro sintético 2,Industrial,ALM-REC-002,false,false
+UC100037,Titular sintético 037,***.000.000-**,"Rua fictícia, 37",Jaboatão,Bairro sintético 3,Industrial,ALM-JAB-003,false,false
+UC100038,Titular sintético 038,***.000.000-**,"Rua fictícia, 38",Jaboatão,Bairro sintético 4,Industrial,ALM-JAB-004,false,false
+UC100039,Titular sintético 039,***.000.000-**,"Rua fictícia, 39",Olinda,Bairro sintético 5,Industrial,ALM-OLI-005,false,false
+UC100040,Titular sintético 040,***.000.000-**,"Rua fictícia, 40",Recife,Bairro sintético 1,Rural,ALM-REC-001,false,false
+UC100041,Titular sintético 041,***.000.000-**,"Rua fictícia, 41",Recife,Bairro sintético 2,Rural,ALM-REC-002,false,false
+UC100042,Titular sintético 042,***.000.000-**,"Rua fictícia, 42",Jaboatão,Bairro sintético 3,Rural,ALM-JAB-003,false,false
+UC100043,Titular sintético 043,***.000.000-**,"Rua fictícia, 43",Jaboatão,Bairro sintético 4,Rural,ALM-JAB-004,false,false
+UC100044,Titular sintético 044,***.000.000-**,"Rua fictícia, 44",Olinda,Bairro sintético 5,Rural,ALM-OLI-005,false,false
+UC100045,Titular sintético 045,***.000.000-**,"Rua fictícia, 45",Recife,Bairro sintético 1,Poder Público,ALM-REC-001,false,false
+UC100046,Titular sintético 046,***.000.000-**,"Rua fictícia, 46",Recife,Bairro sintético 2,Poder Público,ALM-REC-002,false,false
+UC100047,Titular sintético 047,***.000.000-**,"Rua fictícia, 47",Jaboatão,Bairro sintético 3,Poder Público,ALM-JAB-003,false,false
+UC100048,Titular sintético 048,***.000.000-**,"Rua fictícia, 48",Jaboatão,Bairro sintético 4,Poder Público,ALM-JAB-004,false,false
+UC100049,Titular sintético 049,***.000.000-**,"Rua fictícia, 49",Olinda,Bairro sintético 5,Poder Público,ALM-OLI-005,false,false
+UC100050,Titular sintético 050,***.000.000-**,"Rua fictícia, 50",Recife,Bairro sintético 1,Residencial,ALM-REC-001,false,false
+UC100051,Titular sintético 051,***.000.000-**,"Rua fictícia, 51",Recife,Bairro sintético 2,Residencial,ALM-REC-002,false,false
+UC100052,Titular sintético 052,***.000.000-**,"Rua fictícia, 52",Jaboatão,Bairro sintético 3,Residencial,ALM-JAB-003,false,false
+UC100053,Titular sintético 053,***.000.000-**,"Rua fictícia, 53",Jaboatão,Bairro sintético 4,Residencial,ALM-JAB-004,false,false
+UC100054,Titular sintético 054,***.000.000-**,"Rua fictícia, 54",Olinda,Bairro sintético 5,Residencial,ALM-OLI-005,false,false
+UC100055,Titular sintético 055,***.000.000-**,"Rua fictícia, 55",Recife,Bairro sintético 1,Comercial,ALM-REC-001,false,false
+UC100056,Titular sintético 056,***.000.000-**,"Rua fictícia, 56",Recife,Bairro sintético 2,Comercial,ALM-REC-002,false,false
+UC100057,Titular sintético 057,***.000.000-**,"Rua fictícia, 57",Jaboatão,Bairro sintético 3,Comercial,ALM-JAB-003,false,false
+UC100058,Titular sintético 058,***.000.000-**,"Rua fictícia, 58",Jaboatão,Bairro sintético 4,Comercial,ALM-JAB-004,false,false
+UC100059,Titular sintético 059,***.000.000-**,"Rua fictícia, 59",Olinda,Bairro sintético 5,Comercial,ALM-OLI-005,false,false
+UC100060,Titular sintético 060,***.000.000-**,"Rua fictícia, 60",Recife,Bairro sintético 1,Industrial,ALM-REC-001,false,false
+UC100061,Titular sintético 061,***.000.000-**,"Rua fictícia, 61",Recife,Bairro sintético 2,Industrial,ALM-REC-002,false,false
+UC100062,Titular sintético 062,***.000.000-**,"Rua fictícia, 62",Jaboatão,Bairro sintético 3,Industrial,ALM-JAB-003,false,false
+UC100063,Titular sintético 063,***.000.000-**,"Rua fictícia, 63",Jaboatão,Bairro sintético 4,Industrial,ALM-JAB-004,false,false
+UC100064,Titular sintético 064,***.000.000-**,"Rua fictícia, 64",Olinda,Bairro sintético 5,Industrial,ALM-OLI-005,false,false
+UC100065,Titular sintético 065,***.000.000-**,"Rua fictícia, 65",Recife,Bairro sintético 1,Rural,ALM-REC-001,false,false
+UC100066,Titular sintético 066,***.000.000-**,"Rua fictícia, 66",Recife,Bairro sintético 2,Rural,ALM-REC-002,false,false
+UC100067,Titular sintético 067,***.000.000-**,"Rua fictícia, 67",Jaboatão,Bairro sintético 3,Rural,ALM-JAB-003,false,false
+UC100068,Titular sintético 068,***.000.000-**,"Rua fictícia, 68",Jaboatão,Bairro sintético 4,Rural,ALM-JAB-004,false,false
+UC100069,Titular sintético 069,***.000.000-**,"Rua fictícia, 69",Olinda,Bairro sintético 5,Rural,ALM-OLI-005,false,false
+UC100070,Titular sintético 070,***.000.000-**,"Rua fictícia, 70",Recife,Bairro sintético 1,Poder Público,ALM-REC-001,false,false
+UC100071,Titular sintético 071,***.000.000-**,"Rua fictícia, 71",Recife,Bairro sintético 2,Poder Público,ALM-REC-002,false,false
+UC100072,Titular sintético 072,***.000.000-**,"Rua fictícia, 72",Jaboatão,Bairro sintético 3,Poder Público,ALM-JAB-003,false,false
+UC100073,Titular sintético 073,***.000.000-**,"Rua fictícia, 73",Jaboatão,Bairro sintético 4,Poder Público,ALM-JAB-004,false,false
+UC100074,Titular sintético 074,***.000.000-**,"Rua fictícia, 74",Olinda,Bairro sintético 5,Poder Público,ALM-OLI-005,false,false
+UC100075,Titular sintético 075,***.000.000-**,"Rua fictícia, 75",Recife,Bairro sintético 1,Residencial,ALM-REC-001,false,false
+UC100076,Titular sintético 076,***.000.000-**,"Rua fictícia, 76",Recife,Bairro sintético 2,Residencial,ALM-REC-002,false,false
+UC100077,Titular sintético 077,***.000.000-**,"Rua fictícia, 77",Jaboatão,Bairro sintético 3,Residencial,ALM-JAB-003,false,false
+UC100078,Titular sintético 078,***.000.000-**,"Rua fictícia, 78",Jaboatão,Bairro sintético 4,Residencial,ALM-JAB-004,false,false
+UC100079,Titular sintético 079,***.000.000-**,"Rua fictícia, 79",Olinda,Bairro sintético 5,Residencial,ALM-OLI-005,false,false
+UC100080,Titular sintético 080,***.000.000-**,"Rua fictícia, 80",Recife,Bairro sintético 1,Comercial,ALM-REC-001,false,false
+UC100081,Titular sintético 081,***.000.000-**,"Rua fictícia, 81",Recife,Bairro sintético 2,Comercial,ALM-REC-002,false,false
+UC100082,Titular sintético 082,***.000.000-**,"Rua fictícia, 82",Jaboatão,Bairro sintético 3,Comercial,ALM-JAB-003,false,false
+UC100083,Titular sintético 083,***.000.000-**,"Rua fictícia, 83",Jaboatão,Bairro sintético 4,Comercial,ALM-JAB-004,false,false
+UC100084,Titular sintético 084,***.000.000-**,"Rua fictícia, 84",Olinda,Bairro sintético 5,Comercial,ALM-OLI-005,false,false
+UC100085,Titular sintético 085,***.000.000-**,"Rua fictícia, 85",Recife,Bairro sintético 1,Industrial,ALM-REC-001,false,false
+UC100086,Titular sintético 086,***.000.000-**,"Rua fictícia, 86",Recife,Bairro sintético 2,Industrial,ALM-REC-002,false,false
+UC100087,Titular sintético 087,***.000.000-**,"Rua fictícia, 87",Jaboatão,Bairro sintético 3,Industrial,ALM-JAB-003,false,false
+UC100088,Titular sintético 088,***.000.000-**,"Rua fictícia, 88",Jaboatão,Bairro sintético 4,Industrial,ALM-JAB-004,false,false
+UC100089,Titular sintético 089,***.000.000-**,"Rua fictícia, 89",Olinda,Bairro sintético 5,Industrial,ALM-OLI-005,false,false
+UC100090,Titular sintético 090,***.000.000-**,"Rua fictícia, 90",Recife,Bairro sintético 1,Rural,ALM-REC-001,false,false
+UC100091,Titular sintético 091,***.000.000-**,"Rua fictícia, 91",Recife,Bairro sintético 2,Rural,ALM-REC-002,false,false
+UC100092,Titular sintético 092,***.000.000-**,"Rua fictícia, 92",Jaboatão,Bairro sintético 3,Rural,ALM-JAB-003,false,false
+UC100093,Titular sintético 093,***.000.000-**,"Rua fictícia, 93",Jaboatão,Bairro sintético 4,Rural,ALM-JAB-004,false,false
+UC100094,Titular sintético 094,***.000.000-**,"Rua fictícia, 94",Olinda,Bairro sintético 5,Rural,ALM-OLI-005,false,false
+UC100095,Titular sintético 095,***.000.000-**,"Rua fictícia, 95",Recife,Bairro sintético 1,Poder Público,ALM-REC-001,false,false
+UC100096,Titular sintético 096,***.000.000-**,"Rua fictícia, 96",Recife,Bairro sintético 2,Poder Público,ALM-REC-002,false,false
+UC100097,Titular sintético 097,***.000.000-**,"Rua fictícia, 97",Jaboatão,Bairro sintético 3,Poder Público,ALM-JAB-003,false,false
+UC100098,Titular sintético 098,***.000.000-**,"Rua fictícia, 98",Jaboatão,Bairro sintético 4,Poder Público,ALM-JAB-004,false,false
+UC100099,Titular sintético 099,***.000.000-**,"Rua fictícia, 99",Olinda,Bairro sintético 5,Poder Público,ALM-OLI-005,false,false
+UC100100,Titular sintético 100,***.000.000-**,"Rua fictícia, 100",Recife,Bairro sintético 1,Residencial,ALM-REC-001,false,false
+UC100101,Titular sintético 101,***.000.000-**,"Rua fictícia, 101",Recife,Bairro sintético 2,Residencial,ALM-REC-002,false,false
+UC100102,Titular sintético 102,***.000.000-**,"Rua fictícia, 102",Jaboatão,Bairro sintético 3,Residencial,ALM-JAB-003,false,false
+UC100103,Titular sintético 103,***.000.000-**,"Rua fictícia, 103",Jaboatão,Bairro sintético 4,Residencial,ALM-JAB-004,false,false
+UC100104,Titular sintético 104,***.000.000-**,"Rua fictícia, 104",Olinda,Bairro sintético 5,Residencial,ALM-OLI-005,false,false
+UC100105,Titular sintético 105,***.000.000-**,"Rua fictícia, 105",Recife,Bairro sintético 1,Comercial,ALM-REC-001,false,false
+UC100106,Titular sintético 106,***.000.000-**,"Rua fictícia, 106",Recife,Bairro sintético 2,Comercial,ALM-REC-002,false,false
+UC100107,Titular sintético 107,***.000.000-**,"Rua fictícia, 107",Jaboatão,Bairro sintético 3,Comercial,ALM-JAB-003,false,false
+UC100108,Titular sintético 108,***.000.000-**,"Rua fictícia, 108",Jaboatão,Bairro sintético 4,Comercial,ALM-JAB-004,false,false
+UC100109,Titular sintético 109,***.000.000-**,"Rua fictícia, 109",Olinda,Bairro sintético 5,Comercial,ALM-OLI-005,false,false
+UC100110,Titular sintético 110,***.000.000-**,"Rua fictícia, 110",Recife,Bairro sintético 1,Industrial,ALM-REC-001,false,false
+UC100111,Titular sintético 111,***.000.000-**,"Rua fictícia, 111",Recife,Bairro sintético 2,Industrial,ALM-REC-002,false,false
+UC100112,Titular sintético 112,***.000.000-**,"Rua fictícia, 112",Jaboatão,Bairro sintético 3,Industrial,ALM-JAB-003,false,false
+UC100113,Titular sintético 113,***.000.000-**,"Rua fictícia, 113",Jaboatão,Bairro sintético 4,Industrial,ALM-JAB-004,false,false
+UC100114,Titular sintético 114,***.000.000-**,"Rua fictícia, 114",Olinda,Bairro sintético 5,Industrial,ALM-OLI-005,false,false
+UC100115,Titular sintético 115,***.000.000-**,"Rua fictícia, 115",Recife,Bairro sintético 1,Rural,ALM-REC-001,false,false
+UC100116,Titular sintético 116,***.000.000-**,"Rua fictícia, 116",Recife,Bairro sintético 2,Rural,ALM-REC-002,false,false
+UC100117,Titular sintético 117,***.000.000-**,"Rua fictícia, 117",Jaboatão,Bairro sintético 3,Rural,ALM-JAB-003,false,false
+UC100118,Titular sintético 118,***.000.000-**,"Rua fictícia, 118",Jaboatão,Bairro sintético 4,Rural,ALM-JAB-004,false,false
+UC100119,Titular sintético 119,***.000.000-**,"Rua fictícia, 119",Olinda,Bairro sintético 5,Rural,ALM-OLI-005,false,false
+UC100120,Titular sintético 120,***.000.000-**,"Rua fictícia, 120",Recife,Bairro sintético 1,Poder Público,ALM-REC-001,false,false
+UC100121,Titular sintético 121,***.000.000-**,"Rua fictícia, 121",Recife,Bairro sintético 2,Poder Público,ALM-REC-002,false,false
+UC100122,Titular sintético 122,***.000.000-**,"Rua fictícia, 122",Jaboatão,Bairro sintético 3,Poder Público,ALM-JAB-003,false,false
+UC100123,Titular sintético 123,***.000.000-**,"Rua fictícia, 123",Jaboatão,Bairro sintético 4,Poder Público,ALM-JAB-004,false,false
+UC100124,Titular sintético 124,***.000.000-**,"Rua fictícia, 124",Olinda,Bairro sintético 5,Poder Público,ALM-OLI-005,false,false
+UC100125,Titular sintético 125,***.000.000-**,"Rua fictícia, 125",Recife,Bairro sintético 1,Residencial,ALM-REC-001,false,false
+UC100126,Titular sintético 126,***.000.000-**,"Rua fictícia, 126",Recife,Bairro sintético 2,Residencial,ALM-REC-002,false,false
+UC100127,Titular sintético 127,***.000.000-**,"Rua fictícia, 127",Jaboatão,Bairro sintético 3,Residencial,ALM-JAB-003,false,false
+UC100128,Titular sintético 128,***.000.000-**,"Rua fictícia, 128",Jaboatão,Bairro sintético 4,Residencial,ALM-JAB-004,false,false
+UC100129,Titular sintético 129,***.000.000-**,"Rua fictícia, 129",Olinda,Bairro sintético 5,Residencial,ALM-OLI-005,false,false
+UC100130,Titular sintético 130,***.000.000-**,"Rua fictícia, 130",Recife,Bairro sintético 1,Comercial,ALM-REC-001,false,false
+UC100131,Titular sintético 131,***.000.000-**,"Rua fictícia, 131",Recife,Bairro sintético 2,Comercial,ALM-REC-002,false,false
+UC100132,Titular sintético 132,***.000.000-**,"Rua fictícia, 132",Jaboatão,Bairro sintético 3,Comercial,ALM-JAB-003,false,false
+UC100133,Titular sintético 133,***.000.000-**,"Rua fictícia, 133",Jaboatão,Bairro sintético 4,Comercial,ALM-JAB-004,false,false
+UC100134,Titular sintético 134,***.000.000-**,"Rua fictícia, 134",Olinda,Bairro sintético 5,Comercial,ALM-OLI-005,false,false
+UC100135,Titular sintético 135,***.000.000-**,"Rua fictícia, 135",Recife,Bairro sintético 1,Industrial,ALM-REC-001,false,false
+UC100136,Titular sintético 136,***.000.000-**,"Rua fictícia, 136",Recife,Bairro sintético 2,Industrial,ALM-REC-002,false,false
+UC100137,Titular sintético 137,***.000.000-**,"Rua fictícia, 137",Jaboatão,Bairro sintético 3,Industrial,ALM-JAB-003,false,false
+UC100138,Titular sintético 138,***.000.000-**,"Rua fictícia, 138",Jaboatão,Bairro sintético 4,Industrial,ALM-JAB-004,false,false
+UC100139,Titular sintético 139,***.000.000-**,"Rua fictícia, 139",Olinda,Bairro sintético 5,Industrial,ALM-OLI-005,false,false
+UC100140,Titular sintético 140,***.000.000-**,"Rua fictícia, 140",Recife,Bairro sintético 1,Rural,ALM-REC-001,false,false
+UC100141,Titular sintético 141,***.000.000-**,"Rua fictícia, 141",Recife,Bairro sintético 2,Rural,ALM-REC-002,false,false
+UC100142,Titular sintético 142,***.000.000-**,"Rua fictícia, 142",Jaboatão,Bairro sintético 3,Rural,ALM-JAB-003,false,false
+UC100143,Titular sintético 143,***.000.000-**,"Rua fictícia, 143",Jaboatão,Bairro sintético 4,Rural,ALM-JAB-004,false,false
+UC100144,Titular sintético 144,***.000.000-**,"Rua fictícia, 144",Olinda,Bairro sintético 5,Rural,ALM-OLI-005,false,false
+UC100145,Titular sintético 145,***.000.000-**,"Rua fictícia, 145",Recife,Bairro sintético 1,Poder Público,ALM-REC-001,false,false
+UC100146,Titular sintético 146,***.000.000-**,"Rua fictícia, 146",Recife,Bairro sintético 2,Poder Público,ALM-REC-002,false,false
+UC100147,Titular sintético 147,***.000.000-**,"Rua fictícia, 147",Jaboatão,Bairro sintético 3,Poder Público,ALM-JAB-003,false,false
+UC100148,Titular sintético 148,***.000.000-**,"Rua fictícia, 148",Jaboatão,Bairro sintético 4,Poder Público,ALM-JAB-004,false,false
+UC100149,Titular sintético 149,***.000.000-**,"Rua fictícia, 149",Olinda,Bairro sintético 5,Poder Público,ALM-OLI-005,false,false
+UC100150,Titular sintético 150,***.000.000-**,"Rua fictícia, 150",Recife,Bairro sintético 1,Residencial,ALM-REC-001,false,false
+UC100151,Titular sintético 151,***.000.000-**,"Rua fictícia, 151",Recife,Bairro sintético 2,Residencial,ALM-REC-002,false,false
+UC100152,Titular sintético 152,***.000.000-**,"Rua fictícia, 152",Jaboatão,Bairro sintético 3,Residencial,ALM-JAB-003,false,false
+UC100153,Titular sintético 153,***.000.000-**,"Rua fictícia, 153",Jaboatão,Bairro sintético 4,Residencial,ALM-JAB-004,false,false
+UC100154,Titular sintético 154,***.000.000-**,"Rua fictícia, 154",Olinda,Bairro sintético 5,Residencial,ALM-OLI-005,false,false
+UC100155,Titular sintético 155,***.000.000-**,"Rua fictícia, 155",Recife,Bairro sintético 1,Comercial,ALM-REC-001,false,false
+UC100156,Titular sintético 156,***.000.000-**,"Rua fictícia, 156",Recife,Bairro sintético 2,Comercial,ALM-REC-002,false,false
+UC100157,Titular sintético 157,***.000.000-**,"Rua fictícia, 157",Jaboatão,Bairro sintético 3,Comercial,ALM-JAB-003,false,false
+UC100158,Titular sintético 158,***.000.000-**,"Rua fictícia, 158",Jaboatão,Bairro sintético 4,Comercial,ALM-JAB-004,false,false
+UC100159,Titular sintético 159,***.000.000-**,"Rua fictícia, 159",Olinda,Bairro sintético 5,Comercial,ALM-OLI-005,false,false
+UC100160,Titular sintético 160,***.000.000-**,"Rua fictícia, 160",Recife,Bairro sintético 1,Industrial,ALM-REC-001,false,false
+UC100161,Titular sintético 161,***.000.000-**,"Rua fictícia, 161",Recife,Bairro sintético 2,Industrial,ALM-REC-002,false,false
+UC100162,Titular sintético 162,***.000.000-**,"Rua fictícia, 162",Jaboatão,Bairro sintético 3,Industrial,ALM-JAB-003,false,false
+UC100163,Titular sintético 163,***.000.000-**,"Rua fictícia, 163",Jaboatão,Bairro sintético 4,Industrial,ALM-JAB-004,false,false
+UC100164,Titular sintético 164,***.000.000-**,"Rua fictícia, 164",Olinda,Bairro sintético 5,Industrial,ALM-OLI-005,false,false
+UC100165,Titular sintético 165,***.000.000-**,"Rua fictícia, 165",Recife,Bairro sintético 1,Rural,ALM-REC-001,false,false
+UC100166,Titular sintético 166,***.000.000-**,"Rua fictícia, 166",Recife,Bairro sintético 2,Rural,ALM-REC-002,false,false
+UC100167,Titular sintético 167,***.000.000-**,"Rua fictícia, 167",Jaboatão,Bairro sintético 3,Rural,ALM-JAB-003,false,false
+UC100168,Titular sintético 168,***.000.000-**,"Rua fictícia, 168",Jaboatão,Bairro sintético 4,Rural,ALM-JAB-004,false,false
+UC100169,Titular sintético 169,***.000.000-**,"Rua fictícia, 169",Olinda,Bairro sintético 5,Rural,ALM-OLI-005,false,false
+UC100170,Titular sintético 170,***.000.000-**,"Rua fictícia, 170",Recife,Bairro sintético 1,Poder Público,ALM-REC-001,false,false
+UC100171,Titular sintético 171,***.000.000-**,"Rua fictícia, 171",Recife,Bairro sintético 2,Poder Público,ALM-REC-002,false,false
+UC100172,Titular sintético 172,***.000.000-**,"Rua fictícia, 172",Jaboatão,Bairro sintético 3,Poder Público,ALM-JAB-003,false,false
+UC100173,Titular sintético 173,***.000.000-**,"Rua fictícia, 173",Jaboatão,Bairro sintético 4,Poder Público,ALM-JAB-004,false,false
+UC100174,Titular sintético 174,***.000.000-**,"Rua fictícia, 174",Olinda,Bairro sintético 5,Poder Público,ALM-OLI-005,false,false
+UC100175,Titular sintético 175,***.000.000-**,"Rua fictícia, 175",Recife,Bairro sintético 1,Residencial,ALM-REC-001,false,false
+UC100176,Titular sintético 176,***.000.000-**,"Rua fictícia, 176",Recife,Bairro sintético 2,Residencial,ALM-REC-002,false,false
+UC100177,Titular sintético 177,***.000.000-**,"Rua fictícia, 177",Jaboatão,Bairro sintético 3,Residencial,ALM-JAB-003,false,false
+UC100178,Titular sintético 178,***.000.000-**,"Rua fictícia, 178",Jaboatão,Bairro sintético 4,Residencial,ALM-JAB-004,false,false
+UC100179,Titular sintético 179,***.000.000-**,"Rua fictícia, 179",Olinda,Bairro sintético 5,Residencial,ALM-OLI-005,false,false
+UC100180,Titular sintético 180,***.000.000-**,"Rua fictícia, 180",Recife,Bairro sintético 1,Comercial,ALM-REC-001,false,false
+UC100181,Titular sintético 181,***.000.000-**,"Rua fictícia, 181",Recife,Bairro sintético 2,Comercial,ALM-REC-002,false,false
+UC100182,Titular sintético 182,***.000.000-**,"Rua fictícia, 182",Jaboatão,Bairro sintético 3,Comercial,ALM-JAB-003,false,false
+UC100183,Titular sintético 183,***.000.000-**,"Rua fictícia, 183",Jaboatão,Bairro sintético 4,Comercial,ALM-JAB-004,false,false
+UC100184,Titular sintético 184,***.000.000-**,"Rua fictícia, 184",Olinda,Bairro sintético 5,Comercial,ALM-OLI-005,false,false
+UC100185,Titular sintético 185,***.000.000-**,"Rua fictícia, 185",Recife,Bairro sintético 1,Industrial,ALM-REC-001,false,false
+UC100186,Titular sintético 186,***.000.000-**,"Rua fictícia, 186",Recife,Bairro sintético 2,Industrial,ALM-REC-002,false,false
+UC100187,Titular sintético 187,***.000.000-**,"Rua fictícia, 187",Jaboatão,Bairro sintético 3,Industrial,ALM-JAB-003,false,false
+UC100188,Titular sintético 188,***.000.000-**,"Rua fictícia, 188",Jaboatão,Bairro sintético 4,Industrial,ALM-JAB-004,false,false
+UC100189,Titular sintético 189,***.000.000-**,"Rua fictícia, 189",Olinda,Bairro sintético 5,Industrial,ALM-OLI-005,false,false
+UC100190,Titular sintético 190,***.000.000-**,"Rua fictícia, 190",Recife,Bairro sintético 1,Rural,ALM-REC-001,false,false
+UC100191,Titular sintético 191,***.000.000-**,"Rua fictícia, 191",Recife,Bairro sintético 2,Rural,ALM-REC-002,false,false
+UC100192,Titular sintético 192,***.000.000-**,"Rua fictícia, 192",Jaboatão,Bairro sintético 3,Rural,ALM-JAB-003,false,false
+UC100193,Titular sintético 193,***.000.000-**,"Rua fictícia, 193",Jaboatão,Bairro sintético 4,Rural,ALM-JAB-004,false,false
+UC100194,Titular sintético 194,***.000.000-**,"Rua fictícia, 194",Olinda,Bairro sintético 5,Rural,ALM-OLI-005,false,false
+UC100195,Titular sintético 195,***.000.000-**,"Rua fictícia, 195",Recife,Bairro sintético 1,Poder Público,ALM-REC-001,false,false
+UC100196,Titular sintético 196,***.000.000-**,"Rua fictícia, 196",Recife,Bairro sintético 2,Poder Público,ALM-REC-002,false,false
+UC100197,Titular sintético 197,***.000.000-**,"Rua fictícia, 197",Jaboatão,Bairro sintético 3,Poder Público,ALM-JAB-003,false,false
+UC100198,Titular sintético 198,***.000.000-**,"Rua fictícia, 198",Jaboatão,Bairro sintético 4,Poder Público,ALM-JAB-004,false,false
+UC100199,Titular sintético 199,***.000.000-**,"Rua fictícia, 199",Olinda,Bairro sintético 5,Poder Público,ALM-OLI-005,false,false
+UC100200,Titular sintético 200,***.000.000-**,"Rua fictícia, 200",Recife,Bairro sintético 1,Residencial,ALM-REC-001,false,false
+UC100201,Titular sintético 201,***.000.000-**,"Rua fictícia, 201",Recife,Bairro sintético 2,Residencial,ALM-REC-002,false,false
+UC100202,Titular sintético 202,***.000.000-**,"Rua fictícia, 202",Jaboatão,Bairro sintético 3,Residencial,ALM-JAB-003,false,false
+UC100203,Titular sintético 203,***.000.000-**,"Rua fictícia, 203",Jaboatão,Bairro sintético 4,Residencial,ALM-JAB-004,false,false
+UC100204,Titular sintético 204,***.000.000-**,"Rua fictícia, 204",Olinda,Bairro sintético 5,Residencial,ALM-OLI-005,false,false
+UC100205,Titular sintético 205,***.000.000-**,"Rua fictícia, 205",Recife,Bairro sintético 1,Comercial,ALM-REC-001,false,false
+UC100206,Titular sintético 206,***.000.000-**,"Rua fictícia, 206",Recife,Bairro sintético 2,Comercial,ALM-REC-002,false,false
+UC100207,Titular sintético 207,***.000.000-**,"Rua fictícia, 207",Jaboatão,Bairro sintético 3,Comercial,ALM-JAB-003,false,false
+UC100208,Titular sintético 208,***.000.000-**,"Rua fictícia, 208",Jaboatão,Bairro sintético 4,Comercial,ALM-JAB-004,false,false
+UC100209,Titular sintético 209,***.000.000-**,"Rua fictícia, 209",Olinda,Bairro sintético 5,Comercial,ALM-OLI-005,false,false
+UC100210,Titular sintético 210,***.000.000-**,"Rua fictícia, 210",Recife,Bairro sintético 1,Industrial,ALM-REC-001,false,false
+UC100211,Titular sintético 211,***.000.000-**,"Rua fictícia, 211",Recife,Bairro sintético 2,Industrial,ALM-REC-002,false,false
+UC100212,Titular sintético 212,***.000.000-**,"Rua fictícia, 212",Jaboatão,Bairro sintético 3,Industrial,ALM-JAB-003,false,false
+UC100213,Titular sintético 213,***.000.000-**,"Rua fictícia, 213",Jaboatão,Bairro sintético 4,Industrial,ALM-JAB-004,false,false
+UC100214,Titular sintético 214,***.000.000-**,"Rua fictícia, 214",Olinda,Bairro sintético 5,Industrial,ALM-OLI-005,false,false
+UC100215,Titular sintético 215,***.000.000-**,"Rua fictícia, 215",Recife,Bairro sintético 1,Rural,ALM-REC-001,false,false
+UC100216,Titular sintético 216,***.000.000-**,"Rua fictícia, 216",Recife,Bairro sintético 2,Rural,ALM-REC-002,false,false
+UC100217,Titular sintético 217,***.000.000-**,"Rua fictícia, 217",Jaboatão,Bairro sintético 3,Rural,ALM-JAB-003,false,false
+UC100218,Titular sintético 218,***.000.000-**,"Rua fictícia, 218",Jaboatão,Bairro sintético 4,Rural,ALM-JAB-004,false,false
+UC100219,Titular sintético 219,***.000.000-**,"Rua fictícia, 219",Olinda,Bairro sintético 5,Rural,ALM-OLI-005,false,false
+UC100220,Titular sintético 220,***.000.000-**,"Rua fictícia, 220",Recife,Bairro sintético 1,Poder Público,ALM-REC-001,false,false
+UC100221,Titular sintético 221,***.000.000-**,"Rua fictícia, 221",Recife,Bairro sintético 2,Poder Público,ALM-REC-002,false,false
+UC100222,Titular sintético 222,***.000.000-**,"Rua fictícia, 222",Jaboatão,Bairro sintético 3,Poder Público,ALM-JAB-003,false,false
+UC100223,Titular sintético 223,***.000.000-**,"Rua fictícia, 223",Jaboatão,Bairro sintético 4,Poder Público,ALM-JAB-004,false,false
+UC100224,Titular sintético 224,***.000.000-**,"Rua fictícia, 224",Olinda,Bairro sintético 5,Poder Público,ALM-OLI-005,false,false
+UC100225,Titular sintético 225,***.000.000-**,"Rua fictícia, 225",Recife,Bairro sintético 1,Residencial,ALM-REC-001,false,false
+UC100226,Titular sintético 226,***.000.000-**,"Rua fictícia, 226",Recife,Bairro sintético 2,Residencial,ALM-REC-002,false,false
+UC100227,Titular sintético 227,***.000.000-**,"Rua fictícia, 227",Jaboatão,Bairro sintético 3,Residencial,ALM-JAB-003,false,false
+UC100228,Titular sintético 228,***.000.000-**,"Rua fictícia, 228",Jaboatão,Bairro sintético 4,Residencial,ALM-JAB-004,false,false
+UC100229,Titular sintético 229,***.000.000-**,"Rua fictícia, 229",Olinda,Bairro sintético 5,Residencial,ALM-OLI-005,false,false
+UC100230,Titular sintético 230,***.000.000-**,"Rua fictícia, 230",Recife,Bairro sintético 1,Comercial,ALM-REC-001,false,false
+UC100231,Titular sintético 231,***.000.000-**,"Rua fictícia, 231",Recife,Bairro sintético 2,Comercial,ALM-REC-002,false,false
+UC100232,Titular sintético 232,***.000.000-**,"Rua fictícia, 232",Jaboatão,Bairro sintético 3,Comercial,ALM-JAB-003,false,false
+UC100233,Titular sintético 233,***.000.000-**,"Rua fictícia, 233",Jaboatão,Bairro sintético 4,Comercial,ALM-JAB-004,false,false
+UC100234,Titular sintético 234,***.000.000-**,"Rua fictícia, 234",Olinda,Bairro sintético 5,Comercial,ALM-OLI-005,false,false
+UC100235,Titular sintético 235,***.000.000-**,"Rua fictícia, 235",Recife,Bairro sintético 1,Industrial,ALM-REC-001,false,false
+UC100236,Titular sintético 236,***.000.000-**,"Rua fictícia, 236",Recife,Bairro sintético 2,Industrial,ALM-REC-002,false,false
+UC100237,Titular sintético 237,***.000.000-**,"Rua fictícia, 237",Jaboatão,Bairro sintético 3,Industrial,ALM-JAB-003,false,false
+UC100238,Titular sintético 238,***.000.000-**,"Rua fictícia, 238",Jaboatão,Bairro sintético 4,Industrial,ALM-JAB-004,false,false
+UC100239,Titular sintético 239,***.000.000-**,"Rua fictícia, 239",Olinda,Bairro sintético 5,Industrial,ALM-OLI-005,false,false
+UC100240,Titular sintético 240,***.000.000-**,"Rua fictícia, 240",Recife,Bairro sintético 1,Rural,ALM-REC-001,false,false
+UC100241,Titular sintético 241,***.000.000-**,"Rua fictícia, 241",Recife,Bairro sintético 2,Rural,ALM-REC-002,false,false
+UC100242,Titular sintético 242,***.000.000-**,"Rua fictícia, 242",Jaboatão,Bairro sintético 3,Rural,ALM-JAB-003,false,false
+UC100243,Titular sintético 243,***.000.000-**,"Rua fictícia, 243",Jaboatão,Bairro sintético 4,Rural,ALM-JAB-004,false,false
+UC100244,Titular sintético 244,***.000.000-**,"Rua fictícia, 244",Olinda,Bairro sintético 5,Rural,ALM-OLI-005,false,false
+UC100245,Titular sintético 245,***.000.000-**,"Rua fictícia, 245",Recife,Bairro sintético 1,Poder Público,ALM-REC-001,false,false
+UC100246,Titular sintético 246,***.000.000-**,"Rua fictícia, 246",Recife,Bairro sintético 2,Poder Público,ALM-REC-002,false,false
+UC100247,Titular sintético 247,***.000.000-**,"Rua fictícia, 247",Jaboatão,Bairro sintético 3,Poder Público,ALM-JAB-003,false,false
+UC100248,Titular sintético 248,***.000.000-**,"Rua fictícia, 248",Jaboatão,Bairro sintético 4,Poder Público,ALM-JAB-004,false,false
+UC100249,Titular sintético 249,***.000.000-**,"Rua fictícia, 249",Olinda,Bairro sintético 5,Poder Público,ALM-OLI-005,false,false
+UC100250,Titular sintético 250,***.000.000-**,"Rua fictícia, 250",Recife,Bairro sintético 1,Residencial,ALM-REC-001,false,false
+UC100251,Titular sintético 251,***.000.000-**,"Rua fictícia, 251",Recife,Bairro sintético 2,Residencial,ALM-REC-002,false,false
+UC100252,Titular sintético 252,***.000.000-**,"Rua fictícia, 252",Jaboatão,Bairro sintético 3,Residencial,ALM-JAB-003,false,false
+UC100253,Titular sintético 253,***.000.000-**,"Rua fictícia, 253",Jaboatão,Bairro sintético 4,Residencial,ALM-JAB-004,false,false
+UC100254,Titular sintético 254,***.000.000-**,"Rua fictícia, 254",Olinda,Bairro sintético 5,Residencial,ALM-OLI-005,false,false
+UC100255,Titular sintético 255,***.000.000-**,"Rua fictícia, 255",Recife,Bairro sintético 1,Comercial,ALM-REC-001,false,false
+UC100256,Titular sintético 256,***.000.000-**,"Rua fictícia, 256",Recife,Bairro sintético 2,Comercial,ALM-REC-002,false,false
+UC100257,Titular sintético 257,***.000.000-**,"Rua fictícia, 257",Jaboatão,Bairro sintético 3,Comercial,ALM-JAB-003,false,false
+UC100258,Titular sintético 258,***.000.000-**,"Rua fictícia, 258",Jaboatão,Bairro sintético 4,Comercial,ALM-JAB-004,false,false
+UC100259,Titular sintético 259,***.000.000-**,"Rua fictícia, 259",Olinda,Bairro sintético 5,Comercial,ALM-OLI-005,false,false
+UC100260,Titular sintético 260,***.000.000-**,"Rua fictícia, 260",Recife,Bairro sintético 1,Industrial,ALM-REC-001,false,false
+UC100261,Titular sintético 261,***.000.000-**,"Rua fictícia, 261",Recife,Bairro sintético 2,Industrial,ALM-REC-002,false,false
+UC100262,Titular sintético 262,***.000.000-**,"Rua fictícia, 262",Jaboatão,Bairro sintético 3,Industrial,ALM-JAB-003,false,false
+UC100263,Titular sintético 263,***.000.000-**,"Rua fictícia, 263",Jaboatão,Bairro sintético 4,Industrial,ALM-JAB-004,false,false
+UC100264,Titular sintético 264,***.000.000-**,"Rua fictícia, 264",Olinda,Bairro sintético 5,Industrial,ALM-OLI-005,false,false
+UC100265,Titular sintético 265,***.000.000-**,"Rua fictícia, 265",Recife,Bairro sintético 1,Rural,ALM-REC-001,false,false
+UC100266,Titular sintético 266,***.000.000-**,"Rua fictícia, 266",Recife,Bairro sintético 2,Rural,ALM-REC-002,false,false
+UC100267,Titular sintético 267,***.000.000-**,"Rua fictícia, 267",Jaboatão,Bairro sintético 3,Rural,ALM-JAB-003,false,false
+UC100268,Titular sintético 268,***.000.000-**,"Rua fictícia, 268",Jaboatão,Bairro sintético 4,Rural,ALM-JAB-004,false,false
+UC100269,Titular sintético 269,***.000.000-**,"Rua fictícia, 269",Olinda,Bairro sintético 5,Rural,ALM-OLI-005,false,false
+UC100270,Titular sintético 270,***.000.000-**,"Rua fictícia, 270",Recife,Bairro sintético 1,Poder Público,ALM-REC-001,false,false
+UC100271,Titular sintético 271,***.000.000-**,"Rua fictícia, 271",Recife,Bairro sintético 2,Poder Público,ALM-REC-002,false,false
+UC100272,Titular sintético 272,***.000.000-**,"Rua fictícia, 272",Jaboatão,Bairro sintético 3,Poder Público,ALM-JAB-003,false,false
+UC100273,Titular sintético 273,***.000.000-**,"Rua fictícia, 273",Jaboatão,Bairro sintético 4,Poder Público,ALM-JAB-004,false,false
+UC100274,Titular sintético 274,***.000.000-**,"Rua fictícia, 274",Olinda,Bairro sintético 5,Poder Público,ALM-OLI-005,false,false
+UC100275,Titular sintético 275,***.000.000-**,"Rua fictícia, 275",Recife,Bairro sintético 1,Residencial,ALM-REC-001,false,false
+UC100276,Titular sintético 276,***.000.000-**,"Rua fictícia, 276",Recife,Bairro sintético 2,Residencial,ALM-REC-002,false,false
+UC100277,Titular sintético 277,***.000.000-**,"Rua fictícia, 277",Jaboatão,Bairro sintético 3,Residencial,ALM-JAB-003,false,false
+UC100278,Titular sintético 278,***.000.000-**,"Rua fictícia, 278",Jaboatão,Bairro sintético 4,Residencial,ALM-JAB-004,false,false
+UC100279,Titular sintético 279,***.000.000-**,"Rua fictícia, 279",Olinda,Bairro sintético 5,Residencial,ALM-OLI-005,false,false
+UC100280,Titular sintético 280,***.000.000-**,"Rua fictícia, 280",Recife,Bairro sintético 1,Comercial,ALM-REC-001,false,false
+UC100281,Titular sintético 281,***.000.000-**,"Rua fictícia, 281",Recife,Bairro sintético 2,Comercial,ALM-REC-002,false,false
+UC100282,Titular sintético 282,***.000.000-**,"Rua fictícia, 282",Jaboatão,Bairro sintético 3,Comercial,ALM-JAB-003,false,false
+UC100283,Titular sintético 283,***.000.000-**,"Rua fictícia, 283",Jaboatão,Bairro sintético 4,Comercial,ALM-JAB-004,false,false
+UC100284,Titular sintético 284,***.000.000-**,"Rua fictícia, 284",Olinda,Bairro sintético 5,Comercial,ALM-OLI-005,false,false
+UC100285,Titular sintético 285,***.000.000-**,"Rua fictícia, 285",Recife,Bairro sintético 1,Industrial,ALM-REC-001,false,false
+UC100286,Titular sintético 286,***.000.000-**,"Rua fictícia, 286",Recife,Bairro sintético 2,Industrial,ALM-REC-002,false,false
+UC100287,Titular sintético 287,***.000.000-**,"Rua fictícia, 287",Jaboatão,Bairro sintético 3,Industrial,ALM-JAB-003,false,false
+UC100288,Titular sintético 288,***.000.000-**,"Rua fictícia, 288",Jaboatão,Bairro sintético 4,Industrial,ALM-JAB-004,false,false
+UC100289,Titular sintético 289,***.000.000-**,"Rua fictícia, 289",Olinda,Bairro sintético 5,Industrial,ALM-OLI-005,false,false
+UC100290,Titular sintético 290,***.000.000-**,"Rua fictícia, 290",Recife,Bairro sintético 1,Rural,ALM-REC-001,false,false
+UC100291,Titular sintético 291,***.000.000-**,"Rua fictícia, 291",Recife,Bairro sintético 2,Rural,ALM-REC-002,false,false
+UC100292,Titular sintético 292,***.000.000-**,"Rua fictícia, 292",Jaboatão,Bairro sintético 3,Rural,ALM-JAB-003,false,false
+UC100293,Titular sintético 293,***.000.000-**,"Rua fictícia, 293",Jaboatão,Bairro sintético 4,Rural,ALM-JAB-004,false,false
+UC100294,Titular sintético 294,***.000.000-**,"Rua fictícia, 294",Olinda,Bairro sintético 5,Rural,ALM-OLI-005,false,false
+UC100295,Titular sintético 295,***.000.000-**,"Rua fictícia, 295",Recife,Bairro sintético 1,Poder Público,ALM-REC-001,false,false
+UC100296,Titular sintético 296,***.000.000-**,"Rua fictícia, 296",Recife,Bairro sintético 2,Poder Público,ALM-REC-002,false,false
+UC100297,Titular sintético 297,***.000.000-**,"Rua fictícia, 297",Jaboatão,Bairro sintético 3,Poder Público,ALM-JAB-003,false,false
+UC100298,Titular sintético 298,***.000.000-**,"Rua fictícia, 298",Jaboatão,Bairro sintético 4,Poder Público,ALM-JAB-004,false,false
+UC100299,Titular sintético 299,***.000.000-**,"Rua fictícia, 299",Olinda,Bairro sintético 6,Poder Público,ALM-OLI-006,false,false
