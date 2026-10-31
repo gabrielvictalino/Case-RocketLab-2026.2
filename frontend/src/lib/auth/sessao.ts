@@ -163,6 +163,16 @@ export function encerrarSessao(): void {
   }
 }
 
+/**
+ * Encerra a sessão só se ela ainda for a que emitiu `token`. Um 401 atrasado
+ * de uma requisição feita antes de outro login não pode apagar a sessão nova.
+ */
+export function encerrarSessaoDoToken(token: string | null): void {
+  if (token !== null && lerSessao()?.token === token) {
+    encerrarSessao()
+  }
+}
+
 export function assinarSessao(cb: () => void): () => void {
   assinantes.add(cb)
 

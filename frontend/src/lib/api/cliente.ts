@@ -1,6 +1,15 @@
 import createClient from 'openapi-fetch'
 import type { paths } from '@/lib/api/schema'
-import { encerrarSessao, lerSessao } from '@/lib/auth/sessao'
+import { encerrarSessaoDoToken, lerSessao } from '@/lib/auth/sessao'
+
+const PREFIXO_BEARER = 'Bearer '
+
+function tokenDaRequisicao(request: Request): string | null {
+  const cabecalho = request.headers.get('Authorization')
+  return cabecalho?.startsWith(PREFIXO_BEARER)
+    ? cabecalho.slice(PREFIXO_BEARER.length)
+    : null
+}
 
 const origemBase =
   typeof globalThis.location?.origin === 'string' &&
@@ -21,9 +30,9 @@ api.use({
     }
     return request
   },
-  onResponse({ response, schemaPath }) {
+  onResponse({ request, response, schemaPath }) {
     if (response.status === 401 && schemaPath !== '/api/v1/auth/login') {
-      encerrarSessao()
+      encerrarSessaoDoToken(tokenDaRequisicao(request))
     }
     return response
   },

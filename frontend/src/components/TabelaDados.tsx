@@ -112,6 +112,7 @@ export function TabelaDados<T extends object>({
             compacto
           />
         </div>
+        {rodape && <div className="ve-table-foot">{rodape}</div>}
       </div>
     )
   }

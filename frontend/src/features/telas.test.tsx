@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -265,6 +266,67 @@ describe('Telas do portal e PainelAgente', () => {
       expect(screen.queryByText('UC100123')).not.toBeInTheDocument()
       expect(screen.getByText('UC100456')).toBeInTheDocument()
     })
+  })
+
+  it('reinicia a paginação das ordens ao voltar/avançar no histórico', async () => {
+    const todas = Array.from({ length: 60 }, (_, i) => ({
+      ...ORDENS_FIXTURE.items[1]!,
+      id: `ord-${i}`,
+      id_uc: `UC9${String(i).padStart(5, '0')}`,
+    }))
+    const abertas = [ORDENS_FIXTURE.items[0]!]
+    const fetchOrdens = vi.fn(async (req: Request) => {
+      const url = new URL(req.url)
+      if (!url.pathname.endsWith('/api/v1/ordens-inspecao')) {
+        return new Response(
+          JSON.stringify(
+            url.pathname.endsWith('/meta/filtros')
+              ? FILTROS_FIXTURE
+              : CARGA_FIXTURE,
+          ),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+      const lista = url.searchParams.get('status') === 'ABERTA' ? abertas : todas
+      const page = Number(url.searchParams.get('page') ?? '1')
+      return new Response(
+        JSON.stringify({
+          items: lista.slice((page - 1) * 25, page * 25),
+          total: lista.length,
+          page,
+          size: 25,
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      )
+    })
+    vi.stubGlobal('fetch', fetchOrdens)
+
+    const { router } = renderizar('/perdas?aba=ordens')
+    expect(await screen.findByText('Página 1 de 3')).toBeInTheDocument()
+
+    // Filtra por status e volta no histórico para a lista sem filtro.
+    fireEvent.change(screen.getByLabelText('Status'), {
+      target: { value: 'ABERTA' },
+    })
+    expect(await screen.findByText('UC100123')).toBeInTheDocument()
+    await act(() => router.navigate(-1))
+    fireEvent.click(await screen.findByRole('button', { name: 'Próxima' }))
+    expect(await screen.findByText('Página 2 de 3')).toBeInTheDocument()
+
+    // Avançar restaura o status; a página 2 não pode sobreviver à troca.
+    await act(() => router.navigate(1))
+    expect(
+      new URLSearchParams(router.state.location.search).get('status'),
+    ).toBe('ABERTA')
+    expect(await screen.findByText('UC100123')).toBeInTheDocument()
+    const ultimaUrl = new URL(
+      fetchOrdens.mock.calls
+        .map(([req]) => req.url)
+        .filter((u) => u.includes('/api/v1/ordens-inspecao'))
+        .at(-1)!,
+    )
+    expect(ultimaUrl.searchParams.get('status')).toBe('ABERTA')
+    expect(ultimaUrl.searchParams.get('page')).toBe('1')
   })
 
   it('renderiza Operação com filtros de alimentador e toggle atípico', async () => {

@@ -74,7 +74,16 @@ export function PaginaPerdas() {
   const rotuloPeriodo = periodo ? formatarIntervaloPeriodo(periodo) : null
   const abaUrl = searchParams.get('aba') === 'ordens' ? 'ordens' : 'fila'
   const statusFiltro = statusOrdemValido(searchParams.get('status'))
-  const [pagina, setPagina] = useState(1)
+  // A página vale só para o status em que foi escolhida. Quando o status da
+  // URL muda (inclusive por voltar/avançar no histórico), a paginação reinicia.
+  const [paginacao, setPaginacao] = useState<{
+    status: StatusOrdem | null
+    pagina: number
+  }>({ status: statusFiltro, pagina: 1 })
+  const pagina = paginacao.status === statusFiltro ? paginacao.pagina : 1
+  const irParaPagina = (nova: number) => {
+    setPaginacao({ status: statusFiltro, pagina: nova })
+  }
 
   const ordensQuery = useQuery<PaginaOrdens, ErroApi>({
     queryKey: ['ordens-inspecao', statusFiltro, pagina, TAMANHO_PAGINA],
@@ -110,7 +119,6 @@ export function PaginaPerdas() {
   }
 
   const alterarStatusOrdem = (novoStatus: string) => {
-    setPagina(1)
     const proximo = new URLSearchParams(searchParams)
     if (novoStatus && statusOrdemValido(novoStatus)) {
       proximo.set('status', novoStatus)
@@ -121,7 +129,6 @@ export function PaginaPerdas() {
   }
 
   const limparFiltroStatus = () => {
-    setPagina(1)
     const proximo = new URLSearchParams(searchParams)
     proximo.delete('status')
     setSearchParams(proximo)
@@ -332,13 +339,17 @@ export function PaginaPerdas() {
                       Mostrando {itensOrdens.length} de {totalOrdens} ordens de
                       inspeção
                     </span>
-                    {totalPaginas > 1 && (
+                    {(totalPaginas > 1 || pagina > 1) && (
                       <div className="ve-row" style={{ gap: 'var(--space-2)' }}>
                         <button
                           type="button"
                           className="ve-btn ve-btn-sm"
                           disabled={pagina <= 1}
-                          onClick={() => setPagina((p) => Math.max(1, p - 1))}
+                          onClick={() =>
+                            irParaPagina(
+                              Math.max(1, Math.min(pagina - 1, totalPaginas)),
+                            )
+                          }
                         >
                           Anterior
                         </button>
@@ -350,7 +361,7 @@ export function PaginaPerdas() {
                           className="ve-btn ve-btn-sm"
                           disabled={pagina >= totalPaginas}
                           onClick={() =>
-                            setPagina((p) => Math.min(totalPaginas, p + 1))
+                            irParaPagina(Math.min(totalPaginas, pagina + 1))
                           }
                         >
                           Próxima

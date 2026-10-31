@@ -102,6 +102,42 @@ describe('sessao e cliente da API', () => {
     expect(lerSessao()).toBeNull()
   })
 
+  it('ignora 401 atrasado de uma sessão anterior depois de um novo login', async () => {
+    salvarSessao(
+      { access_token: 'token-antigo', token_type: 'bearer', expires_in: 3600 },
+      'comercial',
+    )
+
+    let responder: (r: Response) => void = () => {}
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            responder = resolve
+          }),
+      ),
+    )
+
+    const pendente = desembrulhar(api.GET('/api/v1/meta/carga'))
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
+
+    salvarSessao(
+      { access_token: 'token-novo', token_type: 'bearer', expires_in: 3600 },
+      'perdas',
+    )
+
+    responder(
+      new Response(
+        JSON.stringify({ detail: 'Token inválido', code: 'NAO_AUTORIZADO' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } },
+      ),
+    )
+    await expect(pendente).rejects.toBeInstanceOf(ErroApi)
+
+    expect(lerSessao()?.token).toBe('token-novo')
+  })
+
   it('não encerra sessão existente em caso de 401 no próprio /api/v1/auth/login', async () => {
     salvarSessao(
       { access_token: 'sessao-anterior', token_type: 'bearer', expires_in: 3600 },

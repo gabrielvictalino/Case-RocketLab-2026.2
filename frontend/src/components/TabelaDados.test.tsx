@@ -60,4 +60,19 @@ describe('TabelaDados', () => {
       valor: 500,
     })
   })
+
+  it('mantém o rodapé no estado vazio', () => {
+    render(
+      <TabelaDados
+        colunas={COLUNAS}
+        dados={[]}
+        legenda="Tabela vazia"
+        tituloVazio="Nada por aqui"
+        rodape={<button type="button">Anterior</button>}
+      />,
+    )
+
+    expect(screen.getByText('Nada por aqui')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Anterior' })).toBeInTheDocument()
+  })
 })
