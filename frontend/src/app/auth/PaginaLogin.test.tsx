@@ -217,4 +217,32 @@ describe('PaginaLogin e fluxo de autenticação', () => {
     })
     expect(lerSessao()).toBeNull()
   })
+
+  it('leva ao /login quando a sessão vence com a tela aberta', async () => {
+    salvarSessao(
+      { access_token: 'jwt-curto', token_type: 'bearer', expires_in: 1 },
+      'perdas',
+    )
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (req: Request) => respostaPorUrl(req.url)),
+    )
+
+    const { router } = renderizarApp('/perdas')
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Perdas' }),
+    ).toBeInTheDocument()
+
+    await waitFor(
+      () => {
+        expect(router.state.location.pathname).toBe('/login')
+      },
+      { timeout: 3000 },
+    )
+    // O retorno leva junto o período que a barra global pôs na URL.
+    expect(
+      new URLSearchParams(router.state.location.search).get('retorno'),
+    ).toMatch(/^\/perdas(\?|$)/)
+    expect(lerSessao()).toBeNull()
+  })
 })

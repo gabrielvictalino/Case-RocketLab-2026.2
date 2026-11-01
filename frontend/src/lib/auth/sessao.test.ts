@@ -60,6 +60,60 @@ describe('sessao e cliente da API', () => {
     expect(localStorage.getItem(CHAVE_SESSAO)).toBeNull()
   })
 
+  it('avisa os assinantes quando a sessão vence, sem depender de leitura', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-01T12:00:00Z'))
+    salvarSessao(
+      { access_token: 'jwt-timer', token_type: 'bearer', expires_in: 60 },
+      'comercial',
+    )
+    const notificado = vi.fn()
+    const cancelar = assinarSessao(notificado)
+
+    vi.advanceTimersByTime(59_999)
+    await Promise.resolve()
+    expect(notificado).not.toHaveBeenCalled()
+
+    vi.advanceTimersByTime(1)
+    await Promise.resolve()
+    expect(notificado).toHaveBeenCalledTimes(1)
+    expect(localStorage.getItem(CHAVE_SESSAO)).toBeNull()
+
+    cancelar()
+  })
+
+  it('avisa os assinantes quando uma requisição encontra a sessão vencida', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-01T12:00:00Z'))
+    salvarSessao(
+      { access_token: 'jwt-vencido', token_type: 'bearer', expires_in: 60 },
+      'operacao',
+    )
+    const notificado = vi.fn()
+    const cancelar = assinarSessao(notificado)
+
+    // Avança o relógio sem disparar o timer, como numa aba suspensa que acorda.
+    vi.setSystemTime(new Date('2026-06-01T12:01:00Z'))
+    const fetchMock = vi.fn(async (req: Request) => {
+      expect(req.headers.get('Authorization')).toBeNull()
+      return new Response(
+        JSON.stringify({ detail: 'Não autenticado', code: 'NAO_AUTORIZADO' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } },
+      )
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      desembrulhar(api.GET('/api/v1/meta/carga')),
+    ).rejects.toBeInstanceOf(ErroApi)
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(notificado).toHaveBeenCalledTimes(1)
+    expect(lerSessao()).toBeNull()
+
+    cancelar()
+  })
+
   it('injeta Authorization Bearer nas requisições quando há sessão ativa', async () => {
     salvarSessao(
       { access_token: 'meu-token-secreto', token_type: 'bearer', expires_in: 3600 },

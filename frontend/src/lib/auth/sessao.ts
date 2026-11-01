@@ -57,9 +57,14 @@ export interface Sessao {
 
 export const CHAVE_SESSAO = 'venergy.sessao'
 
+// Teto do setTimeout (2^31 - 1 ms, cerca de 24,8 dias); acima disso ele dispara na hora.
+const ATRASO_MAXIMO_TIMER = 2_147_483_647
+
 const assinantes = new Set<() => void>()
 let ultimoBruto: string | null = null
 let ultimaSessao: Sessao | null = null
+let timerExpiracao: ReturnType<typeof setTimeout> | undefined
+let notificacaoPendente = false
 
 function notificarAssinantes(): void {
   for (const cb of assinantes) {
@@ -67,9 +72,50 @@ function notificarAssinantes(): void {
   }
 }
 
-function removerDoStorage(): void {
+/**
+ * Avisa os assinantes fora da pilha atual. `lerSessao` é o `getSnapshot` do
+ * `useSyncExternalStore` e pode rodar durante a renderização, quando atualizar
+ * outros componentes não é permitido.
+ */
+function notificarDepois(): void {
+  if (notificacaoPendente) {
+    return
+  }
+  notificacaoPendente = true
+  queueMicrotask(() => {
+    notificacaoPendente = false
+    notificarAssinantes()
+  })
+}
+
+function cancelarExpiracao(): void {
+  if (timerExpiracao !== undefined) {
+    clearTimeout(timerExpiracao)
+    timerExpiracao = undefined
+  }
+}
+
+/** Agenda a releitura da sessão no instante em que ela vence, para a tela sair sozinha. */
+function agendarExpiracao(sessao: Sessao): void {
+  cancelarExpiracao()
+  const atraso = Math.min(Math.max(sessao.expiraEm - Date.now(), 0), ATRASO_MAXIMO_TIMER)
+  timerExpiracao = setTimeout(() => {
+    timerExpiracao = undefined
+    const atual = lerSessao()
+    if (atual) {
+      agendarExpiracao(atual)
+    }
+  }, atraso)
+}
+
+function limparCache(): void {
   ultimoBruto = null
   ultimaSessao = null
+  cancelarExpiracao()
+}
+
+function removerDoStorage(): void {
+  limparCache()
   try {
     globalThis.localStorage?.removeItem(CHAVE_SESSAO)
   } catch {
@@ -92,7 +138,21 @@ function sessaoValida(valor: unknown): valor is Sessao {
   )
 }
 
+/**
+ * Lê a sessão do storage. Se uma sessão já lida sumir (vencida, corrompida ou
+ * apagada), os assinantes são avisados para a tela voltar ao login e limpar o
+ * cache, mesmo que quem notou tenha sido uma requisição e não a interface.
+ */
 export function lerSessao(): Sessao | null {
+  const anterior = ultimaSessao
+  const atual = lerSessaoDoStorage()
+  if (anterior !== null && atual === null) {
+    notificarDepois()
+  }
+  return atual
+}
+
+function lerSessaoDoStorage(): Sessao | null {
   let bruto: string | null = null
   try {
     bruto = globalThis.localStorage?.getItem(CHAVE_SESSAO) ?? null
@@ -101,8 +161,7 @@ export function lerSessao(): Sessao | null {
   }
 
   if (!bruto) {
-    ultimoBruto = null
-    ultimaSessao = null
+    limparCache()
     return null
   }
 
@@ -119,6 +178,7 @@ export function lerSessao(): Sessao | null {
         login: parsed.login,
         expiraEm: parsed.expiraEm,
       }
+      agendarExpiracao(ultimaSessao)
     } catch {
       removerDoStorage()
       return null
@@ -142,6 +202,7 @@ export function salvarSessao(token: Token, login: string): Sessao {
   const serializado = JSON.stringify(novaSessao)
   ultimoBruto = serializado
   ultimaSessao = novaSessao
+  agendarExpiracao(novaSessao)
 
   try {
     globalThis.localStorage?.setItem(CHAVE_SESSAO, serializado)
@@ -154,13 +215,8 @@ export function salvarSessao(token: Token, login: string): Sessao {
 }
 
 export function encerrarSessao(): void {
-  const tinhaSessao = ultimaSessao !== null || ultimoBruto !== null
   removerDoStorage()
-  if (tinhaSessao) {
-    notificarAssinantes()
-  } else {
-    notificarAssinantes()
-  }
+  notificarAssinantes()
 }
 
 /**
@@ -178,8 +234,7 @@ export function assinarSessao(cb: () => void): () => void {
 
   const aoMudarStorage = (evento: StorageEvent) => {
     if (evento.key === null || evento.key === CHAVE_SESSAO) {
-      ultimoBruto = null
-      ultimaSessao = null
+      limparCache()
       cb()
     }
   }
