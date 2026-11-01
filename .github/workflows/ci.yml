@@ -1,0 +1,99 @@
+name: Aplicação
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+permissions:
+  contents: read
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.paths.outputs.backend }}
+      faturas: ${{ steps.paths.outputs.faturas }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: paths
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          python - <<'PY'
+          import os
+          import subprocess
+          base = os.environ['BASE_SHA']
+          head = os.environ['HEAD_SHA']
+          args = ['git', 'diff', '--name-only', '--no-renames', base, head]
+          if not base or set(base) == {'0'}:
+              args = ['git', 'ls-files']
+          paths = subprocess.check_output(args, text=True).splitlines()
+          prefixes = ('backend/', 'ai-agent/', 'importador/', 'contracts/',
+                      'infra/postgres/', 'tests/', 'scripts/')
+          files = {'pyproject.toml', 'uv.lock', '.python-version', 'conftest.py',
+                   'docker-compose.yml', 'docker-compose.override.yml', '.dockerignore',
+                   '.github/workflows/ci.yml', '.env.example'}
+          changed = any(p.startswith(prefixes) or p in files for p in paths)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'backend={str(changed).lower()}\n')
+              faturas = any(p.startswith('data-engineering/') or p in {
+                  'tests/test_publicacao_faturas.py', 'tests/RegexFaturas.java',
+                  '.github/workflows/ci.yml',
+                  '.github/workflows/faturas.yml'} for p in paths)
+              output.write(f'faturas={str(faturas).lower()}\n')
+          PY
+  backend:
+    needs: [changes]
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.23'
+          enable-cache: true
+      - run: uv sync --frozen --all-packages
+      - run: uv run ruff check backend ai-agent importador contracts conftest.py
+      - run: uv run ruff format --check backend ai-agent importador contracts conftest.py
+      - run: uv run pytest -q
+  faturas:
+    needs: [changes]
+    if: needs.changes.outputs.faturas == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: python -m unittest discover -s tests -p test_publicacao_faturas.py -v
+  ci:
+    name: CI
+    if: always()
+    needs: [changes, backend, faturas]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Conferir resultado
+        env:
+          FATURAS_RESULT: ${{ needs.faturas.result }}
+          FATURAS_CHANGED: ${{ needs.changes.outputs.faturas }}
+          BACKEND_RESULT: ${{ needs.backend.result }}
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          BACKEND_CHANGED: ${{ needs.changes.outputs.backend }}
+        run: |
+          test "$CHANGES_RESULT" = success
+          if [ "$BACKEND_CHANGED" = true ]; then
+            test "$BACKEND_RESULT" = success
+          else
+            test "$BACKEND_RESULT" = skipped
+          fi
+          if [ "$FATURAS_CHANGED" = true ]; then
+            test "$FATURAS_RESULT" = success
+          else
+            test "$FATURAS_RESULT" = skipped
+          fi

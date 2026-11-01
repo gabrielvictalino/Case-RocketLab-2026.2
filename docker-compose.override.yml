@@ -1,0 +1,8 @@
+# Apenas desenvolvimento; o Compose base não publica portas.
+services:
+  postgres:
+    ports: ['127.0.0.1:5432:5432']
+  redis:
+    ports: ['127.0.0.1:6379:6379']
+  backend:
+    ports: ['127.0.0.1:8000:8000']

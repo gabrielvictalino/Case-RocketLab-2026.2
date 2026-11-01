@@ -1,0 +1,13 @@
+id_uc,score,motivos,energia_recuperar_kwh,energia_recuperar_reais
+UC100000,100,"[""Sinal exclusivamente sintético""]",100,80
+UC100001,99,"[""Sinal exclusivamente sintético""]",101,81
+UC100002,98,"[""Sinal exclusivamente sintético""]",102,82
+UC100003,97,"[""Sinal exclusivamente sintético""]",103,83
+UC100004,96,"[""Sinal exclusivamente sintético""]",104,84
+UC100005,95,"[""Sinal exclusivamente sintético""]",105,85
+UC100006,94,"[""Sinal exclusivamente sintético""]",106,86
+UC100007,93,"[""Sinal exclusivamente sintético""]",107,87
+UC100008,92,"[""Sinal exclusivamente sintético""]",108,88
+UC100009,91,"[""Sinal exclusivamente sintético""]",109,89
+UC100010,90,"[""Sinal exclusivamente sintético""]",110,90
+UC100011,89,"[""Sinal exclusivamente sintético""]",111,91

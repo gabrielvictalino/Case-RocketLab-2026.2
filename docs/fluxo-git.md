@@ -82,22 +82,27 @@ Não habilita exclusão automática de branches para preservar `dev`.
 Confira as regras em Settings → Rules → Rulesets; disponibilidade de proteção
 em repositórios privados depende do plano GitHub.
 
-### CI da aplicação: pendente de definição da stack
+### CI da aplicação
 
-Neste momento o repositório contém apenas documentação e templates, sem
-backend, frontend, manifests ou comandos de build/teste/lint. O check atual
-valida o processo Git; ele não certifica uma aplicação compilada ou testada.
+O workflow `ci.yml` executa Ruff (lint e formatação) e pytest do workspace Python,
+incluindo os testes existentes do fluxo Git. Usa Python 3.12, uv com lockfile
+congelado e PostgreSQL 17/Redis 7 reais via Testcontainers. O workflow roda em
+todas as PRs/pushes para `dev` e `main`. Um detector compara as revisões e o job
+de backend roda quando mudam os pacotes Python, contratos, infraestrutura Postgres,
+testes, scripts ou arquivos compartilhados (lockfile, Compose, CI e configuração).
+O agregador `CI` sempre executa: aceita backend pulado apenas quando o detector
+confirma ausência de mudanças relevantes; falha se o detector ou backend falhar
+ou for cancelado. O workflow obrigatório não usa filtros de evento por caminho.
 
-No PR que introduzir cada aplicação, adicione ao GitHub Actions:
+Os rulesets versionados exigem `Fluxo Git` e `CI`. Sua ativação continua sendo
+administrativa: depois da integração/revisão, reaplique
+`bash scripts/configurar-github.sh`. A implementação local do backend não altera
+proteções remotas. `fluxo-git.yml` permanece independente e obrigatório.
 
-- Build e lint de backend e frontend.
-- Testes unitários de backend e frontend com lógica de negócio.
-- Testes de integração com Postgres real via Testcontainers assim que a
-  estratégia de testes for definida.
-
-Inclua os novos checks obrigatórios em ambos os rulesets e reaplique o script
-no mesmo ciclo de configuração. Evite checks filtrados por caminho sem um
-check agregador que sempre execute. Este documento deve acompanhar essas decisões.
+Frontend ainda não foi implementado. Quando for introduzido, inclua seu build,
+lint e testes e faça o agregador depender também desse job. Evite filtros que
+deixem checks obrigatórios pendentes. Comandos locais estão no
+[README do backend](../backend/README.md).
 
 ## Verificação local
 

@@ -11,3 +11,8 @@ build/
 .vscode/
 .idea/
 *.log
+node_modules/
+frontend/dist/
+.pytest_cache/
+.ruff_cache/
+.coverage

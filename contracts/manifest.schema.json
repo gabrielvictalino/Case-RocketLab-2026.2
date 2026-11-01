@@ -1,0 +1,476 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "batch_id",
+    "contract_version",
+    "synthetic",
+    "period",
+    "tables"
+  ],
+  "properties": {
+    "batch_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "contract_version": {
+      "const": "0.2.0-provisional"
+    },
+    "synthetic": {
+      "type": "boolean"
+    },
+    "period": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "end"
+      ],
+      "properties": {
+        "start": {
+          "type": "string",
+          "pattern": "^[1-9]\\d{3}-(0[1-9]|1[0-2])$"
+        },
+        "end": {
+          "type": "string",
+          "pattern": "^[1-9]\\d{3}-(0[1-9]|1[0-2])$"
+        }
+      }
+    },
+    "tables": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "atendimentos",
+        "atendimentos_historico",
+        "continuidade_alimentador_mensal",
+        "dim_alimentador",
+        "dim_uc",
+        "fila_inspecao",
+        "gd_uc",
+        "inspecoes_historicas",
+        "medidores_historico",
+        "ocorrencias_uc",
+        "receita_volume_mensal",
+        "uc_consumo_faturamento_mensal"
+      ],
+      "properties": {
+        "atendimentos": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "file",
+            "rows",
+            "sha256",
+            "totals"
+          ],
+          "properties": {
+            "file": {
+              "const": "atendimentos.csv"
+            },
+            "rows": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "totals": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [],
+              "properties": {}
+            }
+          }
+        },
+        "atendimentos_historico": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "file",
+            "rows",
+            "sha256",
+            "totals"
+          ],
+          "properties": {
+            "file": {
+              "const": "atendimentos_historico.csv"
+            },
+            "rows": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "totals": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [],
+              "properties": {}
+            }
+          }
+        },
+        "continuidade_alimentador_mensal": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "file",
+            "rows",
+            "sha256",
+            "totals"
+          ],
+          "properties": {
+            "file": {
+              "const": "continuidade_alimentador_mensal.csv"
+            },
+            "rows": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "totals": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [],
+              "properties": {}
+            }
+          }
+        },
+        "dim_alimentador": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "file",
+            "rows",
+            "sha256",
+            "totals"
+          ],
+          "properties": {
+            "file": {
+              "const": "dim_alimentador.csv"
+            },
+            "rows": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "totals": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [],
+              "properties": {}
+            }
+          }
+        },
+        "dim_uc": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "file",
+            "rows",
+            "sha256",
+            "totals"
+          ],
+          "properties": {
+            "file": {
+              "const": "dim_uc.csv"
+            },
+            "rows": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "totals": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [],
+              "properties": {}
+            }
+          }
+        },
+        "fila_inspecao": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "file",
+            "rows",
+            "sha256",
+            "totals"
+          ],
+          "properties": {
+            "file": {
+              "const": "fila_inspecao.csv"
+            },
+            "rows": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "totals": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "energia_recuperar_kwh",
+                "energia_recuperar_reais"
+              ],
+              "properties": {
+                "energia_recuperar_kwh": {
+                  "type": "string",
+                  "pattern": "^-?\\d+(\\.\\d+)?$"
+                },
+                "energia_recuperar_reais": {
+                  "type": "string",
+                  "pattern": "^-?\\d+(\\.\\d+)?$"
+                }
+              }
+            }
+          }
+        },
+        "gd_uc": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "file",
+            "rows",
+            "sha256",
+            "totals"
+          ],
+          "properties": {
+            "file": {
+              "const": "gd_uc.csv"
+            },
+            "rows": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "totals": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [],
+              "properties": {}
+            }
+          }
+        },
+        "inspecoes_historicas": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "file",
+            "rows",
+            "sha256",
+            "totals"
+          ],
+          "properties": {
+            "file": {
+              "const": "inspecoes_historicas.csv"
+            },
+            "rows": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "totals": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kwh_recuperado"
+              ],
+              "properties": {
+                "kwh_recuperado": {
+                  "type": "string",
+                  "pattern": "^-?\\d+(\\.\\d+)?$"
+                }
+              }
+            }
+          }
+        },
+        "medidores_historico": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "file",
+            "rows",
+            "sha256",
+            "totals"
+          ],
+          "properties": {
+            "file": {
+              "const": "medidores_historico.csv"
+            },
+            "rows": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "totals": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [],
+              "properties": {}
+            }
+          }
+        },
+        "ocorrencias_uc": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "file",
+            "rows",
+            "sha256",
+            "totals"
+          ],
+          "properties": {
+            "file": {
+              "const": "ocorrencias_uc.csv"
+            },
+            "rows": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "totals": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "duracao_min",
+                "duracao_efetiva_min"
+              ],
+              "properties": {
+                "duracao_min": {
+                  "type": "string",
+                  "pattern": "^-?\\d+(\\.\\d+)?$"
+                },
+                "duracao_efetiva_min": {
+                  "type": "string",
+                  "pattern": "^-?\\d+(\\.\\d+)?$"
+                }
+              }
+            }
+          }
+        },
+        "receita_volume_mensal": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "file",
+            "rows",
+            "sha256",
+            "totals"
+          ],
+          "properties": {
+            "file": {
+              "const": "receita_volume_mensal.csv"
+            },
+            "rows": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "totals": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "volume_faturado_kwh",
+                "receita",
+                "receita_arrecadada"
+              ],
+              "properties": {
+                "volume_faturado_kwh": {
+                  "type": "string",
+                  "pattern": "^-?\\d+(\\.\\d+)?$"
+                },
+                "receita": {
+                  "type": "string",
+                  "pattern": "^-?\\d+(\\.\\d+)?$"
+                },
+                "receita_arrecadada": {
+                  "type": "string",
+                  "pattern": "^-?\\d+(\\.\\d+)?$"
+                }
+              }
+            }
+          }
+        },
+        "uc_consumo_faturamento_mensal": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "file",
+            "rows",
+            "sha256",
+            "totals"
+          ],
+          "properties": {
+            "file": {
+              "const": "uc_consumo_faturamento_mensal.csv"
+            },
+            "rows": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "totals": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "volume_faturado_kwh",
+                "valor_total",
+                "valor_arrecadado"
+              ],
+              "properties": {
+                "volume_faturado_kwh": {
+                  "type": "string",
+                  "pattern": "^-?\\d+(\\.\\d+)?$"
+                },
+                "valor_total": {
+                  "type": "string",
+                  "pattern": "^-?\\d+(\\.\\d+)?$"
+                },
+                "valor_arrecadado": {
+                  "type": "string",
+                  "pattern": "^-?\\d+(\\.\\d+)?$"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

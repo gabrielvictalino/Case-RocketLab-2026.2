@@ -1,4 +1,5 @@
 """Exercita eventos reais contra um repositório Git temporário."""
+
 import importlib.util
 import os
 from pathlib import Path
@@ -6,7 +7,9 @@ import subprocess
 import tempfile
 import unittest
 
-spec = importlib.util.spec_from_file_location('fluxo', Path(__file__).parents[1] / 'scripts/validar-fluxo-git.py')
+spec = importlib.util.spec_from_file_location(
+    'fluxo', Path(__file__).parents[1] / 'scripts/validar-fluxo-git.py'
+)
 fluxo = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fluxo)
 
@@ -38,9 +41,13 @@ class FlowTests(unittest.TestCase):
         return self.git('rev-parse', 'HEAD')
 
     def event(self, end, base='dev', head='feat/42-calculo', repo='owner/repo'):
-        return {'pull_request': {'base': {'ref': base, 'sha': self.base},
+        return {
+            'pull_request': {
+                'base': {'ref': base, 'sha': self.base},
                 'head': {'ref': head, 'sha': end, 'repo': {'full_name': repo}},
-                'title': 'chore(ci): configura validações'}}
+                'title': 'chore(ci): configura validações',
+            }
+        }
 
     def test_valid_feature_ignores_legacy_commits(self):
         fluxo.validate(self.event(self.change()), 'pull_request', 'owner/repo')
@@ -68,12 +75,16 @@ class FlowTests(unittest.TestCase):
 
     def test_whitespace_is_rejected(self):
         with self.assertRaises(subprocess.CalledProcessError):
-            fluxo.validate(self.event(self.change(content='novo  \n')), 'pull_request', 'owner/repo')
+            fluxo.validate(
+                self.event(self.change(content='novo  \n')), 'pull_request', 'owner/repo'
+            )
 
     def test_push_and_first_push(self):
         end = self.change()
         for before in (self.base, '0' * 40):
-            fluxo.validate({'ref': 'refs/heads/dev', 'before': before, 'after': end}, 'push', 'owner/repo')
+            fluxo.validate(
+                {'ref': 'refs/heads/dev', 'before': before, 'after': end}, 'push', 'owner/repo'
+            )
 
 
 if __name__ == '__main__':
