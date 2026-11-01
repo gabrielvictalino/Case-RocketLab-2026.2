@@ -6,6 +6,7 @@ A role `ai_read`, o `statement_timeout` e o `ROLLBACK` de cada consulta continua
 valendo como camadas independentes.
 """
 
+import re
 from collections.abc import Collection
 
 import sqlglot
@@ -19,6 +20,11 @@ from sqlglot.optimizer.simplify import simplify
 
 SCHEMA = 'ai_read'
 LIMITE_MAXIMO = 1000
+TIPOS_INTEIROS = (exp.DataType.Type.SMALLINT, exp.DataType.Type.INT, exp.DataType.Type.BIGINT)
+
+# O que o Postgres aceita depois de uma consulta entre parênteses, como em
+# (SELECT ...) LIMIT 5. Ele leva isso para dentro, como se não houvesse parênteses.
+MODIFICADORES_FORA_DOS_PARENTESES = frozenset({'with_', 'order', 'limit', 'offset', 'locks'})
 
 # O sqlglot tipa as funções SQL comuns (agregação, data, texto, janela). As que ele
 # não conhece chegam como Anonymous, e entre elas estão as administrativas do
@@ -92,7 +98,7 @@ def validar_sql(sql: str, views: Collection[str]) -> str:
     # O Postgres guarda em minúsculas os nomes criados sem aspas.
     views = frozenset(view.lower() for view in views)
     try:
-        arvore = _uma_instrucao(sql)
+        arvore = _tirar_parenteses(_uma_instrucao(sql))
         for tabela in _conferir(arvore, views):
             tabela.set('db', exp.to_identifier(SCHEMA))
         _impor_limite(arvore)
@@ -123,6 +129,24 @@ def _uma_instrucao(sql: str) -> exp.Expression:
             f'Envie exatamente uma instrução SQL; foram recebidas {len(instrucoes)}.'
         )
     return instrucoes[0]
+
+
+def _tirar_parenteses(arvore: exp.Expression) -> exp.Expression:
+    """Lê (SELECT ...) LIMIT 5 como SELECT ... LIMIT 5, como o Postgres faz."""
+    while isinstance(arvore, exp.Subquery):
+        interna = arvore.this.pop()
+        for chave, valor in arvore.args.items():
+            if not valor:
+                continue
+            # O Postgres também recusa dois LIMIT ou ORDER BY, um dentro e outro fora.
+            if chave not in MODIFICADORES_FORA_DOS_PARENTESES or interna.args.get(chave):
+                raise SQLRejeitado(
+                    'Escreva a consulta sem os parênteses em volta, '
+                    'com um só ORDER BY e LIMIT no fim.'
+                )
+            interna.set(chave, valor)
+        arvore = interna
+    return arvore
 
 
 def _conferir(arvore: exp.Expression, views: frozenset[str]) -> list[exp.Table]:
@@ -242,8 +266,11 @@ def _linhas_pedidas(limite: exp.Expression | None) -> int | None:
     else:
         raise SQLRejeitado(f'Limite não suportado: {limite.sql(dialect=DIALETO)}. Use LIMIT n.')
     valor = simplify(valor.copy(), dialect=DIALETO)
-    # O Postgres aceita LIMIT '5', convertendo o texto em número.
-    if valor.is_string and valor.name.isascii() and valor.name.isdigit():
+    # LIMIT 5::int e LIMIT CAST('5' AS bigint) valem o mesmo que LIMIT 5.
+    while isinstance(valor, exp.Cast) and valor.to.is_type(*TIPOS_INTEIROS):
+        valor = simplify(valor.this, dialect=DIALETO)
+    # O Postgres aceita LIMIT '5' e LIMIT ' 5', convertendo o texto em número.
+    if valor.is_string and re.fullmatch(r'\s*\+?[0-9]+\s*', valor.name, re.ASCII):
         return int(valor.name)
     if valor.is_int and valor.to_py() >= 0:
         return valor.to_py()
