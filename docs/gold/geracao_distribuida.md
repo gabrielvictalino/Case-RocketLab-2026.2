@@ -31,7 +31,7 @@ O quadro abaixo conecta cada uma das 4 tabelas geradas às lideranças da V-Ener
 | **`` `v-energy`.gold.gd_uc ``** | 1 linha por UC com GD (`id_uc`) | **Camila Barreto (Atendimento)** · Tela *Unidade Consumidora (Visão 360)* e Importador (`contracts/tabelas/gd_uc.yaml`) | • *"Esse cliente tem painel solar conectado? Qual a potência instalada e desde quando?"*<br>• Alimenta diretamente o cabeçalho da Visão 360 (`GET /api/v1/ucs/{id_uc}`) e a explicação determinística da conta. |
 | **`` `v-energy`.gold.tb_gd_uc ``** | 1 linha por UC com GD (`gd_uc_sk`, `id_uc`) | **Patrícia Lins (TI / Agente IA)**, **Rafael Coutinho (Perdas)** e **Henrique Duarte (Comercial)** | • *"Quantas unidades com painel solar em Olinda tiveram queda de consumo acima de 30%?"* (Patrícia Lins — respondida direto por `WHERE municipio = 'Olinda' AND flag_queda_acima_30_pct = true` $\rightarrow$ **327 de 328 UCs**).<br>• *"Quais UCs tiveram queda brusca de consumo por motivo legítimo (painel solar) e NÃO devem ir para a fila de inspeção de fraude?"* (Rafael Coutinho — evita 3.510 falsos positivos na fila).<br>• *"Quanto cada UC com GD consumia em média/mediana antes da conexão versus depois, e qual a razão entre a queda de consumo e a injeção declarada?"* |
 | **`` `v-energy`.gold.tb_gd_consumo_mensal ``** | `UC × competência` (`id_uc`, `competencia`) | **Henrique Duarte (Comercial)**, **Camila Barreto (Atendimento)** e **Agente IA** | • *"Em quais meses específicos esta UC já operava com geração distribuída (`flag_gd_ativa_competencia`)?"* (Impede vazamento temporal ao classificar o `grupo_uc = 'GD'` apenas a partir da competência de conexão).<br>• *"Como evoluiu o consumo mensal da UC antes e depois da instalação do painel solar, separando leitura real, leitura estimada e mês de troca de medidor?"* |
-| **`` `v-energy`.gold.tb_gd_resumo_mensal ``** | `competência × município × bairro × classe × modalidade` | **Henrique Duarte (Comercial)** · Telas *Visão Geral* e *Receita* · **Diagnóstico da Receita** | • *"Onde e por que o volume faturado caiu quase 4% entre o primeiro ano e os últimos 12 meses?"* (Mostra que a GD sozinha retirou ~11,1 GWh / −61% nas classes Residencial e Comercial).<br>• *"Qual é o ritmo de novas conexões solares por mês e qual o estoque acumulado de potência ativa (`potencia_instalada_ativa_kwp`) em cada município e bairro?"* |
+| **`` `v-energy`.gold.tb_gd_resumo_mensal ``** | `competência × município × bairro × classe × modalidade` | **Henrique Duarte (Comercial)** · Telas *Visão Geral* e *Receita* · **Diagnóstico da Receita** | • *"Onde e por que o volume faturado caiu quase 4% entre o primeiro ano e os últimos 12 meses?"* (Mostra que as UCs com GD perderam ~11,2 GWh de volume analítico entre P0 e P1, −61%, todas nas classes Residencial e Comercial).<br>• *"Qual é o ritmo de novas conexões solares por mês e qual o estoque acumulado de potência ativa (`potencia_instalada_ativa_kwp`) em cada município e bairro?"* |
 
 > A visão consolidada de todas as tabelas Gold do projeto (para que toda a equipe agregue seus domínios num único lugar) está em [`docs/gold/decisoes_silver_to_gold.md`](decisoes_silver_to_gold.md).
 
@@ -86,8 +86,8 @@ Conexões novas e estoque ativo **não** são calculados só a partir das leitur
 
 ### 4.5. Impacto no volume entre o primeiro ano (`P0`) e os últimos 12 meses (`P1`)
 Na base completa (3.510 UCs com GD, potência instalada corrigida total de **31.865,60 kWp**, sendo **3.127 Residenciais** e **383 Comerciais**):
-- **Volume em `P0` (`jul/2022–jun/2023`):** **18,30 GWh** (`18.295.442 kWh`).
-- **Volume em `P1` (`jul/2025–jun/2026`):** **7,01 GWh** considerando apenas leituras utilizáveis (−61,7%) ou **7,16 GWh** com a imputação analítica dos meses de troca (−60,9%), confirmando a queda de **~61% (−11,1 GWh)** reportada no Diagnóstico da Receita.
+- **Volume em `P0` (`jul/2022–jun/2023`):** **18,30 GWh** (`18.295.246 kWh` utilizável; `18.298.228 kWh` analítico).
+- **Volume em `P1` (`jul/2025–jun/2026`):** **7,01 GWh** considerando apenas leituras utilizáveis (−61,7%, −11,3 GWh) ou **7,09 GWh** com a imputação analítica dos meses de troca (−61,2%, −11,2 GWh). O Diagnóstico da Receita chega à mesma queda de ~61% medindo volume faturado (leituras com fatura na competência): 18,3 GWh → 7,2 GWh, −11,1 GWh.
 
 ---
 
@@ -111,7 +111,7 @@ Na base completa (3.510 UCs com GD, potência instalada corrigida total de **31.
 | `id_uc` | `string` | Não | Chave natural da UC (`^UC\d{6}$`) |
 | `municipio`, `bairro`, `classe` | `string` | Não | Localização e classe tarifária padronizadas vindas da Silver de UC |
 | `subgrupo_tarifario`, `alimentador`, `status` | `string` | Não | Subgrupo (`B1`, `B3`), alimentador (`ALM-...`) e status cadastral |
-| `data_ligacao` | `date` | Sim | Data de ligação da UC no cadastro |
+| `data_ligacao` | `date` | Sim | Data de ligação da UC no cadastro; NULL quando o cadastro não tem data válida (a Silver de UC anula as datas sentinela de 1900 a 1948: 9 UCs com GD nesta extração) |
 | `data_conexao` | `date` | Não | Data de conexão da GD |
 | `competencia_conexao` | `date` | Não | Primeiro dia do mês de `data_conexao` (`yyyy-MM-01`) |
 | `modalidade`, `modalidade_origem` | `string` | Não | Código padronizado (`PROPRIA_UC`, `AUTOCONSUMO_REMOTO`, `COMPARTILHADA`) e texto original |
