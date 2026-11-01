@@ -3,8 +3,8 @@
 **Projeto:** V-Energy Grid 360
 **Domínio:** Unidades Consumidoras (UCs)
 **Camada:** Silver
-**Versão:** 2.1 (Unificada em `` `v-energy` ``)
-**Data:** 31 de outubro de 2026
+**Versão:** 2.2 (Unificada em `` `v-energy` ``)
+**Data:** 1 de novembro de 2026
 **Notebook:** `data-engineering/bronze_to_silver/bronze-to-silver-unidades-consumidoras.ipynb`
 
 ---
@@ -34,15 +34,15 @@ Princípios adotados:
 ## 3. Fluxo de Processamento
 
 1. **Leitura da Bronze (`VERSION AS OF`)** e verificação de que as 18 colunas esperadas existem.
-2. **Normalização mínima das chaves** (`id_uc` em caixa alta e sem espaços nas bordas; `nome_titular` sem espaços repetidos) apenas para avaliar regras. As colunas originais permanecem intactas até a etapa de padronização.
+2. **Normalização mínima das chaves** (`id_uc` em caixa alta; em `id_uc` e `nome_titular`, espaços, tabs e quebras de linha viram um espaço e as bordas são aparadas) apenas para avaliar regras. As colunas originais permanecem intactas até a etapa de padronização.
 3. **Rejeição pré-deduplicação** (seção 4): lixo, cabeçalhos repetidos, dados de teste e nulos em campos obrigatórios vão para a quarentena.
-4. **Tipagem da data de ligação** antes da deduplicação, com restrição de faixa `[1900-01-01, DATA_EXECUCAO]`.
+4. **Tipagem da data de ligação** antes da deduplicação: só o formato `AAAA-MM-DD` é convertido, e a data precisa estar em `[1950-01-01, DATA_EXECUCAO]` (seção 7).
 5. **Deduplicação determinística** por `id_uc` (seção 5).
 6. **Validação estrutural de documentos** (seção 6): documentos inválidos vão para a quarentena.
 7. **Padronização e tipagem** das colunas (seção 7), incluindo correção de mojibake UTF-8/Latin-1 nos 59 bairros e preservação das grafias canônicas com acentos (`Jaboatão dos Guararapes`, `Poder Público`).
 8. **Validação bloqueante e reconciliação de volumes em memória** (antes da escrita).
 9. **Gravação Delta protegida por `RESTORE`** e **revalidação sobre as tabelas gravadas**, seguida da aplicação de constraints.
-10. **Perfilamento e alertas** (não bloqueantes).
+10. **Perfilamento e alertas** (não bloqueantes), sem exibir nome, documento ou endereço, porque as saídas do notebook vão para o git.
 
 ---
 
@@ -71,7 +71,8 @@ Ordenação (primeiro critério que diferenciar as linhas):
 1. `ingestion_datetime` decrescente: versão física mais recente.
 2. `data_ligacao` (já tipada como data válida) decrescente, nulos por último.
 3. `source_file` decrescente, nulos por último.
-4. Hash SHA-256 do conteúdo de negócio, decrescente. Este é o desempate final e torna a escolha reproduzível mesmo quando todos os critérios anteriores empatam.
+4. `nome_titular` que não está todo em caixa alta antes do que está. Nas 360 UCs repetidas com linhas diferentes, a diferença é só a caixa do nome (ex.: `Maria Silva` e `MARIA SILVA`) e, em 40 delas, também a máscara do CPF/CNPJ, com os mesmos dígitos. Sem este critério, o hash escolheria a versão em caixa alta em 181 UCs.
+5. Hash SHA-256 do conteúdo de negócio, decrescente. Este é o desempate final e torna a escolha reproduzível mesmo quando todos os critérios anteriores empatam.
 
 ---
 
@@ -98,7 +99,7 @@ Documentos aprovados são padronizados assim: até 11 dígitos recebem `lpad` co
 | Coluna | Regra |
 |---|---|
 | `id_uc` | Trim e caixa alta, validado no padrão `^UC\d{6}$`. |
-| `nome_titular` | Trim e colapso de espaços repetidos. Caixa original preservada. |
+| `nome_titular` | Espaços, tabs e quebras de linha viram um espaço e as bordas são aparadas. Caixa original preservada; entre duplicatas, fica a grafia que não está toda em caixa alta (seção 5). |
 | `cpf_cnpj` | Somente dígitos, `lpad` conforme seção 6. |
 | `logradouro` | Trim e colapso de espaços. Acentos e caixa preservados. |
 | `numero` | Trim. |
@@ -106,8 +107,8 @@ Documentos aprovados são padronizados assim: até 11 dígitos recebem `lpad` co
 | `uf` | Caixa alta; remoção de pontos e espaços (`P.E.` vira `PE`); `PERNAMBUCO` vira `PE`; qualquer valor fora das 27 siglas oficiais vira NULL. |
 | `cep` | Somente dígitos; exatamente 8; valores sentinela (`99991231`, `00000000`) e sequências de dígitos repetidos viram NULL. |
 | `classe` | Mapeada para os 5 valores canônicos do contrato `dim_uc`: `Residencial`, `Comercial`, `Industrial`, `Rural` e `Poder Público`. |
-| `subgrupo_tarifario`, `alimentador`, `status` | Trim, colapso de espaços e caixa alta. |
-| `data_ligacao` | Convertida com `try_cast` para `DATE` (formato `yyyy-MM-dd`). Valores fora de `1900-01-01` até `DATA_EXECUCAO` (sentinelas e datas futuras) viram NULL. |
+| `subgrupo_tarifario`, `alimentador`, `status` | Trim, colapso de espaços e caixa alta. `alimentador` precisa seguir o padrão `^ALM-[A-Z]{3}-\d{3}$` do contrato `dim_uc` (validação bloqueante). |
+| `data_ligacao` | Só texto no formato `AAAA-MM-DD` é convertido para `DATE` (`try_to_date`); `2024` ou `2024-3` viram NULL em vez de 1º de janeiro. Datas fora de `1950-01-01` até `DATA_EXECUCAO` também viram NULL: são as sentinelas `AAAA-01-01` entre 1900 e 1948 (92 linhas na Bronze, 90 UCs depois da deduplicação; as ligações reais começam em 1997) e eventuais datas futuras. O perfilamento mostra quantas datas foram anuladas e por qual motivo. |
 | `latitude`, `longitude` | Vírgula decimal aceita; conversão com `try_cast` para `DOUBLE`. O par é anulado (`NULL`/`NULL`) se qualquer coordenada estiver fora da caixa do Brasil (latitude -34 a 6, longitude -74 a -28) ou não for numérica. |
 
 ---
@@ -154,14 +155,14 @@ Volumetria da base unificada (`` `v-energy`.bronze.tb_unidades_consumidoras ``):
 | `nome_titular` | string | Não | Nome ou razão social. |
 | `logradouro` | string | Sim | Logradouro. |
 | `numero` | string | Sim | Número do endereço (texto, pode conter `S/N`). |
-| `bairro` | string | Sim | Bairro padronizado e com encoding UTF-8 corrigido (272 bairros). |
-| `municipio` | string | Sim | Município padronizado com acentuação canônica (14 municípios). |
+| `bairro` | string | Não | Bairro padronizado e com encoding UTF-8 corrigido (272 bairros). Obrigatório no `dim_uc`. |
+| `municipio` | string | Não | Município padronizado com acentuação canônica (14 municípios). Obrigatório no `dim_uc`. |
 | `uf` | string | Sim | Sigla oficial (`PE`) ou NULL. |
 | `cep` | string | Sim | 8 dígitos ou NULL. |
 | `classe` | string | Não | `Residencial`, `Comercial`, `Industrial`, `Rural` ou `Poder Público`. |
 | `subgrupo_tarifario` | string | Sim | Caixa alta (`B1`, `B2`, `B3`, `A4`). |
-| `alimentador` | string | Sim | Caixa alta (`ALM-<MUN>-<NNN>`). |
-| `data_ligacao` | date | Sim | Data de ligação ou NULL se fora da faixa. |
+| `alimentador` | string | Não | Caixa alta, no padrão `ALM-<MUN>-<NNN>` (`^ALM-[A-Z]{3}-\d{3}$`, contrato `dim_uc`). |
+| `data_ligacao` | date | Sim | Data de ligação, ou NULL quando fora do formato `AAAA-MM-DD` ou da faixa `[1950-01-01, DATA_EXECUCAO]` (90 UCs nesta extração). |
 | `status` | string | Sim | Caixa alta (`ATIVA`). |
 | `latitude` | double | Sim | NULL se o par estiver inválido. |
 | `longitude` | double | Sim | NULL se o par estiver inválido. |
@@ -177,10 +178,14 @@ As validações bloqueantes são executadas sobre `df_silver` e `df_quarentena` 
 
 - Reconciliação de volumes fechando (seção 9) e motivos de quarentena conhecidos.
 - Silver não vazia, `id_uc` único e 100% no padrão `^UC\d{6}$`.
-- Zero nulos em `id_uc`, `cpf_cnpj`, `nome_titular`, `classe` e `bairro`.
+- Zero nulos em `id_uc`, `cpf_cnpj`, `nome_titular` e `classe`; `bairro` e `municipio` preenchidos (nem nulos nem vazios), como exige o contrato `dim_uc`.
 - `cpf_cnpj` somente com 11 ou 14 dígitos e `tipo_documento` coerente com o tamanho.
 - `cep` somente com 8 dígitos e fora da lista de sentinelas.
 - `uf` somente com siglas oficiais ou NULL.
 - `classe` dentro dos 5 valores canônicos do contrato (`Residencial`, `Comercial`, `Industrial`, `Rural`, `Poder Público`).
-- `bairro` sem sequências de encoding corrompido (`Ã`).
+- `alimentador` no padrão `^ALM-[A-Z]{3}-\d{3}$` do contrato `dim_uc`.
+- `data_ligacao` NULL ou entre `1950-01-01` e `DATA_EXECUCAO`.
+- `bairro` e `municipio` sem sequências de encoding corrompido (`Ã`), em checks separados dos de preenchimento.
 - Nenhum `id_uc` iniciado por `TESTE`.
+
+Depois da escrita, o notebook aplica `NOT NULL` em `id_uc`, `cpf_cnpj`, `nome_titular`, `classe`, `municipio`, `bairro` e `alimentador`, além do `CHECK` de tamanho do documento. Uma falha nessa etapa só gera aviso: o bloqueio real é `validar_uc_silver`.
