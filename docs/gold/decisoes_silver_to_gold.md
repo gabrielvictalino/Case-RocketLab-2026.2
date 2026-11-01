@@ -14,7 +14,7 @@ Documento vivo e compartilhado pela equipe de Engenharia de Dados para consolida
 
 | Domínio Gold | Notebook / Módulo | Tabelas Silver Cruzadas (`JOIN`) | Tabelas Gold Publicadas | Lideranças / Módulos Consumidores | Dicionário Detalhado |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **1. Geração Distribuída (GD)** | `silver-to-gold-geracao-distribuida.ipynb`<br>`gold_geracao_distribuida.py` | • `tb_geracao_distribuida`<br>• `tb_unidades_consumidoras`<br>• `tb_leituras` | • `gd_uc`<br>• `tb_gd_uc`<br>• `tb_gd_consumo_mensal`<br>• `tb_gd_resumo_mensal` | • **Henrique Duarte** (Comercial)<br>• **Camila Barreto** (Atendimento)<br>• **Rafael Coutinho** (Perdas)<br>• **Patrícia Lins** (TI / Agente IA) | [`docs/gold/geracao_distribuida.md`](geracao_distribuida.md) |
+| **1. Geração Distribuída (GD)** | `silver-to-gold-geracao-distribuida.ipynb` | • `tb_geracao_distribuida`<br>• `tb_unidades_consumidoras`<br>• `tb_leituras` | • `gd_uc`<br>• `tb_gd_uc`<br>• `tb_gd_consumo_mensal`<br>• `tb_gd_resumo_mensal` | • **Henrique Duarte** (Comercial)<br>• **Camila Barreto** (Atendimento)<br>• **Rafael Coutinho** (Perdas)<br>• **Patrícia Lins** (TI / Agente IA) | [`docs/gold/geracao_distribuida.md`](geracao_distribuida.md) |
 | **2. Faturamento e Receita** | `silver-to-gold-faturas.ipynb`<br>`gold_faturas.py` *(PR #67)* | • `tb_faturas`<br>• `tb_faturas_pendentes_cadastro`<br>• `tb_unidades_consumidoras`<br>• `tb_leituras` | • `tb_faturas`<br>• `tb_faturas_excluidas`<br>• `tb_faturamento_mensal`<br>• `tb_variacao_receita` | • **Henrique Duarte** (Comercial)<br>• **Camila Barreto** (Atendimento)<br>• **Diretoria** (Visão Geral) | `docs/gold/faturas.md` *(em revisão no PR #67)* |
 | **3. Continuidade da Rede (DEC/FEC)** | *(a integrar pela equipe)* | • `tb_ocorrencias_rede`<br>• `tb_unidades_consumidoras` | • `continuidade_alimentador_mensal`<br>• `ocorrencias_uc`<br>• `dim_alimentador` | • **Beatriz Farias** (Operação)<br>• **Camila Barreto** (Atendimento) | *(a adicionar)* |
 | **4. Perdas e Fila de Inspeção** | *(a integrar pela equipe)* | • `tb_inspecoes`<br>• `tb_leituras`<br>• `tb_unidades_consumidoras`<br>• `tb_medidores`<br>• `tb_geracao_distribuida` | • `inspecoes_historicas`<br>• `fila_inspecao` | • **Rafael Coutinho** (Perdas)<br>• **Henrique Duarte** (Comercial) | *(a adicionar)* |
@@ -24,7 +24,7 @@ Documento vivo e compartilhado pela equipe de Engenharia de Dados para consolida
 
 ## 2. Domínio 1 — Geração Distribuída (`GOLD_GD_V1`)
 
-- **Arquivos:** `data-engineering/silver_to_gold/silver-to-gold-geracao-distribuida.ipynb` e `data-engineering/silver_to_gold/gold_geracao_distribuida.py`
+- **Arquivo:** `data-engineering/silver_to_gold/silver-to-gold-geracao-distribuida.ipynb` (autocontido; sem módulo `.py`)
 - **Dicionário completo:** [`docs/gold/geracao_distribuida.md`](geracao_distribuida.md)
 
 ### 2.1. Cruzamentos realizados (`JOIN` entre 3 tabelas Silver)
@@ -69,7 +69,7 @@ Documento vivo e compartilhado pela equipe de Engenharia de Dados para consolida
   1. *"Por que o volume de energia faturada caiu quase 4% entre o primeiro ano (`P0`: jul/22–jun/23) e os últimos 12 meses (`P1`: jul/25–jun/26)? Onde essa perda se concentra?"*
      - **Resposta direta na tabela:** mostra que as 3.510 UCs com GD caíram de **18,30 GWh** em `P0` para **7,01 GWh** (utilizável) / **7,16 GWh** (analítico) em `P1` (**−61%**, ou **−11,1 GWh**), respondendo por ~80% de toda a perda de volume da distribuidora, concentrada exclusivamente nas classes `Residencial` (3.127 UCs) e `Comercial` (383 UCs).
   2. *"O ritmo de novas conexões de geração solar está acelerando ou desacelerando? Qual é a potência instalada ativa (`kWp`) acumulada a cada mês por município e bairro?"*
-     - **Resposta direta na tabela:** colunas `quantidade_novas_conexoes_mes` (mostra a desaceleração de 1.038 conexões no 1º semestre de 2024 para 361 no 1º semestre de 2026) e `potencia_instalada_ativa_kwp` (estoque em operação que atinge **31.865,60 kWp** em jun/2026).
+     - **Resposta direta na tabela:** colunas `quantidade_novas_conexoes_mes` (a soma em todas as competências fecha em **3.510**, porque o mês de conexão vem do cadastro cruzado com o calendário mensal, mesmo sem leitura) e `potencia_instalada_ativa_kwp` (estoque em operação que atinge **31.865,60 kWp** na última competência).
 
 ### 2.3. Decisões de limpeza que afetam métricas da Gold de GD (Auditoria de Indicadores)
 
@@ -80,6 +80,7 @@ Documento vivo e compartilhado pela equipe de Engenharia de Dados para consolida
 | **Respeito à competência de conexão (`flag_gd_ativa_competencia`)** | `quantidade_ucs_gd_ativas`, `potencia_instalada_ativa_kwp`, `consumo_medio_antes_kwh` | Sem comparar `competencia >= competencia_conexao`, UCs que só instalaram painel em 2025/2026 seriam contadas como GD ativa já em 2022–2023 (vazamento temporal). |
 | **Imputação de meses bloqueados pela mediana da própria fase (`fase_gd`)** | `consumo_kwh_analitico`, `volume_p1_analitico_kwh` | Todas as 465 trocas de medidor em UCs com GD ocorreram entre `set/2025` e `mar/2026` (pós-conexão). Imputar pela mediana global dos 48 meses (dominada pelo consumo pré-solar, 3× maior) inflaria o consumo pós-conexão dessas UCs. |
 | **Preservação das 5 UCs com `fl_data_inconsistente = true` sem base pré-conexão** | `flag_queda_acima_30_pct`, `queda_consumo_pct` | As 5 UCs com `data_conexao < data_ligacao` não têm leituras antes da conexão; manter `queda_consumo_pct = NULL` evita divisão por zero ou falsos percentuais, preservando a UC na Visão 360. |
+| **Calendário mensal no resumo de GD** | `quantidade_novas_conexoes_mes`, `quantidade_ucs_gd_ativas`, `potencia_instalada_ativa_kwp` | Sem cruzar o cadastro com o calendário, as 5 UCs cuja conexão antecede a primeira leitura somem de `quantidade_novas_conexoes_mes` (3.505 em vez de 3.510) e a potência ativa fica ausente nos meses sem leitura. |
 
 ---
 

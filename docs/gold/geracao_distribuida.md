@@ -2,8 +2,7 @@
 
 | Item | Referência |
 | :--- | :--- |
-| **Notebook** | `data-engineering/silver_to_gold/silver-to-gold-geracao-distribuida.ipynb` |
-| **Módulo de transformação** | `data-engineering/silver_to_gold/gold_geracao_distribuida.py` |
+| **Notebook** | `data-engineering/silver_to_gold/silver-to-gold-geracao-distribuida.ipynb` (autocontido; sem módulo `.py` e sem `%run`) |
 | **Fontes Silver lidas** | `` `v-energy`.silver.tb_geracao_distribuida ``, `` `v-energy`.silver.tb_unidades_consumidoras ``, `` `v-energy`.silver.tb_leituras `` |
 | **Tabelas Gold publicadas** | `` `v-energy`.gold.gd_uc ``, `` `v-energy`.gold.tb_gd_uc ``, `` `v-energy`.gold.tb_gd_consumo_mensal ``, `` `v-energy`.gold.tb_gd_resumo_mensal `` |
 | **Versão das regras** | `GOLD_GD_V1` |
@@ -77,7 +76,15 @@ Para conciliar a diretriz da Gold de faturas (PR #67, que não estima consumo oc
 - **Caso especial das 5 UCs com `fl_data_inconsistente = true`** (`UC100259`, `UC102507`, `UC106046`, `UC110560` e `UC119180`): nessas 5 unidades, `data_conexao` é anterior à `data_ligacao` e ao início das leituras da UC. Por isso, `qtd_leituras_utilizaveis_antes = 0`, `consumo_medio_antes_kwh = NULL` e `flag_queda_acima_30_pct = NULL` (não há base pré-conexão para calcular percentual de queda).
 - **Reprodução exata da pergunta da Diretora de Tecnologia:** em **Olinda**, há **328 UCs com GD**, sendo 1 delas a `UC119180` (`fl_data_inconsistente = true`, sem leituras antes da conexão). Das 327 UCs com base antes e depois, todas as **327 tiveram queda de consumo acima de 30%** (`327 de 328`, reproduzindo exatamente o número de `docs/overview_dados/perguntas_negocio.md`).
 
-### 4.4. Impacto no volume entre o primeiro ano (`P0`) e os últimos 12 meses (`P1`)
+### 4.4. Calendário mensal de `tb_gd_resumo_mensal`
+Conexões novas e estoque ativo **não** são calculados só a partir das leituras. O notebook cruza o cadastro de GD com o calendário mensal contínuo (`sequence` do menor ao maior mês entre competências de leitura e de conexão):
+
+- Toda UC entra em `quantidade_novas_conexoes_mes` no mês de `competencia_conexao`, mesmo sem leitura nesse mês. A soma, em todas as competências, fecha com o total de UCs com GD (**3.510**), inclusive as 5 UCs com `fl_data_inconsistente = true` (`UC100259`, `UC102507`, `UC106046`, `UC110560`, `UC119180`), cuja conexão antecede a primeira leitura.
+- `quantidade_ucs_gd_ativas` e `potencia_instalada_ativa_kwp` incluem todos os meses a partir da conexão, com ou sem leitura. Na última competência do calendário, o estoque ativo reproduz as 3.510 UCs e os **31.865,60 kWp** do cadastro.
+- Volumes e contagens de leitura continuam vindo só de `tb_gd_consumo_mensal`. Mês sem leitura contribui 0.
+- Meses anteriores à conexão só entram no resumo quando existe leitura, para preservar o volume pré-solar.
+
+### 4.5. Impacto no volume entre o primeiro ano (`P0`) e os últimos 12 meses (`P1`)
 Na base completa (3.510 UCs com GD, potência instalada corrigida total de **31.865,60 kWp**, sendo **3.127 Residenciais** e **383 Comerciais**):
 - **Volume em `P0` (`jul/2022–jun/2023`):** **18,30 GWh** (`18.295.442 kWh`).
 - **Volume em `P1` (`jul/2025–jun/2026`):** **7,01 GWh** considerando apenas leituras utilizáveis (−61,7%) ou **7,16 GWh** com a imputação analítica dos meses de troca (−60,9%), confirmando a queda de **~61% (−11,1 GWh)** reportada no Diagnóstico da Receita.
@@ -154,13 +161,13 @@ Na base completa (3.510 UCs com GD, potência instalada corrigida total de **31.
 | Coluna | Tipo | Nulável | Definição |
 | :--- | :--- | :---: | :--- |
 | `competencia`, `municipio`, `bairro`, `classe`, `modalidade` | `date` / `string` | Não | Chaves do agrupamento |
-| `quantidade_ucs_gd_cadastradas` | `bigint` | Não | Total de UCs da coorte de GD presentes na competência |
-| `quantidade_ucs_gd_ativas` | `bigint` | Não | UCs cujo painel solar já estava conectado na competência (`flag_gd_ativa_competencia = true`) |
-| `quantidade_novas_conexoes_mes` | `bigint` | Não | UCs conectadas exatamente naquela competência (`competencia == competencia_conexao`) |
+| `quantidade_ucs_gd_cadastradas` | `bigint` | Não | UCs já conectadas na competência, mais UCs ainda não conectadas que têm leitura naquele mês |
+| `quantidade_ucs_gd_ativas` | `bigint` | Não | UCs com `competencia >= competencia_conexao`, contadas pelo cadastro cruzado com o calendário, mesmo sem leitura no mês |
+| `quantidade_novas_conexoes_mes` | `bigint` | Não | UCs cuja conexão cai exatamente naquela competência. A soma em todo o resumo é o total de UCs com GD (3.510), com ou sem leitura no mês da conexão |
 | `potencia_cadastrada_kwp` | `decimal(28,2)` | Não | Soma da potência da coorte na competência |
-| `potencia_instalada_ativa_kwp` | `decimal(28,2)` | Não | Estoque de potência em operação na competência (`flag_gd_ativa_competencia = true`) |
+| `potencia_instalada_ativa_kwp` | `decimal(28,2)` | Não | Soma da potência das UCs já conectadas na competência, pelo cadastro cruzado com o calendário, mesmo sem leitura no mês |
 | `energia_injetada_estimada_ativa_kwh` | `decimal(28,2)` | Não | Soma da injeção média declarada das UCs ativas na competência |
-| `quantidade_leituras_utilizaveis`, `quantidade_leituras_bloqueadas` | `bigint` | Não | Contagem de leituras válidas e bloqueadas (soma = `quantidade_ucs_gd_cadastradas`) |
+| `quantidade_leituras_utilizaveis`, `quantidade_leituras_bloqueadas` | `bigint` | Não | Contagem de leituras válidas e bloqueadas. A soma é menor ou igual a `quantidade_ucs_gd_cadastradas`; a diferença são UCs já conectadas sem leitura naquele mês |
 | `volume_utilizavel_kwh`, `volume_utilizavel_gd_ativa_kwh`, `volume_utilizavel_antes_conexao_kwh` | `decimal(28,2)` | Não | Soma de `volume_analise_kwh` total, pós-conexão e pré-conexão |
 | `volume_analitico_kwh`, `volume_analitico_gd_ativa_kwh`, `volume_analitico_antes_conexao_kwh` | `decimal(28,2)` | Não | Soma de `consumo_kwh_analitico` total, pós-conexão e pré-conexão |
 | `versao_regras_gold` | `string` | Não | Constante `GOLD_GD_V1` |
