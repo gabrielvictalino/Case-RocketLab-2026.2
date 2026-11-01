@@ -71,6 +71,10 @@ CONSULTAS_REESCRITAS = [
     'WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r WHERE n < 5) '
     'SELECT sum(n) FROM r',
     'SELECT x FROM generate_series(1, 5) AS g(x) ORDER BY x OFFSET 1 ROWS FETCH NEXT 2 ROWS ONLY',
+    "SELECT x FROM generate_series(1, 5) AS g(x) ORDER BY x LIMIT ' 2 '::int",
+    'SELECT x FROM generate_series(1, 5) AS g(x) ORDER BY x LIMIT CAST(2 AS bigint)',
+    '(SELECT x FROM generate_series(1, 5) AS g(x) ORDER BY x LIMIT 3) OFFSET 1',
+    '(SELECT 1 AS x UNION SELECT 2) ORDER BY x DESC LIMIT 1',
 ]
 
 
