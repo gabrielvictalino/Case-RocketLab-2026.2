@@ -305,6 +305,24 @@ async def test_reload_preserves_operations_and_unified_view(client, headers, db,
         await redis.aclose()
 
 
+async def test_reload_recreates_ai_views_with_grants(db, infrastructure):
+    importer = await asyncpg.connect(infrastructure['importer_url'])
+    try:
+        # Uma view que saiu do views.sql e um grant perdido não sobrevivem à carga.
+        await importer.execute(
+            'CREATE VIEW ai_read.sobra AS SELECT id_uc,titular FROM analytics.dim_uc'
+        )
+        await importer.execute('GRANT SELECT ON ai_read.sobra TO ai_read')
+        await importer.execute('REVOKE SELECT ON ai_read.gd_uc FROM ai_read')
+        await load(SAMPLES, infrastructure['importer_url'])
+        assert await db.fetchval("SELECT to_regclass('ai_read.sobra')") is None
+        assert await db.fetchval("SELECT has_table_privilege('ai_read','ai_read.gd_uc','SELECT')")
+    finally:
+        await importer.execute('DROP VIEW IF EXISTS ai_read.sobra')
+        await importer.execute('GRANT SELECT ON ai_read.gd_uc TO ai_read')
+        await importer.close()
+
+
 async def test_redis_failure_does_not_undo_committed_import(db, infrastructure):
     before = await db.fetchval('SELECT count(*) FROM operations.cargas')
     version = await load(SAMPLES, infrastructure['importer_url'], 'redis://localhost:1/0')

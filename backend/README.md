@@ -61,6 +61,9 @@ também o importador e a suíte completa, use `--all-packages`.
 
 1. `infra/postgres/init.sh` passa as senhas como variáveis psql ao `init.sql`,
    executado uma única vez no volume novo. Cria roles, schemas e `operations.cargas`.
+   Também tira de `PUBLIC` o `EXECUTE` em `set_config` e na família `pg_sleep`, e o
+   devolve só a `portal` e `importador`. Um volume criado antes disso não recebe a
+   mudança: em dev, recrie-o com `docker compose down -v` e refaça migrações, carga e seed.
 2. Alembic usa `DATABASE_URL_MIGRATIONS`, exclusivamente no serviço de migrações.
    Sua tabela de versões e todas as migrações ficam em `operations`. A revisão
    `0001` assume `cargas` já existente e cria usuários, ordens, eventos e inspeções.
@@ -74,6 +77,9 @@ também o importador e a suíte completa, use `--all-packages`.
    troca schemas, recria views como dono `importador`, remove explicitamente FKs
    internas e tabelas antigas e registra a carga. Não usa `CASCADE`. Uma dependência
    desconhecida aborta a publicação e preserva todo o estado anterior.
+5. As views de `ai_read` são apagadas e recriadas a cada carga, cada uma com seu
+   `GRANT SELECT` para `ai_read`. A IA lê só as que estão em `importador/views.sql`,
+   sem nome, documento e endereço do titular nem a descrição das tratativas.
 
 Cada importação ganha um UUID distinto, mesmo para o mesmo `batch_id` de origem.
 O UUID é a versão da carga, também publicada na chave Redis `versao_carga`.

@@ -16,6 +16,14 @@ GRANT USAGE ON SCHEMA operations TO importador;
 ALTER ROLE ai_read SET default_transaction_read_only = on;
 ALTER ROLE ai_read SET statement_timeout = '5s';
 ALTER ROLE ai_read SET search_path = ai_read, pg_catalog;
+-- Sem essas funções, a IA não troca parâmetros da sessão por SELECT nem prende conexões.
+-- O SET continua possível; por isso o agente encerra cada consulta com ROLLBACK.
+REVOKE EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean),
+  pg_catalog.pg_sleep(double precision), pg_catalog.pg_sleep_for(interval),
+  pg_catalog.pg_sleep_until(timestamp with time zone) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean),
+  pg_catalog.pg_sleep(double precision), pg_catalog.pg_sleep_for(interval),
+  pg_catalog.pg_sleep_until(timestamp with time zone) TO portal, importador;
 ALTER DEFAULT PRIVILEGES FOR ROLE importador IN SCHEMA analytics
   GRANT SELECT ON TABLES TO portal;
 CREATE TABLE operations.cargas (
