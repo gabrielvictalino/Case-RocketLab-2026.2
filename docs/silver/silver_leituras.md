@@ -1,8 +1,8 @@
-# Silver de leituras (`venergy.silver.leituras`)
+# Silver de leituras (`` `v-energy`.silver.tb_leituras ``)
 
 **Notebook:** `data-engineering/bronze_to_silver/bronze-to-silver-leituras.ipynb`
-**Fonte:** `venergy.bronze.leituras` (2.182.468 linhas, todas as colunas como texto) e `venergy.bronze.medidores` (cadastro de medidores).
-**Destino:** `venergy.silver.leituras` (Delta, carga completa com `overwrite`).
+**Fonte:** `` `v-energy`.bronze.tb_leituras `` (2.182.468 linhas, todas as colunas como texto) e `` `v-energy`.bronze.tb_medidores `` (cadastro de medidores).
+**Destino:** `` `v-energy`.silver.tb_leituras `` (Delta, carga completa com `overwrite`).
 **Base das regras:** seção 5 de `docs/auditoria_dados/auditoria_leituras.md`.
 
 ---
@@ -12,18 +12,19 @@
 | Passo | Regra | Linhas antes | Linhas depois | Diferença |
 | :--- | :--- | :---: | :---: | :---: |
 | 1 | Remove duplicatas exatas sobre as 9 colunas de negócio | 2.182.468 | 2.160.945 | −21.523 |
-| 2 | Descarta leituras cujo `id_medidor` não existe em `bronze.medidores` (clones `LTX`/`MD9…`) | 2.160.945 | 2.152.336 | −8.609 |
+| 2 | Descarta leituras cujo `id_medidor` não existe em `` `v-energy`.bronze.tb_medidores `` (clones `LTX`/`MD9…`) | 2.160.945 | 2.152.336 | −8.609 |
 | 3 a 8 | Normalização, datas, tipagem, sinal e flags (nenhuma linha é removida) | 2.152.336 | 2.152.336 | 0 |
 
-Depois do passo 2 sobra exatamente **uma leitura por (`id_uc`, `mes_referencia`)**, e nenhum `id_leitura` `LTX` permanece.
+Depois do passo 2 sobra exatamente **uma leitura por (`id_uc`, `mes_referencia`)**, com `id_leitura` único e nenhum `LTX` remanescente.
 
 ---
 
 ## 2. Regras aplicadas
 
-### 2.1. Duplicatas exatas e clones `LTX`
+### 2.1. Leitura fixada (`VERSION AS OF`), duplicatas exatas e clones `LTX`
+* A leitura fixa a versão atual das duas tabelas de entrada (`VERSION AS OF` em `` `v-energy`.bronze.tb_leituras `` e `` `v-energy`.bronze.tb_medidores ``), garantindo que contagens, validações e escrita leiam exatamente o mesmo snapshot da Bronze.
 * `dropDuplicates` sobre `id_leitura`, `id_uc`, `id_medidor`, `data_leitura`, `mes_referencia`, `leitura_anterior`, `leitura_atual`, `consumo_kwh` e `tipo_leitura`. As cópias estão sempre no mesmo arquivo, então `source_file` não muda.
-* `left_semi` com os `id_medidor` distintos de `venergy.bronze.medidores`. Os 8.609 clones apontam para medidores `MD9…` inexistentes e sempre têm uma gêmea legítima `LT` com os mesmos valores, então nenhum consumo se perde.
+* `left_semi` com os `id_medidor` distintos de `` `v-energy`.bronze.tb_medidores ``. Os 8.609 clones apontam para medidores `MD9…` inexistentes e sempre têm uma gêmea legítima `LT` com os mesmos valores, então nenhum consumo se perde.
 
 ### 2.2. `leitura_anterior`
 `''` (que o leitor CSV do Spark já entrega como null), `N/A`, `NULL` e `-1` viram null **antes** da conversão para inteiro. Na base limpa:
@@ -74,7 +75,7 @@ Essas linhas mantêm o valor original de `consumo_kwh`, **sem** inversão, **sem
 
 | Coluna | Tipo | Observação |
 | :--- | :--- | :--- |
-| `id_leitura`, `id_uc`, `id_medidor`, `tipo_leitura` | `STRING` | sem alteração |
+| `id_leitura`, `id_uc`, `id_medidor`, `tipo_leitura` | `STRING` | sem alteração (`tipo_leitura` validada em `REAL` / `ESTIMADA`) |
 | `data_leitura` | `DATE` | |
 | `mes_referencia` | `STRING` | `AAAA-MM`, validado por regex |
 | `leitura_anterior`, `leitura_atual`, `consumo_kwh` | `INT` | `leitura_anterior` nula quando ausente |
@@ -87,15 +88,15 @@ Essas linhas mantêm o valor original de `consumo_kwh`, **sem** inversão, **sem
 
 **Antes de gravar** (qualquer falha interrompe o notebook e a Silver atual não é tocada):
 * contagem de cada passo: 2.182.468 → 2.160.945 → 2.152.336;
-* 2.152.336 linhas e 2.152.336 pares (`id_uc`, `mes_referencia`) distintos;
+* 2.152.336 linhas, 2.152.336 `id_leitura` distintos e 2.152.336 pares (`id_uc`, `mes_referencia`) distintos;
 * nenhuma data nula e nenhum mês de `data_leitura` diferente de `mes_referencia`;
-* `mes_referencia` no formato `AAAA-MM` em todas as linhas;
+* `mes_referencia` no formato `AAAA-MM` e `tipo_leitura` dentro de `REAL` / `ESTIMADA` (1.761.712 `REAL` e 390.624 `ESTIMADA`) em todas as linhas;
 * nenhuma `leitura_anterior` não numérica depois da normalização, nenhuma `leitura_atual` nula e nenhum `consumo_kwh` fora do padrão `-?\d+(\.0)?`;
 * as linhas de `flag_sinal_nao_confirmado` diferem de `atual − anterior` em exatamente 1 kWh;
 * nenhum consumo positivo tem `leitura_anterior > leitura_atual` nem diferença maior que 1 kWh em relação a `atual − anterior` (premissas das flags, que só olham os consumos negativos);
 * contagens das flags iguais às da tabela 2.5, no máximo uma flag por linha e nenhum consumo negativo sem flag.
 
-**Depois de gravar:** colunas na ordem do contrato e 2.152.336 linhas.
+**Depois de gravar (com `RESTORE`):** confere se a tabela gravada tem exatamente as colunas do contrato (`SILVER_COLUMNS`) e as 2.152.336 linhas. Se divergir, reverte a tabela para a versão anterior ao `overwrite` (`RESTORE TABLE ... TO VERSION AS OF`), ou a remove (`DROP TABLE IF EXISTS`) se era a primeira carga.
 
 ---
 
@@ -111,10 +112,5 @@ Os dois resultados batem entre si e com as contagens da auditoria.
 
 ## 5. Uso e decisões pendentes
 
-* **Somar consumo:** os meses com `flag_troca_medidor`, `flag_sem_leitura_anterior` ou `flag_sinal_nao_confirmado` ainda têm o valor negativo original. Até a decisão abaixo, filtre `consumo_kwh > 0` (ou exclua as linhas com essas flags) em qualquer agregação. **Nunca use `abs()`**: no mês da troca o valor absoluto é a leitura acumulada do medidor antigo, e isso infla o volume dos últimos 12 meses em ≈ 177%.
-* **Pendente (time):** como estimar o consumo dos 6.215 meses de troca e das 114 leituras sem leitura anterior (84 delas também trocas):
-  * pelo `valor_energia` da fatura do mês, dividido pela tarifa implícita da classe; ou
-  * pela média de consumo da própria UC.
-* **Pendente (time):** se as 353 leituras de `flag_sinal_nao_confirmado` devem ter o sinal invertido mesmo com a diferença de ±1 kWh (a mesma tolerância já aceita nas leituras positivas).
-* **Pendente (time):** as 30 leituras sem leitura anterior e com o padrão `-N.0` parecem ter o sinal invertido, mas não há como confirmar pela própria linha.
-* **Dependência:** o notebook lê `venergy.bronze.medidores` (PR #8). A Bronze de leituras vem do notebook individual (PR #5), e não do notebook unificado do PR #14.
+* **Somar consumo:** os meses com `flag_troca_medidor`, `flag_sem_leitura_anterior` ou `flag_sinal_nao_confirmado` ainda têm o valor negativo original. Na camada Gold, filtre `consumo_kwh >= 0` sem flags impeditivas (`volume_analise_kwh`) ou impute pela mediana da própria UC (`consumo_kwh_analitico`). **Nunca use `abs()`**: no mês da troca o valor absoluto é a leitura acumulada do medidor antigo, e isso infla o volume dos últimos 12 meses em ≈ 177%.
+* **Dependência:** o notebook lê `` `v-energy`.bronze.tb_leituras `` e `` `v-energy`.bronze.tb_medidores `` da Bronze unificada (`Landing_to_Bronze.ipynb`, PR #14).
