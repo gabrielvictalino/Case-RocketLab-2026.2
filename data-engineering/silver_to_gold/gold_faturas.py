@@ -41,6 +41,21 @@ COLUNAS_AUDITORIA = [
 ]
 
 
+def validar_data_referencia(data_referencia: str) -> date:
+    """Exige uma data de referência preenchida no formato AAAA-MM-DD."""
+    if data_referencia is None or (
+        isinstance(data_referencia, str) and not data_referencia.strip()
+    ):
+        raise ValueError('Preencha data_referencia no formato AAAA-MM-DD (ex.: 2026-10-22)')
+    try:
+        referencia = date.fromisoformat(data_referencia)
+    except (TypeError, ValueError) as erro:
+        raise ValueError('data_referencia deve ser uma data válida no formato AAAA-MM-DD') from erro
+    if referencia.isoformat() != data_referencia:
+        raise ValueError('data_referencia deve usar o formato AAAA-MM-DD (ex.: 2026-10-22)')
+    return referencia
+
+
 def _exigir_colunas(df, colunas, nome):
     ausentes = set(colunas) - set(df.columns)
     if ausentes:
@@ -78,9 +93,7 @@ def construir_faturas(
     Faturas inclui as duas saídas Silver, principal e pendentes, via unionByName.
     A data é a data de referência do retrato de status da extração, não hoje.
     """
-    referencia = date.fromisoformat(data_referencia)
-    if referencia.isoformat() != data_referencia:
-        raise ValueError('data_referencia deve usar AAAA-MM-DD')
+    referencia = validar_data_referencia(data_referencia)
     _exigir_colunas(faturas, COLUNAS_FATURAS, 'faturas')
     _exigir_colunas(cadastro, ['id_uc', *DIMENSOES], 'cadastro')
     _exigir_colunas(
