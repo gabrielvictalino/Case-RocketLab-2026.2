@@ -23,11 +23,29 @@ npm run build          # tsc -b && vite build (saída em dist/)
 npm run preview        # pré-visualiza o build de produção
 ```
 
-## Proxy de desenvolvimento
+Na CI (`.github/workflows/ci.yml`), o job `frontend` usa a versão do Node.js de
+`.nvmrc` e executa `npm ci`, `npm run lint`, `npm run typecheck`, `npm test` e
+`npm run build`.
+
+## Proxy de desenvolvimento e Nginx (produção/Compose)
 
 No `npm run dev`, chamadas para `/api` são redirecionadas pelo Vite para
-`process.env.BACKEND_URL ?? 'http://localhost:8000'` (porta publicada pelo
-`docker-compose.override.yml` do backend).
+`process.env.BACKEND_URL ?? 'http://localhost:8000'` (porta publicada em
+`127.0.0.1:8000` exclusivamente pelo `docker-compose.override.yml` para
+desenvolvimento).
+
+Na subida completa via Docker Compose (`docker compose up -d`), o `infra/nginx/Dockerfile`
+compila o bundle (`dist/`) em multi-stage (`node:24-alpine` → `nginx:1.28-alpine`) e o
+serviço `nginx` é o único que publica porta no `docker-compose.yml` base
+(`${PORTAL_PORT:-80}:80`, acessível em `http://localhost`):
+
+- Serve a SPA com fallback `try_files $uri /index.html` (`Cache-Control: no-cache` no
+  `index.html` e `immutable` por 1 ano em `/assets/`).
+- Faz proxy reverso de `/api/v1/` para `http://backend:8000` propagando `X-Request-ID`,
+  com `client_max_body_size 10m` e retorno `404` JSON para rotas `/api/` fora de `/api/v1/`.
+- Aplica rate limit por IP: `20 req/s` (`burst=40 nodelay`) em `/api/v1/` e `2 req/s`
+  (`burst=5 nodelay`, `proxy_read_timeout 120s`) em `/api/v1/assistente/` e
+  `/api/v1/insights/`, respondendo `429` em JSON com cabeçalho `Retry-After: 1`.
 
 ## Cliente da API e `gen:api`
 
@@ -44,3 +62,16 @@ uv sync --package backend   # na raiz do repositório, se ainda não sincronizad
 cd frontend
 npm run gen:api
 ```
+
+## Login e período
+
+Em desenvolvimento (`app.seed`), os usuários de demonstração são criados com
+login igual ao cargo (`diretoria`, `comercial`, `atendimento`, `perdas` e
+`operacao`) e senha `Demo-Venergy-2026!`. A sessão fica em `localStorage` na
+chave `venergy.sessao` e qualquer resposta `401` fora do login redireciona para
+`/login` preservando a rota de retorno.
+
+O período e o período de comparação globais ficam sincronizados na URL no
+formato `?periodo=AAAA-MM..AAAA-MM&comparacao=AAAA-MM..AAAA-MM` (por padrão, os
+últimos 12 meses contra os mesmos 12 meses do ano anterior, segundo os limites
+de `GET /api/v1/meta/carga`) e são expostos às telas pelo hook `usePeriodo()`.
