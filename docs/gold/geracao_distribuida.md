@@ -126,7 +126,7 @@ Na base completa (3.510 UCs com GD, potência instalada corrigida total de **31.
 | `versao_regras_gold` | `string` | Não | Constante `GOLD_GD_V1` |
 
 ### 5.3. `` `v-energy`.gold.tb_gd_consumo_mensal `` (Fato Mensal `UC × Competência`)
-**Grão:** 1 linha por `(id_uc, competencia)` para as UCs com GD (~167.979 linhas).
+**Grão:** 1 linha por `(id_uc, competencia)` para as UCs com GD (168.083 linhas).
 
 | Coluna | Tipo | Nulável | Definição |
 | :--- | :--- | :---: | :--- |
