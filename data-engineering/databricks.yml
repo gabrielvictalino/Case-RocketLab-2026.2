@@ -1,0 +1,47 @@
+bundle:
+  name: venergy-gold-faturas
+
+variables:
+  data_referencia:
+    description: Data AAAA-MM-DD do retrato de status da extração; não é a competência.
+  diretorio_exportacao:
+    description: Diretório existente em /Volumes/catalogo/schema/volume para os lotes CSV.
+  tabela_faturas:
+    default: v-energy.silver.tb_faturas
+  tabela_pendentes:
+    default: v-energy.silver.tb_faturas_pendentes_cadastro
+  tabela_cadastro:
+    default: v-energy.silver.tb_unidades_consumidoras
+  tabela_leituras:
+    default: v-energy.silver.tb_leituras
+  schema_gold:
+    default: v-energy.gold
+
+resources:
+  jobs:
+    gold_faturas:
+      name: V-Energy - Gold de faturas
+      max_concurrent_runs: 1
+      schedule:
+        quartz_cron_expression: '0 0 3 5 * ?'
+        timezone_id: America/Fortaleza
+        pause_status: PAUSED
+      tasks:
+        - task_key: gold_faturas
+          timeout_seconds: 3600
+          notebook_task:
+            notebook_path: ./silver_to_gold/silver-to-gold-faturas.ipynb
+            base_parameters:
+              modo: publicar
+              data_referencia: ${var.data_referencia}
+              diretorio_exportacao: ${var.diretorio_exportacao}
+              tabela_faturas: ${var.tabela_faturas}
+              tabela_pendentes: ${var.tabela_pendentes}
+              tabela_cadastro: ${var.tabela_cadastro}
+              tabela_leituras: ${var.tabela_leituras}
+              schema_gold: ${var.schema_gold}
+
+targets:
+  dev:
+    default: true
+    mode: development
