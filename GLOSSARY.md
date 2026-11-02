@@ -57,6 +57,10 @@ Competências de jul/2022 a jun/2023, a base usada pelo Diretor Comercial.
 Competências de jul/2025 a jun/2026, as mais recentes da base.
 _Evitar_: último ano, ano atual
 
+**Data de referência**:
+Data do instantâneo financeiro das faturas (AAAA-MM-DD), informada no manifesto da exportação. É usada para calcular dias de atraso de faturas em aberto e delimitar o status das contas na Visão 360.
+_Evitar_: data de corte, data da carga
+
 ### Receita
 
 **Pendência cadastral**:
@@ -83,7 +87,8 @@ Parte da variação de receita explicada pela mudança de preço, dividida em re
 _Evitar_: efeito-tarifa
 
 **Grupo de UC**:
-Recorte que explica a variação de volume: UCs com GD, UCs com irregularidade confirmada e demais.
+Recorte temporal que classifica cada UC na competência: UCs com GD (a partir do mês de conexão), UCs com irregularidade confirmada (a partir do mês da primeira inspeção técnica com irregularidade confirmada) e demais UCs. A ordem de precedência estrita é GD > irregularidade confirmada > demais.
+_Evitar_: tipo de UC, cluster de cliente
 
 **Tarifa média**:
 Receita dividida pelo volume faturado, em R$/kWh. É derivada; a base não tem tabela de tarifas.
