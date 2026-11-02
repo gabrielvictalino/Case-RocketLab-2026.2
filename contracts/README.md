@@ -124,7 +124,8 @@ Onde:
 
 ### Casos de Borda e Regras de Arredondamento
 - Se $Q_0 = 0$ ou $T_0 + B_0 = 0$: $\text{volume} = \Delta R$, e $\text{reajuste} = \text{bandeira} = \text{mix} = 0$.
-- Se $Q_1 = 0$: $\text{volume} = -R_0$, e $\text{reajuste} = \text{bandeira} = \text{mix} = 0$.
+- Se $Q_1 = 0$: $\text{volume} = -R_0$, $\text{reajuste} = \text{bandeira} = 0$ e $\text{mix} = R_1$
+  (cobrança sem volume no período atual, como uma taxa mínima), o que mantém o fechamento em $\Delta R$.
 - Os cálculos são realizados em Decimal de precisão total. Os efeitos de volume, reajuste e bandeira
   são arredondados uma única vez para duas casas decimais com `ROUND_HALF_UP`.
 - O efeito **mix** absorve o resíduo algébrico e de arredondamento, garantindo que
