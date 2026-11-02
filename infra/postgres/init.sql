@@ -24,6 +24,20 @@ REVOKE EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean),
 GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean),
   pg_catalog.pg_sleep(double precision), pg_catalog.pg_sleep_for(interval),
   pg_catalog.pg_sleep_until(timestamp with time zone) TO portal, importador;
+-- O ROLLBACK não solta um advisory lock de sessão: com o lock das cargas, a IA travaria
+-- o importador. Só o importador usa advisory lock.
+REVOKE EXECUTE ON FUNCTION pg_catalog.pg_advisory_lock(bigint),
+  pg_catalog.pg_advisory_lock(integer, integer), pg_catalog.pg_advisory_lock_shared(bigint),
+  pg_catalog.pg_advisory_lock_shared(integer, integer),
+  pg_catalog.pg_try_advisory_lock(bigint), pg_catalog.pg_try_advisory_lock(integer, integer),
+  pg_catalog.pg_try_advisory_lock_shared(bigint),
+  pg_catalog.pg_try_advisory_lock_shared(integer, integer) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_advisory_lock(bigint),
+  pg_catalog.pg_advisory_lock(integer, integer), pg_catalog.pg_advisory_lock_shared(bigint),
+  pg_catalog.pg_advisory_lock_shared(integer, integer),
+  pg_catalog.pg_try_advisory_lock(bigint), pg_catalog.pg_try_advisory_lock(integer, integer),
+  pg_catalog.pg_try_advisory_lock_shared(bigint),
+  pg_catalog.pg_try_advisory_lock_shared(integer, integer) TO importador;
 ALTER DEFAULT PRIVILEGES FOR ROLE importador IN SCHEMA analytics
   GRANT SELECT ON TABLES TO portal;
 CREATE TABLE operations.cargas (
