@@ -1,85 +1,85 @@
-# Camada Silver ? Atendimentos
+# Camada Silver — Atendimentos
 
 ## 1. Objetivo
 
-Nesta etapa do projeto V-Energy Grid 360, fiquei respons?vel pelo tratamento dos dados de atendimentos, realizando a passagem das informa??es da camada Bronze para a Silver.
+Nesta etapa do projeto V-Energy Grid 360, fiquei responsável pelo tratamento dos dados de atendimentos, realizando a passagem das informações da camada Bronze para a Silver.
 
-O objetivo foi padronizar os dados, identificar poss?veis inconsist?ncias e preparar as informa??es para serem utilizadas posteriormente na camada Gold.
+O objetivo foi padronizar os dados, identificar possíveis inconsistências e preparar as informações para serem utilizadas posteriormente na camada Gold.
 
 O processamento foi desenvolvido em PySpark, no notebook `data-engineering/bronze_to_silver/bronze-to-silver-atendimentos.ipynb`.
 
-As tabelas utilizadas s?o:
+As tabelas utilizadas são:
 
 - Origem: `v-energy`.bronze.tb_atendimentos
 - Destino: `v-energy`.silver.tb_atendimentos
-- Refer?ncia de unidades consumidoras: `v-energy`.silver.tb_unidades_consumidoras
+- Referência de unidades consumidoras: `v-energy`.silver.tb_unidades_consumidoras
 
 ## 2. Tratamentos realizados
 
 No notebook, implementei os seguintes tratamentos:
 
-- Remo??o de espa?os desnecess?rios em `protocolo` e `id_uc`.
-- Padroniza??o de `canal`, `assunto` e `subassunto` em letras mai?sculas.
-- Convers?o das datas de abertura e fechamento para timestamp.
-- Convers?o das notas de satisfa??o para double.
-- Padroniza??o das a??es e canais presentes no hist?rico dos atendimentos.
-- Convers?o das datas e sequ?ncias dos eventos para os tipos adequados.
-- Preserva??o dos campos `ingestion_datetime` e `source_file`, utilizados para rastrear a origem dos dados.
+- Remoção de espaços desnecessários em `protocolo` e `id_uc`.
+- Padronização de `canal`, `assunto` e `subassunto` em letras maiúsculas.
+- Conversão das datas de abertura e fechamento para timestamp.
+- Conversão das notas de satisfação para double.
+- Padronização das ações e canais presentes no histórico dos atendimentos.
+- Conversão das datas e sequências dos eventos para os tipos adequados.
+- Preservação dos campos `ingestion_datetime` e `source_file`, utilizados para rastrear a origem dos dados.
 
-Mantive o hist?rico dentro da pr?pria tabela de atendimentos, pois os eventos est?o diretamente relacionados a cada protocolo.
+Mantive o histórico dentro da própria tabela de atendimentos, pois os eventos estão diretamente relacionados a cada protocolo.
 
-## 3. Valida??es dos dados
+## 3. Validações dos dados
 
-Antes de permitir a grava??o, o notebook verifica:
+Antes de permitir a gravação, o notebook verifica:
 
-- Se todas as colunas obrigat?rias existem na Bronze.
-- Se a quantidade de atendimentos foi preservada ap?s as transforma??es.
-- Se existem protocolos duplicados ou identificadores obrigat?rios vazios.
-- Se ocorreram problemas nas convers?es de datas e notas de satisfa??o.
-- Se as datas de abertura e fechamento apresentam inconsist?ncias.
-- Se as notas preenchidas est?o na faixa de 0 a 10, permitindo valores nulos.
+- Se todas as colunas obrigatórias existem na Bronze.
+- Se a quantidade de atendimentos foi preservada após as transformações.
+- Se existem protocolos duplicados ou identificadores obrigatórios vazios.
+- Se ocorreram problemas nas conversões de datas e notas de satisfação.
+- Se as datas de abertura e fechamento apresentam inconsistências.
+- Se as notas preenchidas estão na faixa de 0 a 5, permitindo valores nulos.
 - Se os valores de `id_uc` existem na Silver de unidades consumidoras.
-- Se o hist?rico possui eventos inv?lidos, sequ?ncias duplicadas ou fora de ordem e datas incompat?veis com o per?odo do atendimento.
+- Se o histórico possui eventos inválidos, sequências duplicadas ou fora de ordem e datas incompatíveis com o período do atendimento.
 - Se a quantidade de eventos foi preservada.
 
-A valida??o de `id_uc` utiliza um `left_anti join` para localizar unidades sem correspond?ncia. Caso a tabela de refer?ncia n?o exista, o processamento tamb?m ? interrompido.
+A validação de `id_uc` utiliza um `left_anti join` para localizar unidades sem correspondência. Caso a tabela de referência não exista, o processamento também é interrompido.
 
-Se alguma dessas verifica??es falhar, o notebook gera um erro antes da etapa de grava??o.
+Se alguma dessas verificações falhar, o notebook gera um erro antes da etapa de gravação.
 
-## 4. Decis?es tomadas
+## 4. Decisões tomadas
 
-Na auditoria realizada anteriormente, identifiquei 9.566 notas de satisfa??o nulas entre os 318.871 atendimentos.
+Na auditoria realizada anteriormente, identifiquei 9.566 notas de satisfação nulas entre os 318.871 atendimentos.
 
-Decidi preservar esses valores porque n?o ? poss?vel afirmar que sejam erros. Alguns clientes podem n?o ter respondido ? pesquisa, e substituir as notas por zero poderia prejudicar as an?lises.
+Decidi preservar esses valores porque não é possível afirmar que sejam erros. Alguns clientes podem não ter respondido à pesquisa, e substituir as notas por zero poderia prejudicar as análises.
 
-Tamb?m foi identificado um aumento consider?vel no volume de atendimentos em julho de 2025. Optei por manter esses registros, pois a auditoria n?o encontrou evid?ncias suficientes para classific?-los como incorretos.
+Também foi identificado um aumento considerável no volume de atendimentos em julho de 2025. Optei por manter esses registros, pois a auditoria não encontrou evidências suficientes para classificá-los como incorretos.
 
-Dessa forma, priorizei a padroniza??o e a valida??o, sem excluir informa??es que podem ser importantes para as pr?ximas etapas.
+Dessa forma, priorizei a padronização e a validação, sem excluir informações que podem ser importantes para as próximas etapas.
 
-## 5. Controle de vers?es e grava??o na Silver
+## 5. Controle de versões e gravação na Silver
 
-Para evitar que mudan?as posteriores na Bronze afetem a execu??o, o notebook consulta o hist?rico Delta da tabela de origem e utiliza uma vers?o espec?fica por meio de `VERSION AS OF`.
+Para evitar que mudanças posteriores na Bronze afetem a execução, o notebook consulta o histórico Delta da tabela de origem e utiliza uma versão específica por meio de `VERSION AS OF`.
 
-A grava??o permanece desativada por padr?o, utilizando `CONFIRMAR_GRAVACAO = False`.
+A gravação permanece desativada por padrão. O parâmetro Databricks `confirmar_publicacao` inicia como `false` e pode ser definido como `true` pelo Workflow para autorizar a publicação após as validações. Fora do Databricks, sem `dbutils`, a gravação permanece desativada.
 
-Quando a grava??o for autorizada, o notebook foi preparado para:
+Quando a gravação for autorizada, o notebook foi preparado para:
 
-1. Concluir as valida??es dos dados antes de escrever.
-2. Identificar se a tabela Silver j? existe e registrar sua vers?o anterior, quando dispon?vel.
+1. Concluir as validações dos dados antes de escrever.
+2. Identificar se a tabela Silver já existe e registrar sua versão anterior, quando disponível.
 3. Gravar os dados tratados em formato Delta, utilizando `overwrite`.
-4. Validar ap?s a grava??o a quantidade de atendimentos, a aus?ncia de protocolos duplicados e a quantidade de eventos.
-5. Tentar restaurar a vers?o anterior com `RESTORE TABLE` caso ocorra uma falha durante a grava??o ou nas verifica??es posteriores.
+4. Validar após a gravação a quantidade de atendimentos, a ausência de protocolos duplicados e a quantidade de eventos.
+5. Tentar restaurar a versão anterior com `RESTORE TABLE` caso ocorra uma falha durante a gravação ou nas verificações posteriores.
 
-Se n?o existir uma vers?o anterior para restaurar, o notebook informa que ser? necess?ria uma verifica??o manual. A tentativa de rollback n?o garante a recupera??o em todos os cen?rios.
+Se não existir uma versão anterior para restaurar, o notebook informa que será necessária uma verificação manual. A tentativa de rollback não garante a recuperação em todos os cenários.
 
-## 6. Situa??o atual
+## 6. Situação atual
 
-O notebook foi organizado em c?lulas de configura??o, transforma??o, valida??o, diagn?stico e grava??o.
+O notebook foi organizado em células de configuração, transformação, validação, diagnóstico e gravação.
 
-As altera??es passaram por verifica??es locais de estrutura e sintaxe Python. Entretanto, o processamento ainda n?o foi executado no Databricks, devido ? indisponibilidade de recursos computacionais no ambiente.
+As alterações passaram por verificações locais de estrutura e sintaxe Python. Na revisão, Fernando também executou o pipeline localmente com PySpark 4.0 e Delta, verificando as contagens, as validações, a gravação Silver e o bloqueio de dados inválidos. A execução no Databricks ainda está pendente. As alterações posteriores no parâmetro de publicação e na faixa das notas ainda precisam de teste de integração.
 
-Portanto, as transforma??es, as valida??es com dados reais, a grava??o e o procedimento de rollback ainda precisam ser testados no Databricks.
+Portanto, as transformações, as validações com dados reais, a gravação e o procedimento de rollback ainda precisam ser testados no Databricks.
 
-Antes de habilitar `CONFIRMAR_GRAVACAO`, ser? necess?rio confirmar que a tabela Silver de unidades consumidoras est? dispon?vel, executar as valida??es e conferir os resultados.
+Antes de definir `confirmar_publicacao=true`, será necessário confirmar que a tabela Silver de unidades consumidoras está disponível, executar as validações e conferir os resultados.
 
-Depois da valida??o da execu??o e da grava??o, os dados poder?o ser utilizados na constru??o da camada Gold.
+Depois da validação da execução e da gravação, os dados poderão ser utilizados na construção da camada Gold.
