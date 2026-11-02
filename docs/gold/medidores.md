@@ -25,7 +25,7 @@ A regra de nomes da Gold (`docs/gold/decisoes_silver_to_gold.md`) diz que a tabe
 | Tabela | Colunas | Para quem |
 | :--- | :--- | :--- |
 | `medidores_historico` | Exatamente as 5 do contrato, na ordem do YAML | Exportação para o Postgres do portal (`analytics.medidores_historico`) |
-| `tb_medidores_historico` | As 5 do contrato e mais 9 derivadas | Consultas no Databricks e proposta de colunas para a próxima versão do contrato |
+| `tb_medidores_historico` | As 5 do contrato, 10 derivadas e a versão das regras | Consultas no Databricks e proposta de colunas para a próxima versão do contrato |
 
 As duas têm as mesmas linhas, e uma regra crítica confere que as 5 colunas do contrato são idênticas nas duas.
 
@@ -55,9 +55,17 @@ O contrato define a chave `id_medidor` + `data_instalacao`, que permitiria o mes
 * o medidor anterior é exatamente o da posição anterior e está `RETIRADO`.
 
 ### 3.4. Competências como data
-O contrato usa a competência como **data do primeiro dia do mês** (`AAAA-MM-01`, `contracts/README.md`). `competencia_instalacao` e `competencia_retirada` seguem essa convenção. Num medidor instalado em troca, `competencia_instalacao` é a competência da troca, e é ela que cruza com o consumo e com a fatura da UC.
+O contrato usa a competência como **data do primeiro dia do mês** (`AAAA-MM-01`, `contracts/README.md`). `competencia_instalacao`, `competencia_retirada` e `competencia_troca` seguem essa convenção.
 
-### 3.5. Leitura e publicação
+### 3.5. Competência da troca
+`competencia_troca` é o mês da **retirada do medidor anterior**, e não o da instalação do novo. É o mesmo mês que as leituras marcam com `flag_troca_medidor`: no mês da troca, a leitura já vem com o medidor novo, e o cruzamento com o cadastro é feito por (`id_uc`, mês da retirada) (`docs/silver/silver_leituras.md`, seção 2.5). É ela que cruza com o consumo e com a fatura da UC.
+
+A Silver aceita uma lacuna entre a retirada do anterior e a instalação do novo (aviso, não regra crítica). Com lacuna, a instalação pode cair no mês seguinte. Usar o mês da instalação moveria a troca para esse mês sem erro, e esta Gold discordaria da Gold de consumo. Na base atual, a instalação cai no mesmo dia da retirada nas 6.299 trocas, então `competencia_troca` = `competencia_instalacao`.
+
+### 3.6. Versão das regras
+Cada linha da `tb_medidores_historico` grava `versao_regras_gold` (`GOLD_MEDIDORES_V1`), como as tabelas `tb_` da Gold de GD. A tabela do contrato fica só com as 5 colunas do YAML.
+
+### 3.7. Leitura e publicação
 Mesmo padrão das Golds de GD (#94) e de continuidade (#98):
 * **Widgets:** `tabela_medidores`, `schema_gold` e `modo`.
 * **Leitura** da Silver por versão fixa (`VERSION AS OF`).
@@ -88,11 +96,13 @@ As 5 colunas acima e mais:
 | `status` | STRING | não | `ATIVO` (instalado hoje) ou `RETIRADO` |
 | `flag_medidor_atual` | BOOLEAN | não | `true` para o medidor instalado hoje (exatamente 1 por UC) |
 | `ordem_na_uc` | INT | não | 1 = primeiro medidor da UC, 2 = o que o substituiu… |
-| `competencia_instalacao` | DATE | não | Primeiro dia do mês da instalação (num medidor de troca, a competência da troca) |
+| `competencia_instalacao` | DATE | não | Primeiro dia do mês da instalação |
 | `competencia_retirada` | DATE | sim | Primeiro dia do mês da retirada; nula no medidor atual |
 | `flag_instalado_em_troca` | BOOLEAN | não | `true` se o medidor entrou substituindo outro da mesma UC |
+| `competencia_troca` | DATE | sim | Primeiro dia do mês da retirada do medidor anterior (seção 3.5); nula se o medidor não entrou em troca |
 | `id_medidor_anterior` | STRING | sim | Medidor substituído por este |
 | `tipo_medidor_anterior` | STRING | sim | Tecnologia do medidor substituído |
+| `versao_regras_gold` | STRING | não | Versão das regras da Gold que gerou a linha (`GOLD_MEDIDORES_V1`) |
 
 As descrições também ficam gravadas como comentários das colunas no Unity Catalog.
 
@@ -116,6 +126,7 @@ Todas as regras são críticas: qualquer violação interrompe a execução com 
 | **Analítica:** troca incoerente com `ordem_na_uc` | 0 |
 | **Analítica:** medidor anterior diferente da ordem ou não `RETIRADO` | 0 |
 | **Analítica:** competência diferente do mês da data | 0 |
+| **Analítica:** `competencia_troca` diferente da retirada do medidor anterior | 0 |
 | **Analítica:** linhas diferentes da Silver | 0 |
 | **Analítica:** as 5 colunas do contrato diferentes da tabela do contrato | 0 |
 
@@ -130,7 +141,7 @@ Todas as regras são críticas: qualquer violação interrompe a execução com 
 | Atuais `ELETRONICO` / `ELETROMECANICO` / `SMART` | 25.738 / 10.832 / 8.430 |
 | Instalados em troca (todos `SMART`) | 6.299 |
 | Tecnologia substituída | 5.661 eletromecânicos, 601 eletrônicos, 37 smart |
-| Trocas por competência | 2025-09: 917 · 2025-10: 890 · 2025-11: 905 · 2025-12: 890 · 2026-01: 901 · 2026-02: 873 · 2026-03: 923 |
+| Trocas por `competencia_troca` | 2025-09: 917 · 2025-10: 890 · 2025-11: 905 · 2025-12: 890 · 2026-01: 901 · 2026-02: 873 · 2026-03: 923 |
 
 Exemplo da Visão 360, a `UC100015`:
 
@@ -151,7 +162,7 @@ FROM analytics.medidores_historico
 WHERE id_uc = 'UC100015' AND data_retirada IS NULL;
 
 -- Competência de troca da UC, para marcar no consumo e na fatura
-SELECT id_uc, competencia_instalacao AS competencia_troca, tipo_medidor_anterior, tipo_medidor
+SELECT id_uc, competencia_troca, tipo_medidor_anterior, tipo_medidor
 FROM `v-energy`.gold.tb_medidores_historico
 WHERE flag_instalado_em_troca;
 ```
@@ -163,7 +174,8 @@ WHERE flag_instalado_em_troca;
 | Decisão | Alternativa descartada | Motivo |
 | :--- | :--- | :--- |
 | Tabela do contrato só com as 5 colunas, na ordem do YAML | Uma tabela só, com colunas extras | O importador exige as colunas exatas; regra de nomes da Gold |
-| Colunas derivadas na `tb_medidores_historico` | Deixar o backend derivar | O backend "filtra e agrega, mas não inventa regra" (system design, princípio 1); a ordem e o medidor atual ficam definidos num lugar só |
+| Colunas derivadas na `tb_medidores_historico` | Deixar o backend derivar | O backend "filtra e agrega, mas não inventa regra" (system design, princípio 1). A `tb_` é a proposta para a próxima versão do contrato (#111). Até lá, o portal não lê a `tb_` e define o medidor atual por `data_retirada` nula, a mesma regra da Gold (`GLOSSARY.md`, "Medidor atual") |
+| Competência da troca no mês da retirada do anterior | Mês da instalação do novo; ou bloquear a carga quando os dois meses diferem | É o mês que as leituras usam. A Silver aceita a lacuna como aviso, e bloquear a Gold por ela pararia a carga por um dado que a Silver aceita |
 | Competência como data `AAAA-MM-01` | Texto `AAAA-MM` | Convenção do contrato e das outras Golds |
 | `tipo` → `tipo_medidor` | Manter o nome da Silver | Nome do contrato |
 | Ler a Silver por versão fixa e publicar com `RESTORE` | `overwrite` direto | Mesmo padrão das outras Golds; uma carga reprovada nunca substitui a Gold boa |
@@ -177,7 +189,7 @@ WHERE flag_instalado_em_troca;
 3. **Validar:** **Run all** com o widget `modo = validar`. Nada é gravado.
 4. **Publicar:** troque o widget `modo` para `publicar` e rode **Run all** de novo.
 5. **Conferir:**
-   * tabela de regras com 22 linhas `OK`;
+   * tabela de regras com 23 linhas `OK`;
    * `[OK] medidores_historico: 51,299 registros` e o mesmo para a `tb_`;
    * a Visão 360 da `UC100015`;
    * o parque atual por tecnologia e as trocas por competência;
@@ -200,11 +212,13 @@ A cadeia Bronze → Silver → Gold rodou localmente em Spark 4.0.1 + Delta 4.0.
   * `id_uc` com 7 dígitos;
   * medidor repetido;
   * tipo fora do domínio;
+* troca com lacuna (retirada do `MD500015` em 30/09/2025 e instalação do `MD545821` em 01/10/2025, na `UC100015`): as 23 regras passam, e a troca fica em 2025-09, com `competencia_instalacao` em 2025-10;
+* `competencia_troca` adulterada numa linha bloqueia a carga pela regra nova;
 * a Gold de continuidade do #98 também rodou na mesma cadeia (5.856 linhas).
 
 ---
 
 ## 10. Pendências
 
-* **Contrato provisório:** o YAML está como `provisorio-nao-aprovado`. As colunas da `tb_medidores_historico` (medidor atual, ordem e troca) são uma proposta para a próxima versão, se o portal quiser usá-las direto.
+* **Contrato provisório:** o YAML está como `provisorio-nao-aprovado`. As colunas da `tb_medidores_historico` (medidor atual, ordem e troca) são uma proposta para a próxima versão (#111), se o portal quiser usá-las direto.
 * **Exportação para o banco local:** passo único de exportação do Job (#96).

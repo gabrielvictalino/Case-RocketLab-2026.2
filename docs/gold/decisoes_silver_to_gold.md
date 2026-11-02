@@ -136,7 +136,7 @@ Documento vivo e compartilhado pela equipe de Engenharia de Dados para consolida
 - **Quem pergunta:** **Rafael Coutinho (Perdas)** e **Henrique Duarte (Comercial)**.
 - **Perguntas que responde:**
   1. *"Quantos medidores de cada tecnologia estão instalados hoje?"* `flag_medidor_atual`: 25.738 eletrônicos, 10.832 eletromecânicos e 8.430 smart.
-  2. *"Quando e em quais UCs houve a troca para smart?"* `flag_instalado_em_troca` e `competencia_instalacao`: 6.299 trocas entre 2025-09 e 2026-03, de 873 a 923 por mês, todas para smart (5.661 eletromecânicos, 601 eletrônicos e 37 smart substituídos). A competência da troca cruza com o consumo e a fatura da UC.
+  2. *"Quando e em quais UCs houve a troca para smart?"* `flag_instalado_em_troca` e `competencia_troca`: 6.299 trocas entre 2025-09 e 2026-03, de 873 a 923 por mês, todas para smart (5.661 eletromecânicos, 601 eletrônicos e 37 smart substituídos). A competência da troca é o mês da retirada do medidor anterior, o mesmo que as leituras marcam com `flag_troca_medidor`, e cruza com o consumo e a fatura da UC.
 
 ### 6.2. Decisões de limpeza que afetam as tabelas de medidores
 

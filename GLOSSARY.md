@@ -37,6 +37,9 @@ _Evitar_: consumo bruto
 **Leitura estimada**:
 Leitura feita sem acesso ao medidor, com consumo estimado pela distribuidora.
 
+**Medidor atual**:
+Medidor instalado hoje na UC: o único dela sem data de retirada.
+
 **Troca de medidor**:
 Competência em que o medidor da UC foi substituído, e por isso o consumo original não representa o consumo real.
 
