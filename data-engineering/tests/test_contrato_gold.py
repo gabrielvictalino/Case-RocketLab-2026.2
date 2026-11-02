@@ -303,7 +303,7 @@ class ContratoGoldTest(unittest.TestCase):
                 'v-energy.silver.tb_unidades_consumidoras': cadastro,
                 'v-energy.silver.tb_leituras': leituras,
                 'v-energy.silver.tb_geracao_distribuida': gd,
-                'venergy.silver.inspecoes': inspecoes,
+                'v-energy.silver.tb_inspecoes': inspecoes,
                 'v-energy.silver.tb_medidores': self.spark.createDataFrame(
                     [],
                     'id_uc string, id_medidor string, '

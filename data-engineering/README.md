@@ -18,8 +18,10 @@ auxiliares reconciliáveis. Regras, fontes e operação estão no
    O marcador padrão é `v-energy.silver.tb_faturas_publicacao`; ausência ou
    incoerência bloqueia, sem ler os nomes finais como fallback. Cadastro e leituras
    usam `v-energy.silver.tb_unidades_consumidoras` e `v-energy.silver.tb_leituras`.
-   GD usa `v-energy.silver.tb_geracao_distribuida`; inspeções usam o nome legado do
-   produtor, `venergy.silver.inspecoes`, parametrizável. Confirme disponibilidade.
+   GD usa `v-energy.silver.tb_geracao_distribuida`; inspeções usam
+   `v-energy.silver.tb_inspecoes`, parametrizável, produzida por
+   `data-engineering/bronze_to_silver/bronze-to-silver-inspecoes.ipynb` (#116).
+   Confirme a publicação dessas fontes no workspace.
 3. Informe `data_referencia` como data do retrato de status da extração; ela vira
    `reference_date`. Não é automaticamente a ingestão ou o dia da execução.
 4. Execute desde o início em `modo=validar`: nenhuma escrita ou limpeza.

@@ -270,10 +270,10 @@ inspeções), referência oficial e lote completo de 12 tabelas seguem necessár
 
 O adaptador exige snapshots de `tb_geracao_distribuida` (`id_uc`, `data_conexao`)
 e de inspeções (`id_uc`, `data`, `resultado`). O padrão de inspeções é
-`venergy.silver.inspecoes`, nome do produtor versionado em
-`notebooks/02_bronze_to_silver_inspecoes.ipynb`; sua disponibilidade e eventual
-migração de catálogo precisam ser confirmadas no workspace. Não cria nem publica
-essas fontes. A precedência é GD desde o mês da conexão; senão, irregularidade
+`v-energy.silver.tb_inspecoes`, padronizada pelo PR #116, cujo produtor é
+`data-engineering/bronze_to_silver/bronze-to-silver-inspecoes.ipynb`. Confirme a
+publicação da nova Silver no workspace antes de executar a Gold. A Gold não cria
+nem publica essas fontes. A precedência é GD desde o mês da conexão; senão, irregularidade
 confirmada desde o mês da primeira inspeção com esse resultado; senão, demais.
 Flags cadastrais atuais não são projetadas para trás.
 

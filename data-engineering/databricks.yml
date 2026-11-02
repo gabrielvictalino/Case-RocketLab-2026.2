@@ -25,7 +25,7 @@ variables:
   tabela_gd:
     default: v-energy.silver.tb_geracao_distribuida
   tabela_inspecoes:
-    default: venergy.silver.inspecoes
+    default: v-energy.silver.tb_inspecoes
   tabela_medidores:
     default: v-energy.silver.tb_medidores
   tabela_complemento_faturamento:
