@@ -16,7 +16,7 @@ não foi encontrado contrato Gold aprovado/versionado nessas referências.
 | Python | Workspace #61 propunha 3.14 | 3.12 em todos os membros, imagem e CI, para usar o runtime disponível e validado; versões resolvidas no uv.lock |
 | Consumo | Diagnóstico usa mediana, tela menciona média, Silver preserva negativos sinalizados | Nenhuma estimativa oficial implementada; original preservado, analítico sintético e método explícito |
 | Continuidade | Soma simples no diagnóstico versus duração efetiva/união na Silver | Nenhuma regra oficial implementada; amostra sintética com numeradores/denominadores explícitos |
-| Gold | Modelos propostos sem contrato aprovado | `0.2.0-provisional`, sinalizado no manifesto; `synthetic` preserva a proveniência e aceita exportação real compatível, sem certificar as fórmulas |
+| Gold | Modelos propostos sem contrato aprovado | `0.3.0-provisional`, sinalizado no manifesto; `synthetic` preserva a proveniência e aceita exportação real compatível, com metadados completos (R1–R8) sem certificar as fórmulas |
 | Inspeções | Portal e IA compartilhavam a mesma view | `portal_read.inspecoes` para o portal e projeção independente `ai_read.inspecoes` para a IA, ambas do importador |
 | Bootstrap | Importador precisa de novas inspeções, migrações não devem precisar de Gold | init → Alembic operations → importador e views, sem dependência circular |
 | Redis | Commit de banco e atualização Redis não são uma transação distribuída | Lock de sessão até terminar Redis, timestamp na publicação e sequência para ordenar cargas; em falha, banco segue sendo a fonte de verdade |
@@ -34,8 +34,8 @@ INSERT em cargas e SELECT em inspeções, sem escrita nas demais tabelas operaci
 | Contrato Gold e exportador | Revisão das 12 tabelas, nomes, grãos, chaves, tipos, nulls, manifesto e versão, com amostra real coerente | Importação real e todos os módulos |
 | Consumo analítico | Média × mediana, janela de referência, negativos não confirmados, fallback, flag da troca e versão da regra | UC 360, receita, KPIs, fila |
 | Receita e volume | Pareamento de faturas/leitura, múltiplas faturas, órfãos e quarentena, tributos, arredondamento, pago/aberto | Receita, explicação da conta, KPIs |
-| Decomposição | Fórmula canônica para qualquer par de períodos e campos necessários para reajuste/bandeira/mix | Receita e insights |
-| Grupos de UC | GD desde conexão, irregularidade desde inspeção, prioridade em grupos sobrepostos, prevenção de vazamento temporal | Receita, fila e avaliações |
+| Decomposição | Formalizada em 0.3.0-provisional (R5: volume, reajuste, bandeira, mix com fechamento exato) | Receita e insights (P20) |
+| Grupos de UC | Formalizado em 0.3.0-provisional (R3: regra temporal GD > IRREGULARIDADE > DEMAIS com date_trunc) | Receita, fila e avaliações |
 | DEC/FEC/CHI | Sobreposições, interrupções contadas, competência de eventos que cruzam meses, denominador temporal e flag de evento atípico | Operação e KPIs |
 | Fila | Score e versão aprovados, motivos, energia em kWh/R$, elegibilidade e comportamento após conclusão/reinspeção | Fila oficial e priorização |
 | Inspeções | Domínio de tipos (overview e auditoria divergem), precisão de kWh, normalização canônica e IDs para resultados novos | Planilha de campo e integração definitiva P16 |
@@ -84,3 +84,20 @@ original; as correções continuam no mesmo PR, sem reescrever seu histórico.
 Os rulesets versionados passam a exigir `CI` e `Fluxo Git`. A reaplicação
 administrativa no GitHub com `scripts/configurar-github.sh` fica para o ciclo de
 integração/revisão: esta entrega versiona a configuração sem aplicar proteções remotas.
+
+## Evolução no ciclo P02 + P05 (0.3.0-provisional)
+
+1. **Contrato Gold 0.3.0-provisional:**
+   - Metadados completos em todas as 12 tabelas e colunas (R1: descrições em português, grãos, unidades e totais).
+   - `uc_consumo_faturamento_mensal`: nova coluna `data_vencimento` (date, anulável) e modelagem estrita de competências sem fatura emitida (R2: nulos síncronos e zeramento de volume/valores).
+   - Enum estrito de bandeira (`VERDE`, `AMARELA`, `VERMELHA_P1`, `VERMELHA_P2`) e validação de `status_pagamento` × arrecadação.
+2. **Decomposição da Receita (R5):**
+   - Fórmula canônica formalizada com fator tributário $k_0$, quatro efeitos (volume, reajuste, bandeira, mix) e fechamento exato em Decimal, pronta para implementação na P20.
+3. **Regra Temporal de Grupo de UC (R3):**
+   - Precedência canônica GD > Irregularidade Confirmada > Demais com `date_trunc('month', ...)`, auditada pelo gate SQL do importador.
+4. **Coerência Cadastral e Fila de Inspeção (R4):**
+   - `dim_uc.flag_gd` auditado contra `gd_uc`; exclusão obrigatória de UCs com GD da `fila_inspecao`.
+5. **Homologação e Validação (R6, R7, R8):**
+   - `reference_date` obrigatória no manifesto com gate temporal em relação ao fechamento do período.
+   - Gerador autônomo `contracts/manifesto.py` para execução independente em jobs Databricks.
+   - Modo `importador --origem <dir> --verificar` para validação transacional com rollback automático.

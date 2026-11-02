@@ -1,7 +1,7 @@
 """Amostra determinística. Todos os valores são inventados; nenhuma fórmula oficial."""
 
 import csv
-import hashlib
+import importlib.util
 import json
 from collections import defaultdict
 from datetime import date
@@ -17,6 +17,11 @@ OUT = Path(__file__).resolve().parent
 def gerar(out=OUT):
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
+
+    manifesto_spec = importlib.util.spec_from_file_location('manifesto', ROOT / 'manifesto.py')
+    manifesto_mod = importlib.util.module_from_spec(manifesto_spec)
+    manifesto_spec.loader.exec_module(manifesto_mod)
+    gerar_manifesto = manifesto_mod.gerar_manifesto
     specs = {
         p.stem: yaml.safe_load(p.read_text()) for p in sorted((ROOT / 'tabelas').glob('*.yaml'))
     }
@@ -89,24 +94,51 @@ def gerar(out=OUT):
             bandeira = Decimal('0.10') if offset == 36 else Decimal('0')
             receita = (consumo * (tarifa + bandeira)).quantize(Decimal('0.01'))
             paga = not (i == 3 and offset >= 45)
-            row = dict(
-                id_uc=uc['id_uc'],
-                competencia=competencia,
-                consumo_kwh_original=-500 if troca else consumo,
-                consumo_kwh_analitico=consumo,
-                metodo_consumo='SINTETICO_TROCA' if troca else 'SINTETICO',
-                tipo_leitura='ESTIMADA' if i == 2 and offset == 47 else 'REAL',
-                flag_troca_medidor=troca,
-                id_fatura=f'FT{i:06}{offset:03}',
-                volume_faturado_kwh=consumo,
-                valor_total=receita,
-                valor_arrecadado=receita if paga else Decimal(0),
-                tarifa_base=tarifa,
-                adicional_bandeira=bandeira,
-                bandeira='AMARELA_SINTETICA' if bandeira else 'VERDE',
-                status_pagamento='PAGA' if paga else 'ABERTA',
-                grupo_uc=grupo,
-            )
+            sem_fatura = i == 4 and offset == 47
+
+            if sem_fatura:
+                row = dict(
+                    id_uc=uc['id_uc'],
+                    competencia=competencia,
+                    consumo_kwh_original=consumo,
+                    consumo_kwh_analitico=consumo,
+                    metodo_consumo='LEITURA',
+                    tipo_leitura='REAL',
+                    flag_troca_medidor=False,
+                    id_fatura=None,
+                    volume_faturado_kwh=Decimal(0),
+                    valor_total=Decimal(0),
+                    valor_arrecadado=Decimal(0),
+                    tarifa_base=None,
+                    adicional_bandeira=None,
+                    bandeira=None,
+                    status_pagamento=None,
+                    data_vencimento=None,
+                    grupo_uc=grupo,
+                )
+            else:
+                vencimento = date(year, month + 1, 20).isoformat()
+                row = dict(
+                    id_uc=uc['id_uc'],
+                    competencia=competencia,
+                    consumo_kwh_original=-500 if troca else consumo,
+                    consumo_kwh_analitico=consumo,
+                    metodo_consumo='SINTETICO_TROCA'
+                    if troca
+                    else ('SINTETICO_ESTIMADA' if i == 2 and offset == 47 else 'LEITURA'),
+                    tipo_leitura='ESTIMADA' if i == 2 and offset == 47 else 'REAL',
+                    flag_troca_medidor=troca,
+                    id_fatura=f'FT{i:06}{offset:03}',
+                    volume_faturado_kwh=consumo,
+                    valor_total=receita,
+                    valor_arrecadado=receita if paga else Decimal(0),
+                    tarifa_base=tarifa,
+                    adicional_bandeira=bandeira,
+                    bandeira='AMARELA' if bandeira else 'VERDE',
+                    status_pagamento='PAGA' if paga else 'ABERTA',
+                    data_vencimento=vencimento,
+                    grupo_uc=grupo,
+                )
             data['uc_consumo_faturamento_mensal'].append(row)
             key = (competencia, uc['municipio'], uc['bairro'], uc['classe'], grupo)
             if key not in aggregated:
@@ -122,11 +154,15 @@ def gerar(out=OUT):
                 ):
                     aggregated[key][field] = Decimal(0)
             agg = aggregated[key]
-            agg['volume_faturado_kwh'] += consumo
-            agg['receita'] += receita
+            agg['volume_faturado_kwh'] += row['volume_faturado_kwh']
+            agg['receita'] += row['valor_total']
             agg['receita_arrecadada'] += row['valor_arrecadado']
-            agg['componente_tarifa_reais'] += consumo * tarifa
-            agg['componente_bandeira_reais'] += consumo * bandeira
+            if row['tarifa_base'] is not None:
+                agg['componente_tarifa_reais'] += row['volume_faturado_kwh'] * row['tarifa_base']
+            if row['adicional_bandeira'] is not None:
+                agg['componente_bandeira_reais'] += (
+                    row['volume_faturado_kwh'] * row['adicional_bandeira']
+                )
         for i, feeder in enumerate(feeders):
             atipico = offset == 36 and i == 0
             minutos = 12000 if atipico else (240 if i == 5 else 60)
@@ -193,24 +229,17 @@ def gerar(out=OUT):
                 kwh_recuperado=0 if i else 100,
             )
         )
-    for i in range(12):
+    for i in range(1, 13):
         data['fila_inspecao'].append(
             dict(
                 id_uc=f'UC{100000 + i}',
-                score=Decimal(100 - i),
+                score=Decimal(101 - i),
                 motivos=['Sinal exclusivamente sintético'],
                 energia_recuperar_kwh=100 + i,
                 energia_recuperar_reais=80 + i,
             )
         )
 
-    manifest = dict(
-        batch_id='amostra-sintetica-v1',
-        contract_version=(ROOT / 'VERSION').read_text().strip(),
-        synthetic=True,
-        period={'start': '2022-07', 'end': '2026-06'},
-        tables={},
-    )
     for name, spec in specs.items():
         filename = out / f'{name}.csv'
         with filename.open('w', newline='', encoding='utf-8') as f:
@@ -227,17 +256,14 @@ def gerar(out=OUT):
                         for k, v in row.items()
                     }
                 )
-        totals = {
-            c: str(sum((Decimal(str(r[c])) for r in data[name]), Decimal(0)))
-            for c in spec.get('control_totals', [])
-        }
-        manifest['tables'][name] = dict(
-            file=f'{name}.csv',
-            rows=len(data[name]),
-            sha256=hashlib.sha256(filename.read_bytes()).hexdigest(),
-            totals=totals,
-        )
-    (out / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n')
+
+    gerar_manifesto(
+        out,
+        batch_id='amostra-sintetica-v1',
+        periodo='2022-07..2026-06',
+        data_referencia='2026-07-01',
+        sintetico=True,
+    )
 
 
 if __name__ == '__main__':

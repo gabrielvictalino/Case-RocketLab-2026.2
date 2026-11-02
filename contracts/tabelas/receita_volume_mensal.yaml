@@ -1,4 +1,4 @@
-version: 0.2.0-provisional
+version: 0.3.0-provisional
 status: provisorio-nao-aprovado
 table: receita_volume_mensal
 grain: competência × município × bairro × classe × grupo de UC
@@ -12,61 +12,70 @@ columns:
   competencia:
     type: date
     nullable: false
-    unit: data ISO
+    unit: —
     month: true
+    description: Primeiro dia do mês da competência de faturamento consolidada.
   municipio:
     type: text
     nullable: false
-    unit: identificador/texto
+    unit: —
+    description: Município do agrupamento comercial.
   bairro:
     type: text
     nullable: false
-    unit: identificador/texto
+    unit: —
+    description: Bairro do agrupamento comercial.
   classe:
     type: text
     nullable: false
-    unit: identificador/texto
+    unit: —
     enum:
     - Residencial
     - Comercial
     - Industrial
     - Rural
     - Poder Público
+    description: Classe de consumo do agrupamento comercial.
   grupo_uc:
     type: text
     nullable: false
-    unit: identificador/texto
+    unit: —
     enum:
     - GD
     - IRREGULARIDADE_CONFIRMADA
     - DEMAIS
+    description: Classificação do grupo de unidades consumidoras no grão agregado.
   volume_faturado_kwh:
     type: numeric(18,2)
     nullable: false
     unit: kWh
     minimum: 0
+    description: Volume físico total de energia elétrica faturado no agrupamento.
   receita:
     type: numeric(18,2)
     nullable: false
     unit: R$
     minimum: 0
+    description: Receita bruta faturada em reais no agrupamento.
   receita_arrecadada:
     type: numeric(18,2)
     nullable: false
     unit: R$
     minimum: 0
+    description: Receita efetivamente arrecadada (paga) em reais no agrupamento.
   componente_tarifa_reais:
     type: numeric(18,2)
     nullable: false
     unit: R$
     minimum: 0
+    description: Parcela da receita correspondente à tarifa base de consumo em reais.
   componente_bandeira_reais:
     type: numeric(18,2)
     nullable: false
     unit: R$
     minimum: 0
-description: Contrato local sintético derivado do system design; sujeito à validação
-  do time de dados.
+    description: Parcela da receita correspondente ao adicional de bandeira tarifária em reais.
+description: Agregado comercial mensal de faturamento, volume e arrecadação por segmento geográfico e grupo de UC.
 control_totals:
 - volume_faturado_kwh
 - receita

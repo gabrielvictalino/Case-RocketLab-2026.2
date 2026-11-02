@@ -159,8 +159,10 @@ async def test_rounded_derivatives_and_tariff_precision(db, infrastructure, tmp_
     for row in csv_rows(origin, 'uc_consumo_faturamento_mensal'):
         group = key({**row, **dims[row['id_uc']]})
         totals = components.setdefault(group, [Decimal(0), Decimal(0)])
-        totals[0] += Decimal(row['volume_faturado_kwh']) * Decimal(row['tarifa_base'])
-        totals[1] += Decimal(row['volume_faturado_kwh']) * Decimal(row['adicional_bandeira'])
+        tarifa = Decimal(row['tarifa_base']) if row['tarifa_base'] else Decimal(0)
+        bandeira = Decimal(row['adicional_bandeira']) if row['adicional_bandeira'] else Decimal(0)
+        totals[0] += Decimal(row['volume_faturado_kwh']) * tarifa
+        totals[1] += Decimal(row['volume_faturado_kwh']) * bandeira
 
     def aggregate(rows):
         for row in rows:
@@ -307,9 +309,183 @@ async def test_reload_preserves_operations_and_unified_view(client, headers, db,
 
 async def test_redis_failure_does_not_undo_committed_import(db, infrastructure):
     before = await db.fetchval('SELECT count(*) FROM operations.cargas')
-    version = await load(SAMPLES, infrastructure['importer_url'], 'redis://localhost:1/0')
-    assert await db.fetchval('SELECT count(*) FROM operations.cargas') == before + 1
-    assert (
-        await db.fetchval('SELECT id FROM operations.cargas ORDER BY carregado_em DESC LIMIT 1')
-        == version
-    )
+    try:
+        version = await load(SAMPLES, infrastructure['importer_url'], 'redis://localhost:1/0')
+        assert await db.fetchval('SELECT count(*) FROM operations.cargas') == before + 1
+        assert (
+            await db.fetchval('SELECT id FROM operations.cargas ORDER BY carregado_em DESC LIMIT 1')
+            == version
+        )
+    finally:
+        await load(SAMPLES, infrastructure['importer_url'], infrastructure['settings'].redis_url)
+
+
+@pytest.mark.parametrize(
+    'gate,table,mutate,expected_table,expected_rule',
+    [
+        (
+            'r2_null_invoice',
+            'uc_consumo_faturamento_mensal',
+            lambda rows: rows[0].update(id_fatura=''),  # deixa outros campos preenchidos
+            'uc_consumo_faturamento_mensal',
+            'R2',
+        ),
+        (
+            'r2_payment_paga',
+            'uc_consumo_faturamento_mensal',
+            lambda rows: rows[0].update(status_pagamento='PAGA', valor_arrecadado='0.00'),
+            'uc_consumo_faturamento_mensal',
+            'R2',
+        ),
+        (
+            'r2_payment_aberta',
+            'uc_consumo_faturamento_mensal',
+            lambda rows: rows[0].update(status_pagamento='ABERTA', valor_arrecadado='50.00'),
+            'uc_consumo_faturamento_mensal',
+            'R2',
+        ),
+        (
+            'r2_meter_exchange',
+            'uc_consumo_faturamento_mensal',
+            lambda rows: rows[0].update(flag_troca_medidor='true', metodo_consumo='LEITURA'),
+            'uc_consumo_faturamento_mensal',
+            'R2',
+        ),
+        (
+            'r3_group_temporal',
+            'uc_consumo_faturamento_mensal',
+            # UC100000 em 2025-01 é GD, mudar para DEMAIS
+            lambda rows: next(
+                r for r in rows if r['id_uc'] == 'UC100000' and r['competencia'] == '2025-01-01'
+            ).update(grupo_uc='DEMAIS'),
+            'uc_consumo_faturamento_mensal',
+            'R3',
+        ),
+        (
+            'r4_flag_gd',
+            'dim_uc',
+            # UC100000 está em gd_uc, setar flag_gd false
+            lambda rows: rows[0].update(flag_gd='false'),
+            'dim_uc',
+            'R4',
+        ),
+        (
+            'r4_queue_gd',
+            'fila_inspecao',
+            # Substituir id_uc por uma UC com GD (UC100000 está em gd_uc)
+            lambda rows: rows[0].update(id_uc='UC100000'),
+            'fila_inspecao',
+            'R4',
+        ),
+        (
+            'r6_reference_date',
+            None,
+            None,
+            'manifesto',
+            'R6',
+        ),
+    ],
+)
+async def test_new_gates_reject_and_preserve_state(
+    db, infrastructure, tmp_path, gate, table, mutate, expected_table, expected_rule
+):
+    origin = tmp_path / f'batch_{gate}'
+    shutil.copytree(SAMPLES, origin)
+    if gate == 'r6_reference_date':
+        manifest_file = origin / 'manifest.json'
+        manifest = json.loads(manifest_file.read_text())
+        manifest['reference_date'] = '2026-05-31'
+        manifest_file.write_text(json.dumps(manifest))
+    elif table and mutate:
+        rewrite(origin, table, mutate)
+        # Sincroniza totais de controle no manifesto caso a mutação tenha alterado colunas somadas
+        manifest_file = origin / 'manifest.json'
+        manifest = json.loads(manifest_file.read_text())
+        for col in manifest['tables'][table]['totals']:
+            manifest['tables'][table]['totals'][col] = str(
+                sum(Decimal(r[col]) for r in csv_rows(origin, table) if r.get(col))
+            )
+        manifest_file.write_text(json.dumps(manifest))
+
+    before = await analytics_snapshot(db)
+    with pytest.raises(ContractError) as exc:
+        await load(origin, infrastructure['importer_url'])
+    assert expected_table in str(exc.value)
+    assert expected_rule in str(exc.value)
+    assert await analytics_snapshot(db) == before
+    assert await db.fetchval("SELECT to_regnamespace('analytics_staging')") is None
+
+
+async def test_verify_mode_valid_sample(db, infrastructure, capsys):
+    before = await analytics_snapshot(db)
+    redis = Redis.from_url(infrastructure['settings'].redis_url)
+    redis_before = await redis.get('versao_carga')
+    try:
+        result = await load(
+            SAMPLES,
+            infrastructure['importer_url'],
+            infrastructure['settings'].redis_url,
+            verify_only=True,
+        )
+        assert result is None
+        assert await analytics_snapshot(db) == before
+        assert await redis.get('versao_carga') == redis_before
+        assert await db.fetchval("SELECT to_regnamespace('analytics_staging')") is None
+        captured = capsys.readouterr()
+        assert '0.3.0-provisional' in captured.out
+        assert 'amostra-sintetica-v1' in captured.out
+        assert '2026-07-01' in captured.out
+        assert 'OK' in captured.out
+    finally:
+        await redis.aclose()
+
+
+async def test_verify_mode_invalid_sample_returns_error(db, infrastructure, tmp_path, capsys):
+    origin = tmp_path / 'batch_verify_invalid'
+    shutil.copytree(SAMPLES, origin)
+    rewrite(origin, 'dim_uc', lambda rows: rows[0].update(flag_gd='false'))
+    before = await analytics_snapshot(db)
+    redis = Redis.from_url(infrastructure['settings'].redis_url)
+    redis_before = await redis.get('versao_carga')
+    try:
+        with pytest.raises(ContractError) as exc:
+            await load(
+                origin,
+                infrastructure['importer_url'],
+                infrastructure['settings'].redis_url,
+                verify_only=True,
+            )
+        assert 'dim_uc' in str(exc.value)
+        assert await analytics_snapshot(db) == before
+        assert await redis.get('versao_carga') == redis_before
+        assert await db.fetchval("SELECT to_regnamespace('analytics_staging')") is None
+    finally:
+        await redis.aclose()
+
+
+def test_cli_verificar_success(infrastructure, monkeypatch, capsys):
+    from importador import cli
+
+    monkeypatch.setenv('DATABASE_URL_IMPORTADOR', infrastructure['importer_url'])
+    monkeypatch.setenv('REDIS_URL', infrastructure['settings'].redis_url)
+    monkeypatch.setattr('sys.argv', ['importador', '--origem', str(SAMPLES), '--verificar'])
+    cli.main()
+    captured = capsys.readouterr()
+    assert '0.3.0-provisional' in captured.out
+    assert 'OK' in captured.out
+
+
+def test_cli_verificar_failure(infrastructure, tmp_path, monkeypatch, capsys):
+    from importador import cli
+
+    origin = tmp_path / 'batch_cli_invalid'
+    shutil.copytree(SAMPLES, origin)
+    rewrite(origin, 'dim_uc', lambda rows: rows[0].update(flag_gd='false'))
+    monkeypatch.setenv('DATABASE_URL_IMPORTADOR', infrastructure['importer_url'])
+    monkeypatch.setenv('REDIS_URL', infrastructure['settings'].redis_url)
+    monkeypatch.setattr('sys.argv', ['importador', '--origem', str(origin), '--verificar'])
+    with pytest.raises(SystemExit) as exc:
+        cli.main()
+    assert exc.value.code == 1
+    captured = capsys.readouterr()
+    assert 'dim_uc' in captured.err

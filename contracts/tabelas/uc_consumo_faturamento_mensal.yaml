@@ -1,4 +1,4 @@
-version: 0.2.0-provisional
+version: 0.3.0-provisional
 status: provisorio-nao-aprovado
 table: uc_consumo_faturamento_mensal
 grain: UC × competência
@@ -9,90 +9,115 @@ columns:
   id_uc:
     type: text
     nullable: false
-    unit: identificador/texto
+    unit: —
     pattern: ^UC\d{6}$
     references:
     - dim_uc
     - id_uc
+    description: Identificador da unidade consumidora.
   competencia:
     type: date
     nullable: false
-    unit: data ISO
+    unit: —
     month: true
+    description: Primeiro dia do mês de referência do faturamento e consumo.
   consumo_kwh_original:
     type: numeric(18,2)
     nullable: false
     unit: kWh
+    description: Consumo bruto medido ou registrado no medidor antes de expurgos ou ajustes.
   consumo_kwh_analitico:
     type: numeric(18,2)
     nullable: false
     unit: kWh
     minimum: 0
+    description: Consumo analítico ajustado para análise de perdas e comportamento da carga.
   metodo_consumo:
     type: text
     nullable: false
-    unit: identificador/texto
+    unit: —
+    description: Método utilizado para estimativa do consumo analítico (LEITURA para medição original sem ajuste).
   tipo_leitura:
     type: text
     nullable: false
-    unit: identificador/texto
+    unit: —
     enum:
     - REAL
     - ESTIMADA
+    description: Tipo da leitura realizada no ciclo (REAL ou ESTIMADA).
   flag_troca_medidor:
     type: boolean
     nullable: false
-    unit: flag
+    unit: —
+    description: Indica se houve substituição física de medidor no período de faturamento.
   id_fatura:
     type: text
     nullable: true
-    unit: identificador/texto
+    unit: —
+    description: Código identificador da fatura emitida. Nulo caso a competência não tenha fatura emitida.
   volume_faturado_kwh:
     type: numeric(18,2)
     nullable: false
     unit: kWh
     minimum: 0
+    description: Volume de energia elétrica faturado ao cliente na fatura da competência (zero quando não há fatura).
   valor_total:
     type: numeric(18,2)
     nullable: false
     unit: R$
     minimum: 0
+    description: Valor financeiro total cobrado na fatura emitida (zero quando não há fatura).
   valor_arrecadado:
     type: numeric(18,2)
     nullable: false
     unit: R$
     minimum: 0
+    description: Valor financeiro efetivamente pago e arrecadado referente à fatura da competência.
   tarifa_base:
     type: numeric(18,6)
-    nullable: false
+    nullable: true
     unit: R$/kWh
     minimum: 0
+    description: Tarifa base de consumo homologada em R$/kWh. Nulo quando não há fatura emitida.
   adicional_bandeira:
     type: numeric(18,6)
-    nullable: false
+    nullable: true
     unit: R$/kWh
     minimum: 0
+    description: Valor do adicional tarifário decorrente da bandeira tarifária em R$/kWh. Nulo quando não há fatura emitida.
   bandeira:
     type: text
-    nullable: false
-    unit: identificador/texto
+    nullable: true
+    unit: —
+    enum:
+    - VERDE
+    - AMARELA
+    - VERMELHA_P1
+    - VERMELHA_P2
+    description: Bandeira tarifária vigente na competência de faturamento. Nulo quando não há fatura emitida.
   status_pagamento:
     type: text
-    nullable: false
-    unit: identificador/texto
+    nullable: true
+    unit: —
     enum:
     - PAGA
     - ABERTA
+    description: Situação de pagamento da fatura da competência (PAGA ou ABERTA). Nulo quando não há fatura emitida.
+  data_vencimento:
+    type: date
+    nullable: true
+    unit: —
+    description: Data limite de vencimento da fatura. Nulo quando não há fatura emitida na competência.
   grupo_uc:
     type: text
     nullable: false
-    unit: identificador/texto
+    unit: —
     enum:
     - GD
     - IRREGULARIDADE_CONFIRMADA
     - DEMAIS
-description: Contrato local sintético derivado do system design; sujeito à validação
-  do time de dados.
+    description: Classificação do grupo da UC no ciclo segundo as regras temporais de GD e perdas.
+description: Série mensal detalhada de consumo, faturamento, leitura e cobrança por unidade consumidora e competência.
 control_totals:
 - volume_faturado_kwh
 - valor_total

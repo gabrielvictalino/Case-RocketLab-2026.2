@@ -1,4 +1,4 @@
-version: 0.2.0-provisional
+version: 0.3.0-provisional
 status: provisorio-nao-aprovado
 table: continuidade_alimentador_mensal
 grain: alimentador × competência
@@ -9,49 +9,57 @@ columns:
   alimentador:
     type: text
     nullable: false
-    unit: identificador/texto
+    unit: —
     pattern: ^ALM-[A-Z]{3}-\d{3}$
     references:
     - dim_alimentador
     - alimentador
+    description: Código identificador do alimentador de distribuição.
   competencia:
     type: date
     nullable: false
-    unit: data ISO
+    unit: —
     month: true
+    description: Primeiro dia do mês de apuração dos indicadores de continuidade.
   numero_ucs:
     type: integer
     nullable: false
     unit: UCs
     minimum: 1
+    description: Quantidade total de unidades consumidoras atendidas pelo alimentador na competência.
   chi_horas:
     type: numeric(18,2)
     nullable: false
     unit: UC × hora
     minimum: 0
+    description: Consumidor-hora interrompido (CHI) acumulado no alimentador no mês.
   interrupcoes:
     type: integer
     nullable: false
     unit: interrupções
     minimum: 0
+    description: Número total de interrupções ocorridas no alimentador na competência.
   dec:
     type: numeric(18,2)
     nullable: false
     unit: horas/UC
     minimum: 0
+    description: Duração Equivalente de Interrupção por Unidade Consumidora no mês (horas/UC).
   fec:
     type: numeric(18,2)
     nullable: false
     unit: interrupções/UC
     minimum: 0
+    description: Frequência Equivalente de Interrupção por Unidade Consumidora no mês (interrupções/UC).
   causa:
     type: text
     nullable: false
-    unit: identificador/texto
+    unit: —
+    description: Causa predominante ou agrupada das interrupções no período.
   flag_evento_atipico:
     type: boolean
     nullable: false
-    unit: flag
-description: Contrato local sintético derivado do system design; sujeito à validação
-  do time de dados.
+    unit: —
+    description: Indica se o mês foi classificado como evento atípico de continuidade.
+description: Indicadores mensais de continuidade do fornecimento de energia (DEC, FEC e CHI) por alimentador.
 control_totals: []

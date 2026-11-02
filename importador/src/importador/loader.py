@@ -15,6 +15,10 @@ VIEWS = Path(__file__).resolve().parents[2] / 'views.sql'
 PUBLICATION_LOCK = 7820360
 
 
+class _Verificado(Exception):
+    """Sinaliza conclusão com sucesso do modo verify_only para rollback automático."""
+
+
 def table_ddl(name, spec):
     fields = [
         f'"{column}" {col["type"]}' + ('' if col['nullable'] else ' NOT NULL')
@@ -81,22 +85,6 @@ async def validate(db, specs, manifest):
         'hi'
     ] != date.fromisoformat(manifest['period']['end'] + '-01'):
         raise ContractError('Cobertura mensal diverge do manifesto')
-    # Reconciliar por grão, não só os totais: evita compensação entre grupos.
-    divergent = await db.fetchval("""
-        WITH detalhe AS (
-          SELECT m.competencia,u.municipio,u.bairro,u.classe,m.grupo_uc,
-            sum(m.volume_faturado_kwh) volume_faturado_kwh,
-            sum(m.valor_total) receita, sum(m.valor_arrecadado) receita_arrecadada,
-            round(sum(m.volume_faturado_kwh*m.tarifa_base),2) componente_tarifa_reais,
-            round(sum(m.volume_faturado_kwh*m.adicional_bandeira),2) componente_bandeira_reais
-          FROM analytics_staging.uc_consumo_faturamento_mensal m
-          JOIN analytics_staging.dim_uc u USING(id_uc) GROUP BY 1,2,3,4,5
-        ), agregado AS (SELECT * FROM analytics_staging.receita_volume_mensal)
-        SELECT EXISTS((SELECT * FROM detalhe EXCEPT SELECT * FROM agregado)
-          UNION ALL (SELECT * FROM agregado EXCEPT SELECT * FROM detalhe))
-    """)
-    if divergent:
-        raise ContractError('Receita e volume não reconciliam por grão')
     invalid_inspection = await db.fetchval("""SELECT EXISTS(
         SELECT 1 FROM analytics_staging.inspecoes_historicas WHERE NOT (
           (resultado='IRREGULARIDADE CONFIRMADA' AND tipo_irregularidade IS NOT NULL
@@ -115,8 +103,111 @@ async def validate(db, specs, manifest):
     if invalid_dates:
         raise ContractError('Datas ou durações incoerentes')
 
+    # Gate R2: Nulidade consistente quando id_fatura é nulo
+    invalid_null_invoice = await db.fetchval("""SELECT EXISTS(
+        SELECT 1 FROM analytics_staging.uc_consumo_faturamento_mensal
+        WHERE (id_fatura IS NULL AND NOT (
+          bandeira IS NULL AND status_pagamento IS NULL AND data_vencimento IS NULL
+          AND tarifa_base IS NULL AND adicional_bandeira IS NULL
+          AND volume_faturado_kwh = 0 AND valor_total = 0 AND valor_arrecadado = 0
+        )) OR (id_fatura IS NOT NULL AND (
+          bandeira IS NULL OR status_pagamento IS NULL OR data_vencimento IS NULL
+          OR tarifa_base IS NULL OR adicional_bandeira IS NULL
+        )))""")
+    if invalid_null_invoice:
+        raise ContractError(
+            'uc_consumo_faturamento_mensal: inconsistência em competência sem fatura (R2)'
+        )
 
-async def load(origin, database_url, redis_url=None):
+    # Gate R2: Arrecadação compatível com status de pagamento
+    invalid_payment_status = await db.fetchval("""SELECT EXISTS(
+        SELECT 1 FROM analytics_staging.uc_consumo_faturamento_mensal
+        WHERE (status_pagamento = 'PAGA' AND valor_arrecadado <> valor_total)
+           OR (status_pagamento = 'ABERTA' AND valor_arrecadado <> 0))""")
+    if invalid_payment_status:
+        raise ContractError(
+            'uc_consumo_faturamento_mensal: valor arrecadado incompatível com status_pagamento (R2)'
+        )
+
+    # Gate R2: Troca de medidor exige método diferente de LEITURA
+    invalid_meter_exchange = await db.fetchval("""SELECT EXISTS(
+        SELECT 1 FROM analytics_staging.uc_consumo_faturamento_mensal
+        WHERE flag_troca_medidor = true AND metodo_consumo = 'LEITURA')""")
+    if invalid_meter_exchange:
+        raise ContractError(
+            'uc_consumo_faturamento_mensal: '
+            'flag_troca_medidor exige metodo_consumo diferente de LEITURA (R2)'
+        )
+
+    # Gate R3: Grupo de UC temporal segundo prioridade GD > IRREGULARIDADE > DEMAIS
+    invalid_group = await db.fetchval("""SELECT EXISTS(
+        WITH primeira_irregularidade AS (
+          SELECT id_uc, date_trunc('month', min(data))::date AS mes_irregularidade
+          FROM analytics_staging.inspecoes_historicas
+          WHERE resultado = 'IRREGULARIDADE CONFIRMADA'
+          GROUP BY id_uc
+        ),
+        esperado AS (
+          SELECT
+            m.id_uc,
+            m.competencia,
+            CASE
+              WHEN g.id_uc IS NOT NULL
+                AND m.competencia >= date_trunc('month', g.data_conexao)::date
+                THEN 'GD'
+              WHEN i.id_uc IS NOT NULL AND m.competencia >= i.mes_irregularidade
+                THEN 'IRREGULARIDADE_CONFIRMADA'
+              ELSE 'DEMAIS'
+            END AS grupo_esperado,
+            m.grupo_uc
+          FROM analytics_staging.uc_consumo_faturamento_mensal m
+          LEFT JOIN analytics_staging.gd_uc g ON m.id_uc = g.id_uc
+          LEFT JOIN primeira_irregularidade i ON m.id_uc = i.id_uc
+        )
+        SELECT 1 FROM esperado WHERE grupo_esperado <> grupo_uc LIMIT 1)""")
+    if invalid_group:
+        raise ContractError(
+            'uc_consumo_faturamento_mensal: grupo_uc diverge da regra temporal (R3)'
+        )
+
+    # Gate R4: dim_uc.flag_gd equivale à presença em gd_uc
+    invalid_flag_gd = await db.fetchval("""SELECT EXISTS(
+        SELECT 1 FROM analytics_staging.dim_uc u
+        FULL OUTER JOIN analytics_staging.gd_uc g ON u.id_uc = g.id_uc
+        WHERE (u.flag_gd = true AND g.id_uc IS NULL)
+           OR (u.flag_gd = false AND g.id_uc IS NOT NULL)
+           OR u.id_uc IS NULL)""")
+    if invalid_flag_gd:
+        raise ContractError('dim_uc: flag_gd diverge de gd_uc (R4)')
+
+    # Gate R4: fila_inspecao não pode conter UC com GD
+    invalid_queue_gd = await db.fetchval("""SELECT EXISTS(
+        SELECT 1 FROM analytics_staging.fila_inspecao f
+        JOIN analytics_staging.gd_uc g ON f.id_uc = g.id_uc)""")
+    if invalid_queue_gd:
+        raise ContractError('fila_inspecao: contém UC presente em gd_uc (R4)')
+
+    # Reconciliar por grão, não só os totais: evita compensação entre grupos.
+    divergent = await db.fetchval("""
+        WITH detalhe AS (
+          SELECT m.competencia,u.municipio,u.bairro,u.classe,m.grupo_uc,
+            sum(m.volume_faturado_kwh) volume_faturado_kwh,
+            sum(m.valor_total) receita, sum(m.valor_arrecadado) receita_arrecadada,
+            round(sum(m.volume_faturado_kwh*coalesce(m.tarifa_base,0)),2)
+              componente_tarifa_reais,
+            round(sum(m.volume_faturado_kwh*coalesce(m.adicional_bandeira,0)),2)
+              componente_bandeira_reais
+          FROM analytics_staging.uc_consumo_faturamento_mensal m
+          JOIN analytics_staging.dim_uc u USING(id_uc) GROUP BY 1,2,3,4,5
+        ), agregado AS (SELECT * FROM analytics_staging.receita_volume_mensal)
+        SELECT EXISTS((SELECT * FROM detalhe EXCEPT SELECT * FROM agregado)
+          UNION ALL (SELECT * FROM agregado EXCEPT SELECT * FROM detalhe))
+    """)
+    if divergent:
+        raise ContractError('Receita e volume não reconciliam por grão')
+
+
+async def load(origin, database_url, redis_url=None, *, verify_only=False):
     origin = Path(origin)
     manifest = manifest_for(origin)
     specs = specifications()
@@ -126,68 +217,83 @@ async def load(origin, database_url, redis_url=None):
         # Lock de sessão cobre também o commit e a atualização externa do Redis.
         # Fechar a conexão libera o lock inclusive em erro/cancelamento.
         await db.execute('SELECT pg_advisory_lock($1)', PUBLICATION_LOCK)
-        async with db.transaction():
-            await db.execute("SET LOCAL lock_timeout = '15s'")
-            await db.execute('CREATE SCHEMA analytics_staging AUTHORIZATION importador')
-            # Default privileges pertencem ao OID do schema e precisam acompanhar a troca.
-            await db.execute("""ALTER DEFAULT PRIVILEGES IN SCHEMA analytics_staging
-                GRANT SELECT ON TABLES TO portal""")
-            for name, spec in specs.items():
-                file = origin / f'{name}.csv'
-                if file_hash(file) != manifest['tables'][name]['sha256']:
-                    raise ContractError(f'{name}: SHA-256 divergente')
-                await db.execute(table_ddl(name, spec))
-                await db.copy_records_to_table(
-                    name,
-                    schema_name='analytics_staging',
-                    columns=list(spec['columns']),
-                    records=records(file, spec),
+        try:
+            async with db.transaction():
+                await db.execute("SET LOCAL lock_timeout = '15s'")
+                await db.execute('CREATE SCHEMA analytics_staging AUTHORIZATION importador')
+                # Default privileges pertencem ao OID do schema e precisam acompanhar a troca.
+                await db.execute("""ALTER DEFAULT PRIVILEGES IN SCHEMA analytics_staging
+                    GRANT SELECT ON TABLES TO portal""")
+                for name, spec in specs.items():
+                    file = origin / f'{name}.csv'
+                    if file_hash(file) != manifest['tables'][name]['sha256']:
+                        raise ContractError(f'{name}: SHA-256 divergente')
+                    await db.execute(table_ddl(name, spec))
+                    await db.copy_records_to_table(
+                        name,
+                        schema_name='analytics_staging',
+                        columns=list(spec['columns']),
+                        records=records(file, spec),
+                    )
+                    await primary_key(db, name, spec)
+                await validate(db, specs, manifest)
+                # Índices por UC e competência complementam as PKs do contrato.
+                for name, spec in specs.items():
+                    for column in ('id_uc', 'competencia'):
+                        if column in spec['columns'] and spec['primary_key'][0] != column:
+                            await db.execute(
+                                f'CREATE INDEX ON analytics_staging."{name}" ("{column}")'
+                            )
+                if verify_only:
+                    raise _Verificado()
+
+                await db.execute('ALTER SCHEMA analytics RENAME TO analytics_anterior')
+                await db.execute('ALTER SCHEMA analytics_staging RENAME TO analytics')
+                await db.execute('GRANT USAGE ON SCHEMA analytics TO portal')
+                for name in specs:
+                    await db.execute(f'GRANT SELECT ON analytics."{name}" TO portal')
+                # Views pertencem ao importador; não há dependência reversa de migração.
+                await db.execute(VIEWS.read_text())
+                # Remove FKs internas antes das tabelas, sem CASCADE.
+                constraints = await db.fetch("""SELECT c.conname, t.relname FROM pg_constraint c
+                    JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
+                    WHERE n.nspname='analytics_anterior' AND c.contype='f' """)
+                for row in constraints:
+                    # Identificadores vêm do catálogo do banco, com escaping SQL.
+                    table = row['relname'].replace('"', '""')
+                    constraint = row['conname'].replace('"', '""')
+                    await db.execute(
+                        f'ALTER TABLE analytics_anterior."{table}" DROP CONSTRAINT "{constraint}"'
+                    )
+                old_tables = await db.fetch(
+                    "SELECT tablename FROM pg_tables WHERE schemaname='analytics_anterior'"
                 )
-                await primary_key(db, name, spec)
-            await validate(db, specs, manifest)
-            # Índices por UC e competência complementam as PKs do contrato.
-            for name, spec in specs.items():
-                for column in ('id_uc', 'competencia'):
-                    if column in spec['columns'] and spec['primary_key'][0] != column:
-                        await db.execute(f'CREATE INDEX ON analytics_staging."{name}" ("{column}")')
-            await db.execute('ALTER SCHEMA analytics RENAME TO analytics_anterior')
-            await db.execute('ALTER SCHEMA analytics_staging RENAME TO analytics')
-            await db.execute('GRANT USAGE ON SCHEMA analytics TO portal')
-            for name in specs:
-                await db.execute(f'GRANT SELECT ON analytics."{name}" TO portal')
-            # Views pertencem ao importador; não há dependência reversa de migração.
-            await db.execute(VIEWS.read_text())
-            # Remove FKs internas antes das tabelas, sem CASCADE.
-            constraints = await db.fetch("""SELECT c.conname, t.relname FROM pg_constraint c
-                JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
-                WHERE n.nspname='analytics_anterior' AND c.contype='f' """)
-            for row in constraints:
-                # Identificadores vêm do catálogo do banco, com escaping SQL.
-                table = row['relname'].replace('"', '""')
-                constraint = row['conname'].replace('"', '""')
+                for row in old_tables:
+                    table = row['tablename'].replace('"', '""')
+                    await db.execute(f'DROP TABLE analytics_anterior."{table}"')
+                await db.execute('DROP SCHEMA analytics_anterior')
                 await db.execute(
-                    f'ALTER TABLE analytics_anterior."{table}" DROP CONSTRAINT "{constraint}"'
+                    """INSERT INTO operations.cargas
+                    (id,batch_id,versao_contrato,sintetica,periodo_inicio,periodo_fim,manifesto,
+                     carregado_em)
+                    VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,clock_timestamp())""",
+                    load_id,
+                    manifest['batch_id'],
+                    manifest['contract_version'],
+                    manifest['synthetic'],
+                    date.fromisoformat(manifest['period']['start'] + '-01'),
+                    date.fromisoformat(manifest['period']['end'] + '-01'),
+                    json.dumps(manifest),
                 )
-            old_tables = await db.fetch(
-                "SELECT tablename FROM pg_tables WHERE schemaname='analytics_anterior'"
-            )
-            for row in old_tables:
-                table = row['tablename'].replace('"', '""')
-                await db.execute(f'DROP TABLE analytics_anterior."{table}"')
-            await db.execute('DROP SCHEMA analytics_anterior')
-            await db.execute(
-                """INSERT INTO operations.cargas
-                (id,batch_id,versao_contrato,sintetica,periodo_inicio,periodo_fim,manifesto,
-                 carregado_em)
-                VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,clock_timestamp())""",
-                load_id,
-                manifest['batch_id'],
-                manifest['contract_version'],
-                manifest['synthetic'],
-                date.fromisoformat(manifest['period']['start'] + '-01'),
-                date.fromisoformat(manifest['period']['end'] + '-01'),
-                json.dumps(manifest),
-            )
+        except _Verificado:
+            print(f'Versão do contrato: {manifest["contract_version"]}')
+            print(f'Batch ID: {manifest["batch_id"]}')
+            print(f'Período: {manifest["period"]["start"]}..{manifest["period"]["end"]}')
+            print(f'Data de referência: {manifest["reference_date"]}')
+            for name, entry in manifest['tables'].items():
+                print(f'  {name}: {entry["rows"]} linhas')
+            print('OK')
+            return None
         # PostgreSQL é a fonte de verdade. Falha no Redis não desfaz carga confirmada.
         if redis_url:
             await publish_redis(redis_url, load_id)

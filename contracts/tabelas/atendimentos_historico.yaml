@@ -1,4 +1,4 @@
-version: 0.2.0-provisional
+version: 0.3.0-provisional
 status: provisorio-nao-aprovado
 table: atendimentos_historico
 grain: protocolo × sequência
@@ -9,23 +9,25 @@ columns:
   protocolo:
     type: text
     nullable: false
-    unit: identificador/texto
+    unit: —
     references:
     - atendimentos
     - protocolo
+    description: Número do protocolo de atendimento ao qual a etapa pertence.
   sequencia:
     type: integer
     nullable: false
-    unit: sequência
-    minimum: 1
+    unit: —
+    description: Número de ordem cronológica da interação dentro do protocolo.
   data:
     type: timestamp
     nullable: false
-    unit: data-hora local sem fuso
+    unit: —
+    description: Data e hora em que a interação ou tratativa foi registrada.
   descricao:
     type: text
     nullable: false
-    unit: identificador/texto
-description: Contrato local sintético derivado do system design; sujeito à validação
-  do time de dados.
+    unit: —
+    description: Descrição textual do andamento ou da tratativa realizada.
+description: Histórico detalhado de etapas e tratativas operacionais dos protocolos de atendimento.
 control_totals: []

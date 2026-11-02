@@ -1,4 +1,4 @@
-version: 0.2.0-provisional
+version: 0.3.0-provisional
 status: provisorio-nao-aprovado
 table: dim_alimentador
 grain: alimentador
@@ -8,17 +8,19 @@ columns:
   alimentador:
     type: text
     nullable: false
-    unit: identificador/texto
+    unit: —
     pattern: ^ALM-[A-Z]{3}-\d{3}$
+    description: Código identificador único do alimentador de distribuição.
   municipio:
     type: text
     nullable: false
-    unit: identificador/texto
+    unit: —
+    description: Município onde se localiza a maior parte da carga do alimentador.
   numero_ucs:
     type: integer
     nullable: false
     unit: UCs
-    minimum: 0
-description: Contrato local sintético derivado do system design; sujeito à validação
-  do time de dados.
+    minimum: 1
+    description: Número de unidades consumidoras vinculadas ao alimentador.
+description: Dimensão cadastral dos alimentadores de distribuição de energia elétrica.
 control_totals: []
