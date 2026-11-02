@@ -4,6 +4,8 @@ import {
   Navigate,
   type RouteObject,
 } from 'react-router'
+import { PaginaLogin } from '@/app/auth/PaginaLogin'
+import { RotaProtegida } from '@/app/auth/RotaProtegida'
 import { LayoutPrincipal } from '@/app/layout/LayoutPrincipal'
 import { PaginaNaoEncontrada } from '@/app/PaginaNaoEncontrada'
 import { PaginaOperacao } from '@/features/operacao/PaginaOperacao'
@@ -14,8 +16,16 @@ import { PaginaVisaoGeral } from '@/features/visao-geral/PaginaVisaoGeral'
 
 export const rotas: RouteObject[] = [
   {
+    path: '/login',
+    element: <PaginaLogin />,
+  },
+  {
     path: '/',
-    element: <LayoutPrincipal />,
+    element: (
+      <RotaProtegida>
+        <LayoutPrincipal />
+      </RotaProtegida>
+    ),
     children: [
       {
         index: true,
