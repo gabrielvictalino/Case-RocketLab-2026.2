@@ -187,13 +187,13 @@ As saídas comerciais são `uc_consumo_faturamento_mensal` e
 `receita_volume_mensal`, com colunas, ordem, tipos e escalas carregados dos YAMLs
 em `contracts/tabelas/`. O adaptador fica em
 [`gold_contrato_faturas.py`](../../data-engineering/silver_to_gold/gold_contrato_faturas.py).
-Não altera os gates do importador nem considera as auxiliares equivalentes ao contrato.
+Acrescenta o gate de volume igual ao analítico no importador; auxiliares não substituem o contrato.
 
 ### R2: consumo e faturamento
 
 A série começa nas leituras das UCs presentes no cadastro. Não gera meses sem
-leitura com consumo original inventado. Uma fatura elegível sem leitura bloqueia
-a saída comercial: é necessário recuperar a leitura original da competência.
+leitura com consumo original inventado. Uma fatura sem leitura é segregada em `faturas_excluidas` com motivo
+`FATURA_SEM_LEITURA`; não se fabrica uma leitura nem uma competência comercial.
 Leituras sem cadastro não viram UCs fictícias; faturas correspondentes continuam
 segregadas e reconciliadas nas auxiliares.
 
@@ -226,28 +226,45 @@ segregadas e reconciliadas nas auxiliares.
   nominal. Esta implementação aplica a convenção provisória, sem comprovação
   independente de caixa, descontos, juros ou pagamentos parciais.**
 
-O widget `tabela_complemento_faturamento` precisa apontar para uma fonte Delta
-homologada com uma linha por `id_fatura` e as colunas:
+## Decisão de dados — comentário 6587742059 da #67
 
-| Campo | Tipo exigido na saída | Origem a fornecer |
-| --- | --- | --- |
-| `volume_faturado_kwh` | decimal(18,2) | Volume discriminado na fatura/sistema comercial, não leitura ou mediana |
-| `tarifa_base` | decimal(18,6) | Tarifa homologada aplicável à fatura, com vigência e classe/subgrupo comprovados |
-| `adicional_bandeira` | decimal(18,6) | Adicional tarifário homologado aplicável à competência/fatura |
-| `proveniencia` | texto não vazio | Identificador auditável da fonte/regra homologada e sua versão |
+Implementa a [decisão de 02/11/2026](https://github.com/gabrielvictalino/Case-RocketLab-2026.2/pull/67#issuecomment-6587742059).
+O nome e o layout `0.3.0-provisional` são mantidos; as descrições provisórias são
+alinhadas ao significado aprovado para o case. Isso não aprova os demais domínios.
 
-As três métricas não existem em `COLUNAS_FATURAS` da Silver atual. `valor_energia`
-não separa tarifa e bandeira, e `valor_total / consumo` é apenas preço efetivo.
-O adaptador não usa nenhuma dessas substituições. Valida valores não negativos,
-precisão/escala sem truncamento e presença do complemento para toda fatura elegível.
-Em `modo=validar`, sem complemento, valida auxiliares e consumo/R3 e informa o
-bloqueio. Em `modo=publicar`, recusa **antes de criar schemas, tabelas ou CSVs**.
+- `volume_faturado_kwh` é o consumo analítico associado à fatura elegível, incluindo
+  estimativas. Não comprova volume do sistema comercial. Sem fatura, continua zero.
+- Original é o valor da Silver, após correções comprovadas de sinal. Leitura utilizável
+  mantém o valor; leituras bloqueadas usam mediana da própria UC por fase da GD,
+  com fallback histórico. Sem doador, a exportação falha com a contagem no erro.
+- O snapshot de `v-energy.silver.tb_medidores` fornece o mês de retirada, equivalente
+  a `competencia_troca` da #105. Esse mês também marca troca quando a leitura só
+  indica ausência de anterior; não se usa o mês de instalação do medidor seguinte.
+- Faturas sem leitura são segregadas com `FATURA_SEM_LEITURA`, como as pendências
+  cadastrais; detalhe + exclusões continuam reconciliando integralmente a fonte.
+  Problema na medição não exclui uma fatura válida que possui leitura estimável.
+- Tarifa base é derivada por subgrupo tarifário × competência: mediana de
+  `valor_energia / consumo utilizável positivo - adicional_bandeira`, nas faturas
+  elegíveis. Subtrair a bandeira evita contá-la duas vezes nos componentes da R5.
+  A mediana é arredondada para seis casas; não é tarifa homologada. Sem doador de
+  tarifa no grupo/mês, a carga falha com contagem; não há fallback entre classes.
+- Adicionais fixos: Verde 0; Amarela 0,01885; Vermelha P1 0,04463; Vermelha P2
+  0,07877 R$/kWh. São característica dos dados do case em todo o período e não
+  representam o histórico regulatório da ANEEL.
+- `complemento_proveniencia` guarda a regra, subgrupo e contagem de doadores por
+  fatura. `consumo_proveniencia` guarda original, método, medianas e doadores.
+  `cobertura_volume` discrimina quantidade, volume e receita por método e tipo de
+  leitura, no grão comercial: permite somar observado/estimado e calcular a cobertura.
+  `LEITURA_UTILIZAVEL` com tipo `ESTIMADA` continua distinguível de leitura `REAL`.
+- O complemento é derivado quando o widget está vazio. Um complemento explícito
+  continua sujeito aos gates, inclusive volume igual ao analítico. O importador
+  também verifica essa igualdade para toda linha com fatura.
+- Os componentes da R5 somam produtos decimais antes de arredondar por grão.
+  Não se fixa `k₀ = 4/3`: resíduos e composição podem mudar o fator e o mix.
+  Volume implícito pela conta não substitui o volume canônico.
 
-Proposta concreta: o responsável pelo sistema comercial deve entregar o complemento
-por fatura e documentar a origem das três métricas. Se não houver fonte, a alternativa
-é uma nova revisão contratual discutida com os consumidores, não preencher campos
-fictícios nem afrouxar gates nesta PR. Hoje não há tabela física comprovada para
-esse complemento, por isso o padrão do parâmetro é vazio.
+A homologação no Databricks, disponibilidade/coerência das fontes (incluindo
+inspeções), referência oficial e lote completo de 12 tabelas seguem necessárias.
 
 ### R3: grupo temporal
 
@@ -272,12 +289,10 @@ preço efetivo e receita sem volume. Não equivale a volume, reajuste, bandeira 
 mix do contrato. `contracts/README.md` e `docs/backend-pendencias.md` atribuem a
 fórmula canônica à P20; os consumidores atuais usam `receita_volume_mensal`
 (importador, views e portal). Esta PR fornece nessa tabela volume faturado,
-receita, arrecadação convencional e componentes de tarifa/bandeira **quando o
-complemento homologado existe**, sem duplicar o cálculo dos quatro efeitos.
+receita, arrecadação convencional e componentes de tarifa/bandeira com o complemento derivado ou explícito validado, sem duplicar o cálculo dos quatro efeitos.
 Os componentes somam produtos Decimal antes de arredondar uma vez por grão a
 duas casas (`round` Spark, empate afastando de zero); validam-se os resultados
-com `exceptAll` nos dois sentidos. Sem complemento, R5 fica concretamente
-bloqueado pelos três campos acima, além da implementação da P20 no consumidor.
+com `exceptAll` nos dois sentidos. A P20 permanece responsável pelo cálculo dos quatro efeitos no consumidor.
 
 ## Consistência das fontes e data de referência
 
@@ -452,5 +467,5 @@ ACL de escritor único, snapshots retidos, registro MERGE e limpeza após sete d
 conferir leitura exata dos CSVs no FUSE do Volume, timestamps e visibilidade de
 rename/recibo no runtime. A hipótese de part files órfãos não foi reproduzida no
 Databricks; os testes locais comprovam rejeição de conteúdo divergente injetado.
-A referência oficial da extração, a disponibilidade de GD/inspeções e o complemento
-financeiro permanecem dependências de negócio identificadas acima.
+A referência oficial da extração, a disponibilidade de GD/inspeções e os doadores
+de tarifa permanecem dependências identificadas acima.

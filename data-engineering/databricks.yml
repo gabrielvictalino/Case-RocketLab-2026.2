@@ -26,8 +26,10 @@ variables:
     default: v-energy.silver.tb_geracao_distribuida
   tabela_inspecoes:
     default: venergy.silver.inspecoes
+  tabela_medidores:
+    default: v-energy.silver.tb_medidores
   tabela_complemento_faturamento:
-    description: Fonte homologada por id_fatura; vazio bloqueia publicação contratual.
+    description: Complemento explícito opcional; vazio deriva conforme decisão da #67.
     default: ''
   schema_gold:
     default: v-energy.gold
@@ -57,6 +59,7 @@ resources:
               tabela_publicacao: ${var.tabela_publicacao}
               tabela_gd: ${var.tabela_gd}
               tabela_inspecoes: ${var.tabela_inspecoes}
+              tabela_medidores: ${var.tabela_medidores}
               tabela_complemento_faturamento: ${var.tabela_complemento_faturamento}
               schema_gold: ${var.schema_gold}
 

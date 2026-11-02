@@ -367,6 +367,15 @@ async def test_redis_failure_does_not_undo_committed_import(db, infrastructure):
             'LEITURA_UTILIZAVEL exige consumo analítico igual ao original (R2)',
         ),
         (
+            'r2_volume_analitico',
+            'uc_consumo_faturamento_mensal',
+            lambda rows: next(
+                r for r in rows if r['id_fatura'] and r['metodo_consumo'] != 'LEITURA_UTILIZAVEL'
+            ).update(consumo_kwh_analitico='999.00'),
+            'uc_consumo_faturamento_mensal',
+            'volume com fatura deve ser igual ao consumo analítico (R2)',
+        ),
+        (
             'r3_group_temporal',
             'uc_consumo_faturamento_mensal',
             # UC100000 em 2025-01 é GD, mudar para DEMAIS

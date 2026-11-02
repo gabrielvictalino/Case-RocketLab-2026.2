@@ -1,4 +1,3 @@
-# Databricks notebook source
 """Transformações e exportação da Gold de faturas, sem dependência de dbutils."""
 
 from datetime import date

@@ -12,6 +12,46 @@ de pagamento (R2), a regra temporal de grupos de UC (R3), a coerência cadastral
 a fórmula canônica de decomposição da receita (R5), a data de referência no manifesto (R6),
 o gerador autônomo de manifesto (R7) e o modo de teste `--verificar` (R8).
 
+## Decisão de dados — comentário 6587742059 da #67
+
+Implementa a [decisão de 02/11/2026](https://github.com/gabrielvictalino/Case-RocketLab-2026.2/pull/67#issuecomment-6587742059).
+O nome e o layout `0.3.0-provisional` são mantidos; as descrições provisórias são
+alinhadas ao significado aprovado para o case. Isso não aprova os demais domínios.
+
+- `volume_faturado_kwh` é o consumo analítico associado à fatura elegível, incluindo
+  estimativas. Não comprova volume do sistema comercial. Sem fatura, continua zero.
+- Original é o valor da Silver, após correções comprovadas de sinal. Leitura utilizável
+  mantém o valor; leituras bloqueadas usam mediana da própria UC por fase da GD,
+  com fallback histórico. Sem doador, a exportação falha com a contagem no erro.
+- O snapshot de `v-energy.silver.tb_medidores` fornece o mês de retirada, equivalente
+  a `competencia_troca` da #105. Esse mês também marca troca quando a leitura só
+  indica ausência de anterior; não se usa o mês de instalação do medidor seguinte.
+- Faturas sem leitura são segregadas com `FATURA_SEM_LEITURA`, como as pendências
+  cadastrais; detalhe + exclusões continuam reconciliando integralmente a fonte.
+  Problema na medição não exclui uma fatura válida que possui leitura estimável.
+- Tarifa base é derivada por subgrupo tarifário × competência: mediana de
+  `valor_energia / consumo utilizável positivo - adicional_bandeira`, nas faturas
+  elegíveis. Subtrair a bandeira evita contá-la duas vezes nos componentes da R5.
+  A mediana é arredondada para seis casas; não é tarifa homologada. Sem doador de
+  tarifa no grupo/mês, a carga falha com contagem; não há fallback entre classes.
+- Adicionais fixos: Verde 0; Amarela 0,01885; Vermelha P1 0,04463; Vermelha P2
+  0,07877 R$/kWh. São característica dos dados do case em todo o período e não
+  representam o histórico regulatório da ANEEL.
+- `complemento_proveniencia` guarda a regra, subgrupo e contagem de doadores por
+  fatura. `consumo_proveniencia` guarda original, método, medianas e doadores.
+  `cobertura_volume` discrimina quantidade, volume e receita por método e tipo de
+  leitura, no grão comercial: permite somar observado/estimado e calcular a cobertura.
+  `LEITURA_UTILIZAVEL` com tipo `ESTIMADA` continua distinguível de leitura `REAL`.
+- O complemento é derivado quando o widget está vazio. Um complemento explícito
+  continua sujeito aos gates, inclusive volume igual ao analítico. O importador
+  também verifica essa igualdade para toda linha com fatura.
+- Os componentes da R5 somam produtos decimais antes de arredondar por grão.
+  Não se fixa `k₀ = 4/3`: resíduos e composição podem mudar o fator e o mix.
+  Volume implícito pela conta não substitui o volume canônico.
+
+A homologação no Databricks, disponibilidade/coerência das fontes (incluindo
+inspeções), referência oficial e lote completo de 12 tabelas seguem necessárias.
+
 ## Convenções de intercâmbio
 
 - UTF-8, CSV com vírgula, cabeçalho e ordem de colunas exatamente como o contrato.

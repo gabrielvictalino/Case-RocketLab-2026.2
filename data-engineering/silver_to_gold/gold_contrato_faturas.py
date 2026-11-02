@@ -1,4 +1,4 @@
-"""Adaptador comercial do contrato 0.3.0-provisional; nenhuma tarifa é inferida."""
+"""Contrato 0.3.0-provisional: volume analítico e tarifa derivada das faturas."""
 
 from pathlib import Path
 
@@ -65,7 +65,9 @@ def validar_tabela_contratual(df, spec):
     )
 
 
-def construir_consumo_contratual(leituras, cadastro, gd, inspecoes, data_referencia):
+def construir_consumo_contratual(
+    leituras, cadastro, gd, inspecoes, data_referencia, medidores=None
+):
     """Métodos da GD generalizados para todas as UCs, com proveniência auxiliar.
 
     Mediana aproximada Spark (mesma convenção da Gold GD), apenas de leituras
@@ -119,6 +121,32 @@ def construir_consumo_contratual(leituras, cadastro, gd, inspecoes, data_referen
         },
         'leituras contratuais',
     )
+    # A retirada identifica também trocas sem leitura anterior (regra da #105).
+    if medidores is not None:
+        _exigir_colunas(
+            medidores, ['id_uc', 'id_medidor', 'id_medidor_anterior', 'data_retirada'], 'medidores'
+        )
+        _exigir_chave(medidores, ['id_medidor'], 'medidores')
+        if medidores.schema['data_retirada'].dataType.simpleString() != 'date':
+            raise ValueError('medidores: data_retirada precisa ser date')
+        retirados = medidores.filter(F.col('data_retirada').isNotNull()).select(
+            'id_uc', F.col('id_medidor').alias('id_medidor_anterior'), 'data_retirada'
+        )
+        trocas = (
+            medidores.select('id_uc', 'id_medidor_anterior')
+            .join(retirados, ['id_uc', 'id_medidor_anterior'], 'inner')
+            .select('id_uc', F.date_format('data_retirada', 'yyyy-MM').alias('mes_referencia'))
+            .distinct()
+            .withColumn('_troca_cadastral', F.lit(True))
+        )
+        leituras = (
+            leituras.join(trocas, ['id_uc', 'mes_referencia'], 'left')
+            .withColumn(
+                'flag_troca_medidor',
+                F.col('flag_troca_medidor') | F.coalesce('_troca_cadastral', F.lit(False)),
+            )
+            .drop('_troca_cadastral')
+        )
     primeira = (
         inspecoes.filter(F.col('resultado') == 'IRREGULARIDADE CONFIRMADA')
         .groupBy('id_uc')
@@ -178,38 +206,130 @@ def construir_consumo_contratual(leituras, cadastro, gd, inspecoes, data_referen
     return base.drop('_utilizavel')
 
 
+def segregar_faturas_sem_leitura(tabelas, leituras):
+    """Segrega a fatura inteira; reconciliação com a fonte continua obrigatória."""
+    from gold_faturas import agregar_faturamento
+
+    chaves = leituras.select('id_uc', 'mes_referencia')
+    detalhe = tabelas['faturas']
+    sem = detalhe.join(chaves, ['id_uc', 'mes_referencia'], 'left_anti')
+    excluidas = tabelas['faturas_excluidas']
+    sem = sem.withColumn('motivo_exclusao', F.lit('FATURA_SEM_LEITURA')).select(*excluidas.columns)
+    detalhe = detalhe.join(chaves, ['id_uc', 'mes_referencia'], 'left_semi')
+    return {
+        **tabelas,
+        'faturas': detalhe,
+        'faturas_excluidas': excluidas.unionByName(sem),
+        'faturamento_mensal': agregar_faturamento(detalhe),
+    }
+
+
+def derivar_complemento(consumo, detalhe, cadastro):
+    """Decisão #67: tarifa líquida da bandeira por subgrupo × competência.
+
+    Somente leitura utilizável positiva com fatura elegível doa tarifa; o volume
+    canônico usa o analítico e nunca é reconstruído pela conta.
+    """
+    from decimal import Decimal
+
+    _exigir_colunas(cadastro, ['id_uc', 'subgrupo_tarifario'], 'cadastro para tarifa')
+    adicionais = F.create_map(
+        *[
+            v
+            for nome, valor in [
+                ('Verde', '0'),
+                ('Amarela', '0.01885'),
+                ('Vermelha P1', '0.04463'),
+                ('Vermelha P2', '0.07877'),
+            ]
+            for v in (F.lit(nome), F.lit(Decimal(valor)).cast('decimal(18,6)'))
+        ]
+    )
+    base = (
+        detalhe.select('id_fatura', 'id_uc', 'competencia', 'valor_energia', 'bandeira_tarifaria')
+        .join(
+            consumo.select('id_uc', 'competencia', 'consumo_kwh_analitico', 'metodo_consumo'),
+            ['id_uc', 'competencia'],
+            'inner',
+        )
+        .join(cadastro.select('id_uc', 'subgrupo_tarifario'), 'id_uc', 'left')
+        .withColumn('adicional_bandeira', adicionais[F.col('bandeira_tarifaria')])
+    )
+    _validar_regras(
+        base,
+        {
+            'subgrupo_ausente': F.col('subgrupo_tarifario').isNull()
+            | (F.trim('subgrupo_tarifario') == ''),
+            'bandeira_desconhecida': F.col('adicional_bandeira').isNull(),
+        },
+        'derivação da tarifa',
+    )
+    doadores = base.filter(
+        (F.col('metodo_consumo') == 'LEITURA_UTILIZAVEL') & (F.col('consumo_kwh_analitico') > 0)
+    ).withColumn(
+        '_tarifa',
+        F.col('valor_energia') / F.col('consumo_kwh_analitico') - F.col('adicional_bandeira'),
+    )
+    _validar_regras(doadores, {'tarifa_negativa': F.col('_tarifa') < 0}, 'doadores de tarifa')
+    tarifas = doadores.groupBy('subgrupo_tarifario', 'competencia').agg(
+        F.percentile('_tarifa', F.lit(0.5)).cast('decimal(18,6)').alias('tarifa_base'),
+        F.count('*').alias('doadores_tarifa'),
+    )
+    base = base.join(tarifas, ['subgrupo_tarifario', 'competencia'], 'left')
+    _validar_regras(
+        base, {'sem_doador_tarifa': F.col('tarifa_base').isNull()}, 'tarifa derivada indisponível'
+    )
+    return base.select(
+        'id_fatura',
+        F.col('consumo_kwh_analitico').alias('volume_faturado_kwh'),
+        'tarifa_base',
+        'adicional_bandeira',
+        'subgrupo_tarifario',
+        'doadores_tarifa',
+        F.lit('case:#67:6587742059;volume=analitico;tarifa=mediana_liquida_bandeira').alias(
+            'proveniencia'
+        ),
+    )
+
+
+def cobertura_volume(mensal_uc, cadastro):
+    """Cobertura observada/estimada; auxiliar sem mudar o layout do contrato."""
+    return (
+        mensal_uc.filter(F.col('id_fatura').isNotNull())
+        .join(cadastro.select('id_uc', *DIMENSOES), 'id_uc', 'inner')
+        .groupBy('competencia', *DIMENSOES, 'grupo_uc', 'metodo_consumo', 'tipo_leitura')
+        .agg(
+            F.count('*').alias('quantidade_faturas'),
+            F.sum('volume_faturado_kwh').alias('volume_faturado_kwh'),
+            F.sum('valor_total').alias('receita'),
+        )
+    )
+
+
 def construir_saidas_contratuais(
-    consumo, tabelas_auxiliares, cadastro, complemento, raiz=CONTRATOS
+    consumo, tabelas_auxiliares, cadastro, complemento=None, raiz=CONTRATOS
 ):
-    """Complemento homologado por id_fatura; exige valores e proveniência explícitos."""
+    """Complemento derivado por padrão; valores e proveniência explícitos por fatura."""
     detalhe = tabelas_auxiliares['faturas']
+    if complemento is None:
+        complemento = derivar_complemento(consumo, detalhe, cadastro)
     _exigir_colunas(
         complemento,
         ['id_fatura', *CAMPOS_COMPLEMENTO, 'proveniencia'],
-        'complemento homologado de faturamento',
+        'complemento de faturamento',
     )
-    _exigir_chave(complemento, ['id_fatura'], 'complemento homologado de faturamento')
+    _exigir_chave(complemento, ['id_fatura'], 'complemento de faturamento')
     _validar_regras(
         complemento,
         {
             'id_nulo': F.col('id_fatura').isNull(),
             'proveniencia_ausente': F.col('proveniencia').isNull() | (F.trim('proveniencia') == ''),
         },
-        'complemento homologado de faturamento',
+        'complemento de faturamento',
     )
-    # Fatura elegível sem leitura não pode desaparecer nem receber um original inventado.
     chaves = ['id_uc', 'competencia']
-    competencias_com_fatura = (
-        detalhe.select(*chaves)
-        .unionByName(tabelas_auxiliares['faturas_excluidas'].select(*chaves))
-        .join(cadastro.select('id_uc'), 'id_uc', 'inner')
-        .select(*chaves)
-        .distinct()
-    )
-    if competencias_com_fatura.join(consumo, chaves, 'left_anti').limit(1).count():
-        raise ValueError(
-            'Competência com fatura sem leitura: consumo original obrigatório indisponível'
-        )
+    if detalhe.join(consumo, chaves, 'left_anti').limit(1).count():
+        raise ValueError('Fatura sem leitura deve ser segregada antes da saída comercial')
     faturado = detalhe.select(
         *chaves, 'id_fatura', 'valor_total', 'data_vencimento', 'bandeira_tarifaria', 'status'
     ).join(complemento, 'id_fatura', 'left')
@@ -264,7 +384,7 @@ def construir_saidas_contratuais(
                 ]
             },
         },
-        'fatura sem complemento homologado',
+        'fatura sem complemento',
     )
     specs = especificacoes(raiz)
     mensal_uc = validar_tabela_contratual(base, specs[COMERCIAIS[0]])
@@ -311,6 +431,8 @@ def validar_reconciliacao_contratual(tabelas, cadastro, raiz=CONTRATOS):
         regras[f'{c}_sem_fatura'] = sem & (F.col(c) != 0)
     regras.update(
         {
+            'volume_analitico': ~sem
+            & (F.col('volume_faturado_kwh') != F.col('consumo_kwh_analitico')),
             'paga': (F.col('status_pagamento') == 'PAGA')
             & (F.col('valor_arrecadado') != F.col('valor_total')),
             'aberta': (F.col('status_pagamento') == 'ABERTA') & (F.col('valor_arrecadado') != 0),

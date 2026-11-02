@@ -28,7 +28,7 @@ As regras, os grãos e as limitações das métricas estão no
 proxy de leituras utilizáveis; as fontes não comprovam kWh faturado nem parcelas
 isoladas de tarifa/bandeira. A referência do status de pagamento é um parâmetro
 explícito da carga. A integração com `0.3.0-provisional` fornece consumo estimado com método e
-proveniência e grupos temporais; exportar as tabelas comerciais exige uma fonte
-complementar homologada de volume faturado, tarifa e adicional de bandeira.
+proveniência e grupos temporais; as tabelas comerciais usam volume analítico associado às faturas e tarifa
+derivada por subgrupo/competência, conforme decisão 6587742059 da #67.
 A [matriz de aderência](docs/gold/aderencia-faturas-0.3.md) identifica os bloqueios.
 Os testes locais e o job Gold no agregador `CI` usam Spark com dados sintéticos.

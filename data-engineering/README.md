@@ -23,9 +23,10 @@ auxiliares reconciliáveis. Regras, fontes e operação estão no
 3. Informe `data_referencia` como data do retrato de status da extração; ela vira
    `reference_date`. Não é automaticamente a ingestão ou o dia da execução.
 4. Execute desde o início em `modo=validar`: nenhuma escrita ou limpeza.
-   Sem `tabela_complemento_faturamento`, as validações disponíveis rodam e informam
-   bloqueio de volume faturado/tarifa/adicional homologados. O complemento exige
-   proveniência por fatura; não se obtém dividindo valor por leitura.
+   Com `tabela_complemento_faturamento` vazio, deriva o complemento conforme
+   decisão 6587742059: volume analítico, tarifa por subgrupo/mês e bandeiras fixas.
+   Configure também `tabela_medidores` (Silver com `data_retirada`). Falta de doadores
+   bloqueia; faturas sem leitura são segregadas.
 5. A publicação só é possível com todas as fontes/gates satisfeitos, escritor
    único por ACL e `diretorio_exportacao` em `/Volumes/...`. O código prepara
    revisões exclusivas, reconcilia integralmente, confirma por marcador e exporta

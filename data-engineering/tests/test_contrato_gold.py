@@ -15,6 +15,9 @@ from pyspark.sql import functions as F
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'silver_to_gold'))
 from gold_contrato_faturas import (  # noqa: E402
     COMERCIAIS,
+    derivar_complemento,
+    segregar_faturas_sem_leitura,
+    cobertura_volume,
     agregar_receita_contratual,
     construir_consumo_contratual,
     construir_saidas_contratuais,
@@ -161,9 +164,9 @@ class ContratoGoldTest(unittest.TestCase):
                 )
                 with self.assertRaisesRegex(ValueError, 'por grão'):
                     validar_reconciliacao_contratual(adulteradas, cadastro)
-            with self.assertRaisesRegex(ValueError, 'consumo original obrigatório'):
+            with self.assertRaisesRegex(ValueError, 'Fatura sem leitura'):
                 construir_saidas_contratuais(
-                    consumo.filter("mes_referencia != '2025-01'"),
+                    consumo.filter("mes_referencia != '2024-01'"),
                     auxiliares,
                     cadastro,
                     complemento,
@@ -268,6 +271,7 @@ class ContratoGoldTest(unittest.TestCase):
         import gold_faturas
 
         faturas, cadastro, leituras = test_gold_faturas.GoldFaturasTest.fontes(self)
+        cadastro = cadastro.withColumn('subgrupo_tarifario', F.lit('B1'))
         fatura = faturas.filter("id_fatura = 'FT2'").first().asDict()
         leitura = leituras.first().asDict()
         registros_f, registros_l = [], []
@@ -300,6 +304,11 @@ class ContratoGoldTest(unittest.TestCase):
                 'v-energy.silver.tb_leituras': leituras,
                 'v-energy.silver.tb_geracao_distribuida': gd,
                 'venergy.silver.inspecoes': inspecoes,
+                'v-energy.silver.tb_medidores': self.spark.createDataFrame(
+                    [],
+                    'id_uc string, id_medidor string, '
+                    'id_medidor_anterior string, data_retirada date',
+                ),
             }[nome]
             return df, {
                 'tabela': gold_faturas.qualificar(nome),
@@ -325,12 +334,58 @@ class ContratoGoldTest(unittest.TestCase):
         with redirect_stdout(saida):
             for i in [2, 4, 6, 8]:
                 exec(''.join(notebook['cells'][i]['source']), ns)
-        self.assertIn('BLOQUEIO CONTRATUAL', saida.getvalue())
+        self.assertNotIn('BLOQUEIO CONTRATUAL', saida.getvalue())
         self.assertIn('Nenhum schema, tabela ou CSV foi gravado', saida.getvalue())
         ns['publicar_revisoes'].assert_not_called()
-        # Mesmo retrato, mesmo resultado em outro dia: o notebook não usa o relógio
-        # para status/atraso. Sem complemento, publicar é recusado antes de gravar.
-        ns['config']['modo'] = 'publicar'
-        with self.assertRaisesRegex(ValueError, 'complemento homologado indisponível'):
-            ns['executar_gold']()
-        ns['publicar_revisoes'].assert_not_called()
+        self.assertFalse(
+            Path(gold_faturas.__file__).read_text().startswith('# Databricks notebook source')
+        )
+
+    def test_derivacao_segregacao_e_troca_cadastral(self):
+        faturas, cadastro, leituras = test_gold_faturas.GoldFaturasTest.fontes(self)
+        cadastro = cadastro.withColumn('subgrupo_tarifario', F.lit('B1'))
+        leituras = leituras.withColumn('tipo_leitura', F.lit('REAL'))
+        # Outra UC doa tarifa no mesmo subgrupo/mês. A leitura bloqueada não doa.
+        cadastro = cadastro.unionByName(cadastro.withColumn('id_uc', F.lit('UC100002')))
+        leituras = leituras.unionByName(leituras.withColumn('id_uc', F.lit('UC100002')))
+        faturas = faturas.unionByName(
+            faturas.filter("id_fatura = 'FT2'")
+            .withColumn('id_uc', F.lit('UC100002'))
+            .withColumn('id_fatura', F.lit('FT4'))
+        )
+        faturas = faturas.withColumn('bandeira_tarifaria', F.lit('Amarela'))
+        medidores = self.spark.createDataFrame(
+            [('UC100001', 'MD1', None, date(2025, 1, 20)), ('UC100001', 'MD2', 'MD1', None)],
+            'id_uc string, id_medidor string, id_medidor_anterior string, data_retirada date',
+        )
+        gd, inspecoes = self.contexto()
+        consumo = construir_consumo_contratual(
+            leituras, cadastro, gd, inspecoes, '2025-02-15', medidores
+        )
+        aux = construir_faturas(faturas, cadastro, leituras, '2025-02-15')
+        with persistir_quadros([consumo, *aux.values()]):
+            comp = derivar_complemento(consumo, aux['faturas'], cadastro)
+            row = comp.filter("id_fatura = 'FT2'").first()
+            self.assertEqual(row.volume_faturado_kwh, Decimal('100.00'))
+            self.assertEqual(row.tarifa_base, Decimal('1.181150'))
+            self.assertEqual(row.adicional_bandeira, Decimal('0.018850'))
+            self.assertEqual(row.doadores_tarifa, 1)
+            ts = construir_saidas_contratuais(consumo, aux, cadastro)
+            validar_reconciliacao_contratual(ts, cadastro)
+            troca = ts[COMERCIAIS[0]].filter("id_fatura = 'FT2'").first()
+            self.assertTrue(troca.flag_troca_medidor)
+            self.assertEqual(troca.metodo_consumo, 'MEDIANA_HISTORICA_UC')
+            self.assertEqual(troca.valor_total, Decimal('216.00'))
+            self.assertEqual(
+                sum(x.receita for x in cobertura_volume(ts[COMERCIAIS[0]], cadastro).collect()),
+                Decimal('552.00'),
+            )
+            with self.assertRaisesRegex(ValueError, 'sem_doador_tarifa'):
+                derivar_complemento(consumo, aux['faturas'].filter("id_fatura = 'FT2'"), cadastro)
+        sem = segregar_faturas_sem_leitura(aux, leituras.filter("mes_referencia = '2024-01'"))
+        self.assertEqual(
+            sem['faturas_excluidas'].filter("motivo_exclusao = 'FATURA_SEM_LEITURA'").count(), 2
+        )
+        from gold_faturas import validar_reconciliacao
+
+        validar_reconciliacao(faturas, sem)

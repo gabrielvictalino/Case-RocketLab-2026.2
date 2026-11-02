@@ -8,10 +8,10 @@ conflitos. Esta revisão não executou produtores ou mutações no Databricks.
 | Requisito | Implementação | Evidência local | Dependência ou bloqueio remanescente |
 | --- | --- | --- | --- |
 | R1, saídas comerciais, grão, chaves e ordem | `gold_contrato_faturas.py` carrega os dois YAMLs; valida PK, enums, nulabilidade, precisão/escala antes dos casts; exporta dois CSVs com cabeçalho canônico | `test_contrato_gold`, exportação integral da fixture e `--verificar` | Aprovação de negócio dos dados reais e coerência com a dimensão cadastral do lote |
-| R2, consumo original/analítico | Original da Silver separado; leitura utilizável igual ao original; medianas da própria UC por fase da GD e fallback histórico; auxiliar com métodos, medianas e doadores | Troca de medidor, fallback, ausência de doadores e igualdade testados em Spark real | Aceitar explicitamente o significado de original após normalização/correção de sinal da Silver; sem doadores ou sem leitura obrigatória, bloquear e recuperar fonte |
-| R2, sem fatura e múltiplas | Parte das leituras; junta só fatura elegível; todas as múltiplas segregadas; zeros/nulos contratuais preservam consumo | Casos sem emissão e com múltiplas em `test_contrato_gold`; reconciliação financeira integral mantida | Recuperar leitura se houver competência com fatura de UC conhecida e original indisponível; não preencher com zero |
+| R2, consumo original/analítico | Original da Silver separado; leitura utilizável igual ao original; medianas da própria UC por fase da GD e fallback histórico; auxiliar com métodos, medianas e doadores | Troca de medidor, fallback, ausência de doadores e igualdade testados em Spark real | Aceitar explicitamente o significado de original após normalização/correção de sinal da Silver; sem doadores, bloquear com contagem; trocas também pelo mês de retirada do medidor |
+| R2, sem fatura e múltiplas | Parte das leituras; junta só fatura elegível; todas as múltiplas segregadas; zeros/nulos contratuais preservam consumo | Casos sem emissão e com múltiplas em `test_contrato_gold`; reconciliação financeira integral mantida | Fatura sem leitura segregada com FATURA_SEM_LEITURA; não preencher original com zero |
 | R2, vencimento/enums/pagamento | `data_vencimento` preservada, bandeiras e `EM ABERTO` normalizados; PAGA recebe total nominal e ABERTA zero | Testes de PAGA, ABERTA, VERDE e sem fatura; gates atuais do importador | A convenção não comprova caixa efetivo, apesar da descrição provisória do contrato; homologar com responsável financeiro |
-| R2, volume faturado e tarifas | Complemento Delta por `id_fatura`, com `volume_faturado_kwh`, `tarifa_base`, `adicional_bandeira` e `proveniencia` obrigatórios para fatura elegível | Fixtures com complemento; ausência de cada campo bloqueia; escala excedida rejeitada | **Bloqueio real:** esses três campos não existem na Silver de faturas. Responsável comercial deve fornecer volume faturado e tarifas homologadas, vigências e origem; não há nome físico comprovado. O widget vazio bloqueia publicação antes de escrever |
+| R2, volume faturado e tarifas | Complemento Delta por `id_fatura`, com `volume_faturado_kwh`, `tarifa_base`, `adicional_bandeira` e `proveniencia` obrigatórios para fatura elegível | Fixtures com complemento; ausência de cada campo bloqueia; escala excedida rejeitada | Decisão 6587742059: complemento derivado no widget vazio; volume analítico e tarifa líquida da bandeira por subgrupo/mês; falta de doador bloqueia |
 | R3, grupo temporal | GD desde mês da conexão; senão, primeira inspeção confirmada; senão, demais. Snapshots de GD e inspeções obrigatórios | Testes antes/no mês de conexão, antes/no mês da inspeção e precedência da GD | Comprovar disponibilidade e coerência das fontes: `v-energy.silver.tb_geracao_distribuida` e nome legado parametrizável `venergy.silver.inspecoes`; exportar os mesmos dados ao lote |
 | R4, outros domínios | Montador recebe as dez tabelas externas, sem fabricá-las; gates relacionais continuam no importador | Suíte atual de 50 testes do importador e fixture completa aprovada | Os respectivos produtores devem fornecer dimensões, GD, fila, inspeções, medição, continuidade e atendimento reais compatíveis; esta PR não os substitui |
 | R5, quatro efeitos | Fornece volume/receita e soma Decimal dos produtos de tarifa e bandeira, arredondados uma vez por grão. Decomposição auxiliar rotulada como distinta da canônica | Teste de soma antes do arredondamento e reconciliação por grão com `exceptAll`; docs da P20 consultadas | Três métricas do complemento são pré-condição; a fórmula canônica e seus casos de borda pertencem à P20, ainda indicada como pendência no consumidor. Não duplicada na Gold |
@@ -19,7 +19,7 @@ conflitos. Esta revisão não executou produtores ou mutações no Databricks.
 | R7, manifesto | Reutiliza `contracts/manifesto.py`, versão 0.3.0; recibo comercial separado; montador exige exatamente 12 exportações com período/referência/proveniência compatíveis | `test_lote_ci_gold`: lote completo, falta de tabela, mistura synthetic/real, PK, escala e hash inválidos | Coordenador deve reunir dez exportações dos outros domínios, com dados compatíveis com os snapshots comerciais. Não existe evidência de lote real completo |
 | R8, homologação | Fluxo de montagem + `importador --verificar` mantém FKs, gates, índices e rollback do importador da dev | CLI real sobre lote de 12 fixtures, incluindo os dois CSVs reexportados: OK, retorno 0; hash alterado: retorno 1; analytics e operations.cargas preservados | Repetir no lote real completo em banco de teste, após resolver fontes; aprovação de fixtures não homologa a Gold real |
 | Review 1, consistência Silver | Marcador lido uma vez; valida par, identidade comum, revisões e versões; lê fonte/versionAsOf; metadados registram snapshots efetivos | Migração de fatura pendente durante republicação simulada não perde receita; marcador inválido recusado; versões 3 e 7 | Exercitar o protocolo com Delta/UC e a retenção real de pelo menos 7 dias após retirada do marcador |
-| Review 2, política de data | Referência preserva o retrato; agendamento pausado e parâmetro explícito | Notebook em validar sem escrita e publicação bloqueada sem complemento; datas ISO testadas | Oficializar referência de cada nova extração antes de ativar qualquer agendamento |
+| Review 2, política de data | Referência preserva o retrato; agendamento pausado e parâmetro explícito | Notebook em validar sem escrita com complemento derivado; datas ISO testadas | Oficializar referência de cada nova extração antes de ativar qualquer agendamento |
 | Review 3, interrupção/recuperação | Revisões exclusivas, reconciliação e confirmação persistente por marcador; mantém compensação nas candidatas; manutenção com aposentadoria persistente e 7 dias | Morte entre escritas, antes do marcador e resposta perdida após confirmação simuladas; consumidor recupera conjunto anterior pelo marcador; limpeza protege atuais/recentes | Validar Delta real, ACL de escritor único, falhas de comunicação e retenção. Leitores de nomes fixos legados precisam migrar; não recebem atomicidade conjunta |
 | Review 4/10, CI e documentação | Job Gold no detector e needs do CI; lint, formato e suíte; workflow separado removido. `.github/` descrito nesta PR e no guia | Scripts reais do detector/agregador executados com fixtures; failure/cancelled/skip indevido rejeitados; demais jobs preservados | CI remoto precisa concluir no novo commit; proteções administrativas não foram alteradas |
 | Review 5, identificadores | Comparação normalizada e guards de schemas proibidos e fonte/destino, antes das escritas | `v-energy.Silver`, `BRONZE`, `Default` e identificadores equivalentes em capitalizações diferentes bloqueados | Nenhum bloqueio local; testar os identificadores físicos do workspace na homologação |
@@ -51,3 +51,57 @@ no [dicionário](faturas.md). Ela não exercitou este protocolo nem o contrato d
 #101. Nesta revisão não houve publicação, teste de recuperação, deploy ou
 homologação no Databricks. Os testes locais não substituem os ensaios de runtime
 e as decisões de negócio identificadas na matriz.
+
+## Decisão de dados — comentário 6587742059 da #67
+
+Implementa a [decisão de 02/11/2026](https://github.com/gabrielvictalino/Case-RocketLab-2026.2/pull/67#issuecomment-6587742059).
+O nome e o layout `0.3.0-provisional` são mantidos; as descrições provisórias são
+alinhadas ao significado aprovado para o case. Isso não aprova os demais domínios.
+
+- `volume_faturado_kwh` é o consumo analítico associado à fatura elegível, incluindo
+  estimativas. Não comprova volume do sistema comercial. Sem fatura, continua zero.
+- Original é o valor da Silver, após correções comprovadas de sinal. Leitura utilizável
+  mantém o valor; leituras bloqueadas usam mediana da própria UC por fase da GD,
+  com fallback histórico. Sem doador, a exportação falha com a contagem no erro.
+- O snapshot de `v-energy.silver.tb_medidores` fornece o mês de retirada, equivalente
+  a `competencia_troca` da #105. Esse mês também marca troca quando a leitura só
+  indica ausência de anterior; não se usa o mês de instalação do medidor seguinte.
+- Faturas sem leitura são segregadas com `FATURA_SEM_LEITURA`, como as pendências
+  cadastrais; detalhe + exclusões continuam reconciliando integralmente a fonte.
+  Problema na medição não exclui uma fatura válida que possui leitura estimável.
+- Tarifa base é derivada por subgrupo tarifário × competência: mediana de
+  `valor_energia / consumo utilizável positivo - adicional_bandeira`, nas faturas
+  elegíveis. Subtrair a bandeira evita contá-la duas vezes nos componentes da R5.
+  A mediana é arredondada para seis casas; não é tarifa homologada. Sem doador de
+  tarifa no grupo/mês, a carga falha com contagem; não há fallback entre classes.
+- Adicionais fixos: Verde 0; Amarela 0,01885; Vermelha P1 0,04463; Vermelha P2
+  0,07877 R$/kWh. São característica dos dados do case em todo o período e não
+  representam o histórico regulatório da ANEEL.
+- `complemento_proveniencia` guarda a regra, subgrupo e contagem de doadores por
+  fatura. `consumo_proveniencia` guarda original, método, medianas e doadores.
+  `cobertura_volume` discrimina quantidade, volume e receita por método e tipo de
+  leitura, no grão comercial: permite somar observado/estimado e calcular a cobertura.
+  `LEITURA_UTILIZAVEL` com tipo `ESTIMADA` continua distinguível de leitura `REAL`.
+- O complemento é derivado quando o widget está vazio. Um complemento explícito
+  continua sujeito aos gates, inclusive volume igual ao analítico. O importador
+  também verifica essa igualdade para toda linha com fatura.
+- Os componentes da R5 somam produtos decimais antes de arredondar por grão.
+  Não se fixa `k₀ = 4/3`: resíduos e composição podem mudar o fator e o mix.
+  Volume implícito pela conta não substitui o volume canônico.
+
+A homologação no Databricks, disponibilidade/coerência das fontes (incluindo
+inspeções), referência oficial e lote completo de 12 tabelas seguem necessárias.
+
+## Validação da decisão 6587742059
+
+39 cenários Gold com Spark 4.0.1: os 7 testes contratuais foram reexecutados
+após os ajustes finais e passaram; os outros 32 passaram na suíte completa.
+19 testes da raiz e 51 do importador passaram (PostgreSQL 17 e Redis 7 via
+Testcontainers), incluindo o novo gate de volume analítico. Ruff 0.17.3
+(check e format --check) e git diff --check aprovados. O notebook em validar
+foi exercitado com 24 competências sintéticas, snapshots simulados e derivação
+do complemento, sem escrita.
+
+A tentativa de acesso à API SQL Databricks retornou HTTP 401 com a credencial
+configurada. Não houve execução do notebook, publicação, deploy ou ativação
+de agendamento no Databricks nesta implementação; a homologação real segue pendente.
