@@ -4,9 +4,9 @@ from fastapi import APIRouter, Depends, Query
 
 from app.core.auth import usuario_atual
 from app.core.database import session
-from app.core.metricas import Recorte
 from app.modules.kpis import service
 from app.modules.kpis.schemas import KPIs, Serie
+from app.modules.metricas import Recorte
 
 router = APIRouter(prefix='/kpis', tags=['kpis'], dependencies=[Depends(usuario_atual)])
 

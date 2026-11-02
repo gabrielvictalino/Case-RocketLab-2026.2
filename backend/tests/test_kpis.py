@@ -1,10 +1,17 @@
 import csv
+from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
 import pytest
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.core.periodos import Periodo
+from app.modules.kpis import repository as kpis_repository
 from app.modules.kpis.service import indicador, razao
+from app.modules.metricas import Recorte
+from app.modules.receita import repository as receita_repository
 
 SAMPLES = Path(__file__).resolve().parents[2] / 'contracts/samples'
 D = Decimal
@@ -44,8 +51,48 @@ def agregado(inicio, fim, **recorte):
         ]
     return {
         key: sum((D(r[key]) for r in rows), D(0))
-        for key in ('receita', 'receita_arrecadada', 'volume_faturado_kwh')
+        for key in (
+            'receita',
+            'receita_arrecadada',
+            'volume_faturado_kwh',
+            'componente_tarifa_reais',
+            'componente_bandeira_reais',
+        )
     }
+
+
+def detalhe(inicio, fim, **recorte):
+    with (SAMPLES / 'dim_uc.csv').open() as file:
+        ids = {
+            r['id_uc'] for r in csv.DictReader(file) if all(r[k] == v for k, v in recorte.items())
+        }
+    with (SAMPLES / 'uc_consumo_faturamento_mensal.csv').open() as file:
+        rows = [
+            r
+            for r in csv.DictReader(file)
+            if inicio <= r['competencia'] <= fim and r['id_uc'] in ids
+        ]
+    return dict(
+        receita=sum((D(r['valor_total']) for r in rows), D(0)),
+        receita_arrecadada=sum((D(r['valor_arrecadado']) for r in rows), D(0)),
+        volume_faturado_kwh=sum((D(r['volume_faturado_kwh']) for r in rows), D(0)),
+        componente_tarifa_reais=arredondar(
+            sum((D(r['volume_faturado_kwh']) * D(r['tarifa_base'] or 0) for r in rows), D(0))
+        ),
+        componente_bandeira_reais=arredondar(
+            sum((D(r['volume_faturado_kwh']) * D(r['adicional_bandeira'] or 0) for r in rows), D(0))
+        ),
+    )
+
+
+@pytest.fixture
+async def sessao_metricas(infrastructure):
+    engine = create_async_engine(infrastructure['settings'].database_url_portal)
+    try:
+        async with async_sessionmaker(engine)() as session:
+            yield session
+    finally:
+        await engine.dispose()
 
 
 @INTEGRATION
@@ -56,7 +103,7 @@ async def test_oito_cards_e_formulas_da_amostra(client, headers):
     assert len(set(data) - {'periodo', 'comparacao', 'carga'}) == 8
     atual = agregado('2025-07-01', '2026-06-01')
     anterior = agregado('2024-07-01', '2025-06-01')
-    for key in atual:
+    for key in ('receita', 'receita_arrecadada', 'volume_faturado_kwh'):
         assert D(data[key]['valor']) == atual[key]
         assert D(data[key]['comparacao']) == anterior[key]
         assert D(data[key]['variacao']) == atual[key] - anterior[key]
@@ -84,15 +131,12 @@ async def test_oito_cards_e_formulas_da_amostra(client, headers):
         {'municipio': 'inexistente'},
     ],
 )
-async def test_cruzado_com_decomposicao_e_serie(client, headers, recorte):
+async def test_cruzado_com_serie(client, headers, recorte):
     params = dict(periodo='2025-07..2026-06', comparacao='2023-07..2024-06', **recorte)
     kpis = await get(client, headers, **params)
-    receita = await get(client, headers, '/receita/decomposicao', **params)
     serie = await get(client, headers, '/kpis/serie', **params)
-    assert kpis['carga']['id'] == receita['carga']['id'] == serie['carga']['id']
+    assert kpis['carga']['id'] == serie['carga']['id']
     for key in ('receita', 'volume_faturado_kwh'):
-        assert kpis[key]['valor'] == receita['atual'][key]
-        assert kpis[key]['comparacao'] == receita['anterior'][key]
         valores = [D(p[key]) for p in serie['serie'] if p[key] is not None]
         total = sum(valores) if valores else None
         assert total == (D(kpis[key]['valor']) if kpis[key]['valor'] is not None else None)
@@ -100,10 +144,45 @@ async def test_cruzado_com_decomposicao_e_serie(client, headers, recorte):
     assert [p['competencia'] for p in serie['serie']] == sorted(
         p['competencia'] for p in serie['serie']
     )
-    if receita['efeitos'] is not None:
-        assert sum(D(v) for v in receita['efeitos'].values()) == D(receita['variacao'])
-    else:
-        assert receita['variacao'] is None
+
+
+@INTEGRATION
+@pytest.mark.parametrize(
+    'recorte',
+    [
+        {'municipio': 'Recife'},
+        {'alimentador': 'ALM-REC-001'},
+        {'alimentador': 'ALM-REC-001', 'bairro': 'Bairro sintético 1', 'classe': 'Residencial'},
+    ],
+)
+async def test_recortes_conferidos_contra_csv(client, headers, sessao_metricas, recorte):
+    # O oráculo lê o CSV diretamente, sem usar o SQL compartilhado pelas rotas.
+    amostra = detalhe if 'alimentador' in recorte else agregado
+    params = dict(periodo='2025-07..2026-06', comparacao='2023-07..2024-06', **recorte)
+    kpis = await get(client, headers, **params)
+    for campo, inicio, fim in (
+        ('valor', '2025-07-01', '2026-06-01'),
+        ('comparacao', '2023-07-01', '2024-06-01'),
+    ):
+        esperado = amostra(inicio, fim, **recorte)
+        periodo = Periodo(date.fromisoformat(inicio), date.fromisoformat(fim))
+        totais = await receita_repository.totais(sessao_metricas, periodo, Recorte(**recorte))
+        assert dict(totais) == esperado
+        for key in ('receita', 'receita_arrecadada', 'volume_faturado_kwh'):
+            assert D(kpis[key][campo]) == esperado[key]
+        assert D(kpis['tarifa_media'][campo]) == arredondar(
+            esperado['receita'] / esperado['volume_faturado_kwh'], '0.000001'
+        )
+        assert D(kpis['inadimplencia'][campo]) == arredondar(
+            (esperado['receita'] - esperado['receita_arrecadada']) / esperado['receita'] * 100
+        )
+        serie = await get(
+            client, headers, '/kpis/serie', periodo=f'{inicio[:7]}..{fim[:7]}', **recorte
+        )
+        for ponto in serie['serie']:
+            mensal = amostra(ponto['competencia'], ponto['competencia'], **recorte)
+            for key in ('receita', 'volume_faturado_kwh'):
+                assert D(ponto[key]) == mensal[key]
 
 
 @INTEGRATION
@@ -150,6 +229,17 @@ async def test_gd_temporal_e_ucs_distintas(client, headers):
     assert D(depois['ucs']['com_gd']['valor']) == 1
     assert D(antes['ucs']['ativas']['valor']) == 299
     assert D(depois['ucs']['ativas']['valor']) == 300
+
+
+@INTEGRATION
+@pytest.mark.parametrize('fuso', ['UTC', 'America/Fortaleza', 'Pacific/Kiritimati'])
+async def test_gd_limite_da_competencia_independe_do_fuso(sessao_metricas, fuso):
+    await sessao_metricas.execute(
+        text("SELECT set_config('TimeZone', :fuso, true)"), {'fuso': fuso}
+    )
+    for mes, esperado in ((date(2024, 12, 1), 0), (date(2025, 1, 1), 1)):
+        ucs = await kpis_repository.ucs(sessao_metricas, Periodo(mes, mes), Recorte())
+        assert ucs['com_gd'] == esperado
 
 
 @INTEGRATION
@@ -257,7 +347,7 @@ async def test_continuidade_sem_cobertura_vem_nula(client, headers, db):
 
 
 @INTEGRATION
-@pytest.mark.parametrize('path', ['/kpis', '/kpis/serie', '/receita/decomposicao'])
+@pytest.mark.parametrize('path', ['/kpis', '/kpis/serie'])
 async def test_autenticacao_e_validacao(client, headers, path):
     url = '/api/v1' + path
     assert (await client.get(url, params={'periodo': '2025-01..2025-02'})).status_code == 401

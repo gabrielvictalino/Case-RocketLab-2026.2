@@ -1,4 +1,4 @@
-"""Contexto comum às métricas de KPIs e receita."""
+"""Contexto das métricas: períodos, recortes e metadados da carga publicada."""
 
 from dataclasses import dataclass
 

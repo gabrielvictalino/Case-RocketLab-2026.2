@@ -8,7 +8,7 @@ async def ucs(db, periodo, recorte):
                 text(f"""
                     SELECT count(DISTINCT m.id_uc) AS ativas,
                            count(DISTINCT m.id_uc) FILTER (
-                               WHERE date_trunc('month', gd.data_conexao) <= :fim
+                               WHERE gd.data_conexao < CAST(:fim AS date) + interval '1 month'
                            ) AS com_gd
                     FROM analytics.uc_consumo_faturamento_mensal m
                     JOIN analytics.dim_uc u USING (id_uc)

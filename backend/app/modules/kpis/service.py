@@ -1,8 +1,8 @@
 from decimal import Decimal, ROUND_HALF_UP
 
-from app.core.metricas import contexto
 from app.modules.kpis import repository
 from app.modules.kpis.schemas import Indicador, KPIs, Serie
+from app.modules.metricas import contexto
 from app.modules.receita import repository as receita
 
 

@@ -1,4 +1,4 @@
-"""Totais canônicos compartilhados pela decomposição e pelos KPIs.
+"""Totais e série de receita usados pelos KPIs e disponíveis para a P20 (#55).
 
 Sem alimentador, usa o agregado Gold; com alimentador, usa o detalhe reconciliado
 com esse agregado pelo importador. Regras R2/R5: contracts/README.md.

@@ -34,7 +34,8 @@ INSERT em cargas e SELECT em inspeções, sem escrita nas demais tabelas operaci
 | Contrato Gold e exportador | Revisão das 12 tabelas, nomes, grãos, chaves, tipos, nulls, manifesto e versão, com amostra real coerente | Importação real e todos os módulos |
 | Consumo analítico | Média × mediana, janela de referência, negativos não confirmados, fallback, flag da troca e versão da regra | UC 360, receita, KPIs, fila |
 | Receita e volume | Pareamento de faturas/leitura, órfãos e quarentena, tributos, arredondamento, pago/aberto; múltiplas faturas na mesma competência têm regra provisória em 0.3.0-provisional (segregadas, competência sem fatura) | Receita, explicação da conta, KPIs |
-| Decomposição | Formalizada em 0.3.0-provisional (R5: volume, reajuste, bandeira, mix com fechamento exato) | Receita e insights (P20) |
+| Decomposição | R5 define quatro efeitos com fechamento exato, mas ainda é necessário alinhar na #55/P20 o grão de cálculo: decompor os totais filtrados ou somar efeitos por subgrão. As leituras dão efeitos diferentes; esclarecer a R5 antes de publicar a rota e conferir KPIs × decomposição. A rota foi retirada da #59 conforme a revisão do PR #112 | Receita e insights (P20) |
+| UC ativa (P05) | Homologar se a presença de registro mensal representa atividade. Se a Gold real publicar a grade UC × competência completa, inclusive sem fatura, o card contará todas as UCs e poderá ficar constante; validar cobertura e disponibilidade de status cadastral histórico | KPIs |
 | Grupos de UC | Formalizado em 0.3.0-provisional (R3: regra temporal GD > IRREGULARIDADE > DEMAIS com date_trunc) | Receita, fila e avaliações |
 | DEC/FEC/CHI | Sobreposições, interrupções contadas, competência de eventos que cruzam meses, denominador temporal e flag de evento atípico | Operação e KPIs |
 | Fila | Score e versão aprovados, motivos, energia em kWh/R$, elegibilidade e comportamento após conclusão/reinspeção | Fila oficial e priorização |

@@ -141,7 +141,6 @@ Rotas implementadas:
 | `GET /meta/filtros` | Municípios, bairros por município, classes e alimentadores |
 | `GET /kpis?periodo=AAAA-MM..AAAA-MM` | Oito cards com valor, comparação e variações |
 | `GET /kpis/serie?periodo=AAAA-MM..AAAA-MM` | Receita e volume por competência, em ordem cronológica |
-| `GET /receita/decomposicao?periodo=AAAA-MM..AAAA-MM` | Totais dos dois períodos e efeitos canônicos R5 |
 | `GET /ordens-inspecao?status=&page=1&size=25` | Listagem com snapshot, máximo 100 por página |
 | `POST /ordens-inspecao` | Lote `{ucs: [...]}`, criadas e rejeitadas; não aborta por UC repetida |
 | `POST /ordens-inspecao/{id}/despachar` | `{inspetor: "INSP-001"}` |
@@ -158,7 +157,7 @@ da base continua retornando 422.
 
 ### KPIs da Visão Geral (#59)
 
-As três rotas de métricas exigem autenticação e `periodo`; aceitam `comparacao`
+As duas rotas de KPIs exigem autenticação e `periodo`; aceitam `comparacao`
 opcional e os recortes `municipio`, `bairro`, `classe` e `alimentador` (combinados
 por interseção). A comparação padrão é o mesmo intervalo do ano anterior.
 Respostas incluem `periodo`, `comparacao` efetivamente resolvida e `carga`, com
@@ -170,11 +169,13 @@ versão, data de publicação, limites e proveniência sintética/real.
 Cada indicador tem `valor`, `comparacao`, `variacao` (atual menos comparação)
 e `variacao_pct` (variação relativa à comparação × 100). Para taxas, `variacao`
 é em pontos percentuais; `variacao_pct` continua sendo a variação relativa.
-Decimais são strings JSON, preservando a precisão financeira.
+Decimais são strings JSON, preservando a precisão financeira. Isso inclui as
+contagens de UC (por exemplo, `"300"`); o frontend deve convertê-las para operações
+numéricas.
 
 - Receita, arrecadação e volume somam `receita_volume_mensal`. Com recorte por
   alimentador, usam o detalhe por UC, reconciliado com o agregado na importação.
-  KPIs, série e decomposição compartilham o mesmo repositório de totais.
+  KPIs e série usam o repositório `modules/receita/repository.py`.
 - Tarifa média = receita / volume (seis casas); inadimplência =
   (receita − arrecadação) / receita × 100, conforme o [glossário](../GLOSSARY.md).
 - Como o contrato não expõe status cadastral histórico, UCs ativas são as UCs
@@ -199,11 +200,12 @@ exemplo, inspeções realizadas sem nenhuma confirmação). `/kpis/serie` retorn
 `serie: [{competencia, receita, volume_faturado_kwh}]` para todos os meses do
 período; lacunas ficam com valores nulos.
 
-A rota `/receita/decomposicao` foi incluída nesta entrega para exercitar o teste
-cruzado requerido pela #59. Usa a função canônica `core/decomposicao.py` e retorna
-`atual`, `anterior`, `variacao` e `efeitos` (volume, reajuste, bandeira e mix),
-cuja soma fecha exatamente a variação da receita. Sem dados nos dois períodos,
-os efeitos ficam nulos. Locais e grupos da #55 continuam para aquela entrega.
+A rota `/receita/decomposicao` e o teste cruzado KPIs × decomposição ficam para
+a #55/P20, junto com locais e grupos. Antes de publicar a rota, essa entrega deve
+resolver a ambiguidade da R5 entre decompor totais filtrados e somar efeitos por
+subgrão. KPIs e série são conferidos diretamente contra os CSVs da amostra nos
+recortes por município e alimentador; o repositório de totais também tem seus
+componentes de tarifa e bandeira conferidos contra o detalhe por UC.
 As métricas usam o contrato vigente `0.3.0-provisional`; esta implementação não
 homologa uma exportação real nem altera a Gold.
 

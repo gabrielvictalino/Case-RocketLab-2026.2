@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel
 
-from app.core.metricas import RespostaMetricas
+from app.modules.metricas import RespostaMetricas
 
 
 class Indicador(BaseModel):
