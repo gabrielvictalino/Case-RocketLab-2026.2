@@ -117,3 +117,11 @@ def test_manifest_reference_date_invalid_calendar_date(tmp_path):
 def test_invalid_types(value, type_):
     with pytest.raises(ValueError):
         parse(value, {'type': type_, 'nullable': False})
+
+
+@pytest.mark.parametrize('value', ['0', '-1'])
+def test_sequencia_de_atendimento_comeca_em_um(value):
+    spec = specifications()['atendimentos_historico']['columns']['sequencia']
+    assert parse('1', spec) == 1
+    with pytest.raises(ValueError, match='mínimo'):
+        parse(value, spec)

@@ -424,7 +424,7 @@ O Databricks não alcança um Postgres local, então a carga é **pull**:
    grão com `receita_volume_mensal` e os gates de negócio:
    - R2: competências sem fatura com nulos síncronos e zeramento de volume/valores;
      status de pagamento coerente com valor arrecadado; flag de troca de medidor exige
-     método diferente de LEITURA.
+     método diferente de LEITURA; método LEITURA exige consumo analítico igual ao original.
    - R3: regra temporal estrita de grupo de UC (GD > irregularidade confirmada > demais).
    - R4: equivalência de `dim_uc.flag_gd` com `gd_uc` e exclusão de UCs com GD da fila.
    - R6: `reference_date` maior ou igual ao primeiro dia do mês de encerramento do período.

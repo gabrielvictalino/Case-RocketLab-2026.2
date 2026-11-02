@@ -139,6 +139,17 @@ async def validate(db, specs, manifest):
             'flag_troca_medidor exige metodo_consumo diferente de LEITURA (R2)'
         )
 
+    # Gate R2: LEITURA significa consumo analítico igual ao original
+    invalid_reading = await db.fetchval("""SELECT EXISTS(
+        SELECT 1 FROM analytics_staging.uc_consumo_faturamento_mensal
+        WHERE metodo_consumo = 'LEITURA'
+          AND consumo_kwh_analitico <> consumo_kwh_original)""")
+    if invalid_reading:
+        raise ContractError(
+            'uc_consumo_faturamento_mensal: '
+            'metodo_consumo LEITURA exige consumo analítico igual ao original (R2)'
+        )
+
     # Gate R3: Grupo de UC temporal segundo prioridade GD > IRREGULARIDADE > DEMAIS
     invalid_group = await db.fetchval("""SELECT EXISTS(
         WITH primeira_irregularidade AS (

@@ -18,6 +18,7 @@ columns:
     type: integer
     nullable: false
     unit: —
+    minimum: 1
     description: Número de ordem cronológica da interação dentro do protocolo.
   data:
     type: timestamp

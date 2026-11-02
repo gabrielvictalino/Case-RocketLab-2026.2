@@ -352,6 +352,18 @@ async def test_redis_failure_does_not_undo_committed_import(db, infrastructure):
             'R2',
         ),
         (
+            'r2_leitura_consumo_alterado',
+            'uc_consumo_faturamento_mensal',
+            # Volume faturado intacto: só o gate de LEITURA detecta a divergência
+            lambda rows: next(
+                r
+                for r in rows
+                if r['metodo_consumo'] == 'LEITURA' and r['consumo_kwh_original'] != '999.00'
+            ).update(consumo_kwh_analitico='999.00'),
+            'uc_consumo_faturamento_mensal',
+            'LEITURA exige consumo analítico igual ao original (R2)',
+        ),
+        (
             'r3_group_temporal',
             'uc_consumo_faturamento_mensal',
             # UC100000 em 2025-01 é GD, mudar para DEMAIS
