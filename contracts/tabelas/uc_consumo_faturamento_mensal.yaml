@@ -25,7 +25,7 @@ columns:
     type: numeric(18,2)
     nullable: false
     unit: kWh
-    description: Consumo bruto medido ou registrado no medidor antes de expurgos ou ajustes.
+    description: Consumo como veio do sistema de medição, antes de qualquer ajuste.
   consumo_kwh_analitico:
     type: numeric(18,2)
     nullable: false
@@ -36,7 +36,11 @@ columns:
     type: text
     nullable: false
     unit: —
-    description: Método utilizado para estimativa do consumo analítico (LEITURA para medição original sem ajuste).
+    enum:
+    - LEITURA_UTILIZAVEL
+    - MEDIANA_FASE_UC
+    - MEDIANA_HISTORICA_UC
+    description: Origem do consumo analítico. LEITURA_UTILIZAVEL usa o consumo original sem ajuste; MEDIANA_FASE_UC e MEDIANA_HISTORICA_UC estimam o mês bloqueado, como o da troca de medidor, pela mediana da UC na mesma fase da GD ou em todo o histórico.
   tipo_leitura:
     type: text
     nullable: false
@@ -60,7 +64,7 @@ columns:
     nullable: false
     unit: kWh
     minimum: 0
-    description: Volume de energia elétrica faturado ao cliente na fatura da competência (zero quando não há fatura).
+    description: Volume de energia elétrica faturado à UC na fatura da competência (zero quando não há fatura).
   valor_total:
     type: numeric(18,2)
     nullable: false

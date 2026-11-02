@@ -69,10 +69,19 @@ anterior: ela é substituída na próxima publicação válida.
      `valor_total = 0` e `valor_arrecadado = 0`. As 5 colunas são `nullable: true`.
    - `bandeira`: enum estrito `VERDE | AMARELA | VERMELHA_P1 | VERMELHA_P2`.
    - `status_pagamento = 'PAGA'` ⇒ `valor_arrecadado = valor_total`; `'ABERTA'` ⇒ `valor_arrecadado = 0`.
-   - `metodo_consumo = 'LEITURA'` indica consumo analítico igual ao original. Se
-     `flag_troca_medidor = true`, `metodo_consumo` obrigatoriamente é diferente de `LEITURA`.
+   - `metodo_consumo`: enum estrito `LEITURA_UTILIZAVEL | MEDIANA_FASE_UC | MEDIANA_HISTORICA_UC`,
+     os mesmos nomes da Gold de GD (#94). `LEITURA_UTILIZAVEL` exige consumo analítico igual ao
+     original. Se `flag_troca_medidor = true`, o método obrigatoriamente é uma das medianas.
+     `INDISPONIVEL` não faz parte do enum porque `consumo_kwh_analitico` é obrigatório.
+   - Faturas múltiplas: quando a mesma UC tem mais de uma fatura na competência (motivo
+     `MULTIPLAS_FATURAS_UC_MES` da Gold de faturas, #67), a Gold segrega todas essas faturas,
+     como faz com as órfãs, e publica a linha da UC na competência como competência sem fatura,
+     com as nulidades e os zeros acima e o consumo da leitura preservado. Regra provisória,
+     revisável com o time de dados.
 3. **Grupos de UC Temporais (R3):** classificação temporal auditada em staging (GD > Irregularidade Confirmada > Demais).
 4. **Coerência Cadastral e Fila (R4):** `dim_uc.flag_gd ⇔ UC em gd_uc`. `fila_inspecao` não contém UCs com GD.
+   `continuidade_alimentador_mensal.numero_ucs` é igual ao `numero_ucs` da `dim_alimentador` em todas
+   as competências (denominador fixo do DEC e do FEC, proposto no #98).
 5. **Decomposição da Receita (R5):** fórmula canônica com 4 efeitos e fechamento exato em Decimal.
 6. **Data de Referência (R6):** manifesto exige `reference_date` (`AAAA-MM-DD`) com gate `reference_date >=` primeiro dia do mês de `period.end`.
 7. **Gerador de Manifesto (R7):** script autônomo `contracts/manifesto.py` usando apenas stdlib + PyYAML.
@@ -161,10 +170,10 @@ A tabela abaixo mapeia cada um dos 9 itens da seção 13 do system design com su
 | **1** | **Consumo original e analítico** em colunas separadas em `uc_consumo_faturamento_mensal`, com a marcação de leitura estimada e de troca de medidor e o método de estimativa | Visão 360, volume faturado | **Formalizado (R2)**: colunas separadas `consumo_kwh_original`, `consumo_kwh_analitico`, `metodo_consumo` e gate de troca de medidor. |
 | **2** | **Fórmula da decomposição da receita** (volume, reajuste, bandeira, mix), aplicável a qualquer par de períodos sobre `receita_volume_mensal`, incluindo como obter a tarifa base da classe por competência | Receita, insights, agente | **Formalizado (R5)**: fórmula canônica com fator $k_0$, quatro efeitos e fechamento exato em Decimal no README; implementação na P20. |
 | **3** | **Grupo de UC** em `receita_volume_mensal` (com GD, irregularidade confirmada, demais), respeitando a data de conexão da GD | Receita | **Formalizado (R3)**: regra temporal GD > IRREGULARIDADE_CONFIRMADA > DEMAIS com `date_trunc` e gate SQL. |
-| **4** | **Regra de DEC/FEC**: sobreposição de interrupções (fórmula simples ou `duracao_efetiva_min`), denominador por alimentador e marcação de evento atípico | Operação, Visão Geral | **Parcial**: tabela `continuidade_alimentador_mensal` com numeradores e denominadores mensais e flag atípica; critério regulatório final de sobreposição segue pendente com o time de dados. |
+| **4** | **Regra de DEC/FEC**: sobreposição de interrupções (fórmula simples ou `duracao_efetiva_min`), denominador por alimentador e marcação de evento atípico | Operação, Visão Geral | **Proposta no #98** (`docs/gold/continuidade.md`): CHI com `duracao_efetiva_min`, interrupções com `flag_sobreposicao = false`, denominador fixo com as UCs do alimentador no cadastro e evento atípico marcado pela Silver, sem remoção. Falta o aceite do backend (#57) para a causa principal por linha e o valor `SEM OCORRENCIA`. |
 | **5** | **Fila de inspeção** com score, motivos em formato legível (lista de sinais com valor) e energia a recuperar em kWh e R$, sem UCs com GD | Perdas | **Formalizado (R4)**: gate estrito excluindo UCs de `gd_uc` da fila; `dim_uc.flag_gd` auditado contra `gd_uc`. |
 | **6** | **Atendimentos** em duas tabelas (protocolo; protocolo × sequência) | Visão 360 | **Formalizado**: tabelas `atendimentos` e `atendimentos_historico` com metadados R1. |
-| **7** | **Faturas órfãs** fora de toda tabela de receita do contrato | Receita, KPIs | **Formalizado (R2)**: faturas órfãs excluídas de toda tabela analítica; competência sem fatura modelada com nulos síncronos e zeros; nova coluna `data_vencimento`. |
+| **7** | **Faturas órfãs** fora de toda tabela de receita do contrato | Receita, KPIs | **Formalizado (R2)**: faturas órfãs excluídas de toda tabela analítica; competência sem fatura modelada com nulos síncronos e zeros; nova coluna `data_vencimento`. Faturas múltiplas da mesma UC na competência (`MULTIPLAS_FATURAS_UC_MES`, #67) também são segregadas, e a competência entra como sem fatura. |
 | **8** | **Manifesto** da exportação com `batch_id`, versão do contrato, contagens e totais de controle | Importador | **Formalizado (R6, R7)**: `reference_date` obrigatória, validação estrita e gerador autônomo `contracts/manifesto.py`. |
 | **9** | Nomes físicos de catálogo e schema unificados no Databricks, para a exportação ser um passo só do Job | Exportação | **Pendente**: depende da unificação de catálogo/schema no Databricks pelo time de dados (fora do escopo do portal). |
 
@@ -237,8 +246,8 @@ mas CHI menor que o do evento atípico.
 
 Todos os números vêm de constantes/fórmulas do gerador, sem sorteio e sem dados
 externos. O agregado de receita é gerado a partir do detalhe com `Decimal`.
-No gerador, consumo analítico da troca é um valor inventado identificado por
-`SINTETICO_TROCA`; não adota média ou mediana. A flag de irregularidade no cadastro
+No gerador, o consumo analítico da troca usa o rótulo `MEDIANA_FASE_UC` do enum, mas o
+valor é inventado: o gerador não calcula a mediana. A flag de irregularidade no cadastro
 é o retrato atual; os grupos mensais são temporais na amostra. O denominador de
 continuidade usa o cadastro sintético atual, sujeito a substituição no contrato
 real. Não há tratamento oficial de sobreposição nem limiar oficial de score.

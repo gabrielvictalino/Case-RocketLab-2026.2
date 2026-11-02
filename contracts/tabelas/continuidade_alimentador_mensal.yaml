@@ -26,19 +26,19 @@ columns:
     nullable: false
     unit: UCs
     minimum: 1
-    description: Quantidade total de unidades consumidoras atendidas pelo alimentador na competência.
+    description: Número de UCs do alimentador no cadastro, o mesmo em todas as competências (denominador do DEC e do FEC).
   chi_horas:
     type: numeric(18,2)
     nullable: false
     unit: UC × hora
     minimum: 0
-    description: Consumidor-hora interrompido (CHI) acumulado no alimentador no mês.
+    description: Horas de interrupção somadas sobre as UCs do alimentador no mês (soma de duracao_efetiva_min ÷ 60).
   interrupcoes:
     type: integer
     nullable: false
     unit: interrupções
     minimum: 0
-    description: Número total de interrupções ocorridas no alimentador na competência.
+    description: Ocorrências do alimentador na competência com flag_sobreposicao = false; a que começa com a UC já sem energia não é interrupção nova.
   dec:
     type: numeric(18,2)
     nullable: false
@@ -55,7 +55,7 @@ columns:
     type: text
     nullable: false
     unit: —
-    description: Causa predominante ou agrupada das interrupções no período.
+    description: Causa principal do mês, a de mais minutos efetivos (no empate, a de mais interrupções e depois a primeira em ordem alfabética); SEM OCORRENCIA quando o mês não tem interrupção.
   flag_evento_atipico:
     type: boolean
     nullable: false

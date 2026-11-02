@@ -102,7 +102,7 @@ def gerar(out=OUT):
                     competencia=competencia,
                     consumo_kwh_original=consumo,
                     consumo_kwh_analitico=consumo,
-                    metodo_consumo='LEITURA',
+                    metodo_consumo='LEITURA_UTILIZAVEL',
                     tipo_leitura='REAL',
                     flag_troca_medidor=False,
                     id_fatura=None,
@@ -123,9 +123,7 @@ def gerar(out=OUT):
                     competencia=competencia,
                     consumo_kwh_original=-500 if troca else consumo,
                     consumo_kwh_analitico=consumo,
-                    metodo_consumo='SINTETICO_TROCA'
-                    if troca
-                    else ('SINTETICO_ESTIMADA' if i == 2 and offset == 47 else 'LEITURA'),
+                    metodo_consumo='MEDIANA_FASE_UC' if troca else 'LEITURA_UTILIZAVEL',
                     tipo_leitura='ESTIMADA' if i == 2 and offset == 47 else 'REAL',
                     flag_troca_medidor=troca,
                     id_fatura=f'FT{i:06}{offset:03}',

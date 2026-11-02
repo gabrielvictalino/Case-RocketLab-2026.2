@@ -89,7 +89,7 @@
     "uc_consumo_faturamento_mensal": {
       "file": "uc_consumo_faturamento_mensal.csv",
       "rows": 14364,
-      "sha256": "ba206c7f24c70a04ce93c6f4b2e6b87f3c3076f8d79848498c5bc264b69c3b99",
+      "sha256": "9ecd9e2708ff05932e34d38909c64528cd954d7c57a7e7f12d11c9ca77c1e7cd",
       "totals": {
         "volume_faturado_kwh": "1721365",
         "valor_total": "1294441.40",

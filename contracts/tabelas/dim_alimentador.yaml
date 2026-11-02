@@ -15,7 +15,7 @@ columns:
     type: text
     nullable: false
     unit: —
-    description: Município onde se localiza a maior parte da carga do alimentador.
+    description: Município das UCs do alimentador (único; a Gold bloqueia alimentador com UCs em mais de um município).
   numero_ucs:
     type: integer
     nullable: false

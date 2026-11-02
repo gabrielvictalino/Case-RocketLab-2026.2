@@ -129,25 +129,25 @@ async def validate(db, specs, manifest):
             'uc_consumo_faturamento_mensal: valor arrecadado incompatível com status_pagamento (R2)'
         )
 
-    # Gate R2: Troca de medidor exige método diferente de LEITURA
+    # Gate R2: Troca de medidor exige consumo estimado (o enum do contrato fecha os métodos)
     invalid_meter_exchange = await db.fetchval("""SELECT EXISTS(
         SELECT 1 FROM analytics_staging.uc_consumo_faturamento_mensal
-        WHERE flag_troca_medidor = true AND metodo_consumo = 'LEITURA')""")
+        WHERE flag_troca_medidor = true AND metodo_consumo = 'LEITURA_UTILIZAVEL')""")
     if invalid_meter_exchange:
         raise ContractError(
             'uc_consumo_faturamento_mensal: '
-            'flag_troca_medidor exige metodo_consumo diferente de LEITURA (R2)'
+            'flag_troca_medidor exige metodo_consumo diferente de LEITURA_UTILIZAVEL (R2)'
         )
 
-    # Gate R2: LEITURA significa consumo analítico igual ao original
+    # Gate R2: LEITURA_UTILIZAVEL significa consumo analítico igual ao original
     invalid_reading = await db.fetchval("""SELECT EXISTS(
         SELECT 1 FROM analytics_staging.uc_consumo_faturamento_mensal
-        WHERE metodo_consumo = 'LEITURA'
+        WHERE metodo_consumo = 'LEITURA_UTILIZAVEL'
           AND consumo_kwh_analitico <> consumo_kwh_original)""")
     if invalid_reading:
         raise ContractError(
             'uc_consumo_faturamento_mensal: '
-            'metodo_consumo LEITURA exige consumo analítico igual ao original (R2)'
+            'metodo_consumo LEITURA_UTILIZAVEL exige consumo analítico igual ao original (R2)'
         )
 
     # Gate R3: Grupo de UC temporal segundo prioridade GD > IRREGULARIDADE > DEMAIS
@@ -197,6 +197,16 @@ async def validate(db, specs, manifest):
         JOIN analytics_staging.gd_uc g ON f.id_uc = g.id_uc)""")
     if invalid_queue_gd:
         raise ContractError('fila_inspecao: contém UC presente em gd_uc (R4)')
+
+    # Gate R4: denominador do DEC/FEC fixo, igual ao cadastro do alimentador
+    invalid_denominator = await db.fetchval("""SELECT EXISTS(
+        SELECT 1 FROM analytics_staging.continuidade_alimentador_mensal c
+        JOIN analytics_staging.dim_alimentador a USING (alimentador)
+        WHERE c.numero_ucs <> a.numero_ucs)""")
+    if invalid_denominator:
+        raise ContractError(
+            'continuidade_alimentador_mensal: numero_ucs diverge de dim_alimentador (R4)'
+        )
 
     # Reconciliar por grão, não só os totais: evita compensação entre grupos.
     divergent = await db.fetchval("""

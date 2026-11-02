@@ -37,7 +37,7 @@ columns:
     unit: R$
     minimum: 0
     description: Valor financeiro estimado a recuperar em reais.
-description: Fila priorizada de unidades consumidoras suspeitas de fraude ou irregularidade para inspeção em campo.
+description: UCs candidatas a inspeção, com score, motivos da suspeita e energia estimada a recuperar.
 control_totals:
 - energia_recuperar_kwh
 - energia_recuperar_reais

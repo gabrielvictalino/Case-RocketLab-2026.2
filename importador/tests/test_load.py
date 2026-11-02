@@ -347,21 +347,24 @@ async def test_redis_failure_does_not_undo_committed_import(db, infrastructure):
         (
             'r2_meter_exchange',
             'uc_consumo_faturamento_mensal',
-            lambda rows: rows[0].update(flag_troca_medidor='true', metodo_consumo='LEITURA'),
+            lambda rows: rows[0].update(
+                flag_troca_medidor='true', metodo_consumo='LEITURA_UTILIZAVEL'
+            ),
             'uc_consumo_faturamento_mensal',
             'R2',
         ),
         (
             'r2_leitura_consumo_alterado',
             'uc_consumo_faturamento_mensal',
-            # Volume faturado intacto: só o gate de LEITURA detecta a divergência
+            # Volume faturado intacto: só o gate de LEITURA_UTILIZAVEL detecta a divergência
             lambda rows: next(
                 r
                 for r in rows
-                if r['metodo_consumo'] == 'LEITURA' and r['consumo_kwh_original'] != '999.00'
+                if r['metodo_consumo'] == 'LEITURA_UTILIZAVEL'
+                and r['consumo_kwh_original'] != '999.00'
             ).update(consumo_kwh_analitico='999.00'),
             'uc_consumo_faturamento_mensal',
-            'LEITURA exige consumo analítico igual ao original (R2)',
+            'LEITURA_UTILIZAVEL exige consumo analítico igual ao original (R2)',
         ),
         (
             'r3_group_temporal',
@@ -387,6 +390,13 @@ async def test_redis_failure_does_not_undo_committed_import(db, infrastructure):
             # Substituir id_uc por uma UC com GD (UC100000 está em gd_uc)
             lambda rows: rows[0].update(id_uc='UC100000'),
             'fila_inspecao',
+            'R4',
+        ),
+        (
+            'r4_denominador_continuidade',
+            'continuidade_alimentador_mensal',
+            lambda rows: rows[0].update(numero_ucs=str(int(rows[0]['numero_ucs']) + 1)),
+            'continuidade_alimentador_mensal',
             'R4',
         ),
         (

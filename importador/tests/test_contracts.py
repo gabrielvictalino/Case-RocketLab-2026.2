@@ -125,3 +125,12 @@ def test_sequencia_de_atendimento_comeca_em_um(value):
     assert parse('1', spec) == 1
     with pytest.raises(ValueError, match='mínimo'):
         parse(value, spec)
+
+
+def test_metodo_consumo_aceita_so_o_enum_do_contrato():
+    spec = specifications()['uc_consumo_faturamento_mensal']['columns']['metodo_consumo']
+    for metodo in ('LEITURA_UTILIZAVEL', 'MEDIANA_FASE_UC', 'MEDIANA_HISTORICA_UC'):
+        assert parse(metodo, spec) == metodo
+    for metodo in ('LEITURA', 'INDISPONIVEL', 'SINTETICO_TROCA'):
+        with pytest.raises(ValueError, match='domínio'):
+            parse(metodo, spec)

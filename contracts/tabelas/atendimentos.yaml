@@ -40,6 +40,6 @@ columns:
     unit: —
     minimum: 0
     maximum: 10
-    description: Nota de satisfação atribuída pelo cliente ao atendimento (escala de 0 a 10).
-description: Registro consolidado de chamados e protocolos de atendimento ao cliente da distribuidora.
+    description: Nota de satisfação atribuída ao atendimento pelo titular da UC (escala de 0 a 10).
+description: Registro consolidado dos protocolos de atendimento das UCs da distribuidora.
 control_totals: []

@@ -56,7 +56,7 @@ columns:
     nullable: false
     unit: R$
     minimum: 0
-    description: Receita bruta faturada em reais no agrupamento.
+    description: Receita faturada em reais no agrupamento, com tributos.
   receita_arrecadada:
     type: numeric(18,2)
     nullable: false

@@ -33,7 +33,7 @@ INSERT em cargas e SELECT em inspeções, sem escrita nas demais tabelas operaci
 |---|---|---|
 | Contrato Gold e exportador | Revisão das 12 tabelas, nomes, grãos, chaves, tipos, nulls, manifesto e versão, com amostra real coerente | Importação real e todos os módulos |
 | Consumo analítico | Média × mediana, janela de referência, negativos não confirmados, fallback, flag da troca e versão da regra | UC 360, receita, KPIs, fila |
-| Receita e volume | Pareamento de faturas/leitura, múltiplas faturas, órfãos e quarentena, tributos, arredondamento, pago/aberto | Receita, explicação da conta, KPIs |
+| Receita e volume | Pareamento de faturas/leitura, órfãos e quarentena, tributos, arredondamento, pago/aberto; múltiplas faturas na mesma competência têm regra provisória em 0.3.0-provisional (segregadas, competência sem fatura) | Receita, explicação da conta, KPIs |
 | Decomposição | Formalizada em 0.3.0-provisional (R5: volume, reajuste, bandeira, mix com fechamento exato) | Receita e insights (P20) |
 | Grupos de UC | Formalizado em 0.3.0-provisional (R3: regra temporal GD > IRREGULARIDADE > DEMAIS com date_trunc) | Receita, fila e avaliações |
 | DEC/FEC/CHI | Sobreposições, interrupções contadas, competência de eventos que cruzam meses, denominador temporal e flag de evento atípico | Operação e KPIs |
@@ -91,6 +91,8 @@ integração/revisão: esta entrega versiona a configuração sem aplicar prote�
    - Metadados completos em todas as 12 tabelas e colunas (R1: descrições em português, grãos, unidades e totais).
    - `uc_consumo_faturamento_mensal`: nova coluna `data_vencimento` (date, anulável) e modelagem estrita de competências sem fatura emitida (R2: nulos síncronos e zeramento de volume/valores).
    - Enum estrito de bandeira (`VERDE`, `AMARELA`, `VERMELHA_P1`, `VERMELHA_P2`) e validação de `status_pagamento` × arrecadação.
+   - Enum de `metodo_consumo` alinhado à Gold de GD (#94): `LEITURA_UTILIZAVEL` exige consumo analítico igual ao original, e a troca de medidor exige uma das medianas.
+   - Faturas múltiplas da mesma UC na competência segregadas, como no #67, com a competência publicada como sem fatura.
 2. **Decomposição da Receita (R5):**
    - Fórmula canônica formalizada com fator tributário $k_0$, quatro efeitos (volume, reajuste, bandeira, mix) e fechamento exato em Decimal, pronta para implementação na P20.
 3. **Regra Temporal de Grupo de UC (R3):**
