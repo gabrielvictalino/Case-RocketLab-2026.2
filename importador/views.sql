@@ -7,13 +7,16 @@ CREATE OR REPLACE VIEW portal_read.inspecoes AS
         'portal'::text AS origem FROM operations.inspecoes;
 GRANT SELECT ON portal_read.inspecoes TO portal;
 -- A IA vê só as views abaixo, recriadas do zero a cada carga: view ou grant que sai
--- deste arquivo some do banco. Sem CASCADE, uma dependência desconhecida aborta a carga.
+-- deste arquivo some do banco. Um DROP só para todas não depende da ordem, mesmo com uma
+-- view de ai_read lendo outra. Sem CASCADE, uma dependência de fora aborta a carga.
 DO $$
-DECLARE v record;
+DECLARE views text;
 BEGIN
-  FOR v IN SELECT viewname FROM pg_views WHERE schemaname = 'ai_read' LOOP
-    EXECUTE format('DROP VIEW ai_read.%I', v.viewname);
-  END LOOP;
+  SELECT string_agg(format('ai_read.%I', viewname), ', ') INTO views
+  FROM pg_views WHERE schemaname = 'ai_read';
+  IF views IS NOT NULL THEN
+    EXECUTE 'DROP VIEW ' || views;
+  END IF;
 END $$;
 -- Colunas listadas uma a uma: coluna nova no contrato só chega à IA depois de revisão.
 -- A projeção da IA é independente da view do portal.
@@ -28,7 +31,7 @@ GRANT SELECT ON ai_read.inspecoes TO ai_read;
 CREATE VIEW ai_read.ucs AS
  SELECT id_uc,municipio,bairro,classe,alimentador,flag_gd,flag_irregularidade_confirmada
  FROM analytics.dim_uc;
-GRANT SELECT ON ai_read.ucs TO portal, ai_read;
+GRANT SELECT ON ai_read.ucs TO ai_read;
 CREATE VIEW ai_read.receita_volume_mensal AS
  SELECT competencia,municipio,bairro,classe,grupo_uc,volume_faturado_kwh,receita,
         receita_arrecadada,componente_tarifa_reais,componente_bandeira_reais
