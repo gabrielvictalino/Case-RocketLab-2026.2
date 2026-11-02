@@ -4,12 +4,17 @@
 from datetime import date
 import hashlib
 import json
+import re
+from contextlib import contextmanager
+from datetime import datetime, timezone
+from uuid import uuid4
 from pathlib import Path
 
 from pyspark.sql import DataFrame, Window
 from pyspark.sql import functions as F
 
-VERSAO_REGRAS = 'GOLD_FATURAS_V1'
+VERSAO_REGRAS = 'GOLD_FATURAS_V2'
+COMPETENCIA_REGEX = r'^[1-9][0-9]{3}-(0[1-9]|1[0-2])$'
 DIMENSOES = ['municipio', 'bairro', 'classe']
 FLAGS_LEITURAS = [
     'flag_troca_medidor',
@@ -137,9 +142,7 @@ def construir_faturas(
         {
             'id_fatura_vazio': F.trim(F.col('id_fatura')) == '',
             'id_uc_invalido': ~F.col('id_uc').rlike(r'^UC[0-9]+$'),
-            'competencia_invalida': ~F.col('mes_referencia').rlike(
-                r'^[1-9][0-9]{3}-(0[1-9]|1[0-2])$'
-            ),
+            'competencia_invalida': ~F.col('mes_referencia').rlike(COMPETENCIA_REGEX),
             'status_invalido': ~F.col('status').isin('PAGA', 'EM ABERTO'),
             'bandeira_invalida': ~F.col('bandeira_tarifaria').isin(
                 'Verde', 'Amarela', 'Vermelha P1', 'Vermelha P2'
@@ -176,9 +179,7 @@ def construir_faturas(
         leituras,
         {
             'chave_nula': F.col('id_uc').isNull() | F.col('mes_referencia').isNull(),
-            'competencia_invalida': ~F.col('mes_referencia').rlike(
-                r'^[1-9][0-9]{3}-(0[1-9]|1[0-2])$'
-            ),
+            'competencia_invalida': ~F.col('mes_referencia').rlike(COMPETENCIA_REGEX),
         },
         'leituras',
     )
@@ -288,7 +289,7 @@ def agregar_faturamento(detalhe: DataFrame) -> DataFrame:
             F.round(
                 F.col('quantidade_com_volume_positivo') * F.lit(100) / F.col('quantidade_faturas'),
                 2,
-            ),
+            ).cast('decimal(5,2)'),
         )
         .withColumn('versao_regras_gold', F.lit(VERSAO_REGRAS))
     )
@@ -320,8 +321,7 @@ def comparar_periodos(
     disponiveis = {r[0] for r in mensal.select('competencia').distinct().collect()}
     for inicio, fim in [(b0, b1), (a0, a1)]:
         for deslocamento in range(meses(inicio, fim)):
-            indice = inicio.year * 12 + inicio.month - 1 + deslocamento
-            esperado = date(indice // 12, indice % 12 + 1, 1)
+            esperado = deslocar_mes(inicio, deslocamento)
             if esperado not in disponiveis:
                 raise ValueError(f'Competência ausente no período: {esperado}')
 
@@ -449,13 +449,19 @@ def exportar_csv(tabelas: dict[str, DataFrame], diretorio: str, metadados: dict)
         pasta_tabela = pasta_lote / nome
         df.write.mode('errorifexists').option('header', 'true').option(
             'dateFormat', 'yyyy-MM-dd'
-        ).option('nullValue', '').option('encoding', 'UTF-8').csv(str(pasta_tabela))
+        ).option('nullValue', '').option('encoding', 'UTF-8').option(
+            'timestampFormat', "yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXX"
+        ).csv(str(pasta_tabela))
+        partes = sorted(pasta_tabela.glob('part-*.csv'))
+        hashes_conferidos = conferir_arquivos_csv(df, partes)
         arquivos = []
-        for arquivo in sorted(pasta_tabela.glob('part-*.csv')):
+        for arquivo in partes:
             digest = hashlib.sha256()
             with arquivo.open('rb') as stream:
                 for bloco in iter(lambda: stream.read(1024 * 1024), b''):
                     digest.update(bloco)
+            if digest.hexdigest() != hashes_conferidos[str(arquivo)]:
+                raise ValueError(f'CSV mudou após a conferência: {arquivo}')
             arquivos.append(
                 {
                     'arquivo': str(arquivo.relative_to(pasta_lote)),
@@ -478,6 +484,10 @@ def exportar_csv(tabelas: dict[str, DataFrame], diretorio: str, metadados: dict)
             'totais_controle': {c: str(v) for c, v in totais.items()},
             'arquivos': arquivos,
         }
+    for tabela in manifesto['tabelas'].values():
+        for parte in tabela['arquivos']:
+            if hash_arquivo(pasta_lote / parte['arquivo']) != parte['sha256']:
+                raise ValueError('CSV mudou antes da confirmação do manifesto')
     temporario = pasta_lote / 'manifest.json.tmp'
     temporario.write_text(json.dumps(manifesto, ensure_ascii=False, indent=2), encoding='utf-8')
     temporario.replace(pasta_lote / 'manifest.json')
@@ -490,6 +500,11 @@ def publicar_delta(spark, tabelas, destinos, validar):
     Exige exclusividade de escrita durante publicação e recuperação. RESTORE é
     compensação, sem isolamento/atomicidade entre tabelas para leitores externos.
     """
+    if not tabelas or set(tabelas) != set(destinos):
+        raise ValueError('Publicação exige tabelas e destinos correspondentes não vazios')
+    for destino in destinos.values():
+        schema = '.'.join(qualificar(destino).split('.')[:2])
+        validar_destinos(schema, [destino], [])
     anteriores = {}
     for nome in tabelas:
         destino = destinos[nome]
@@ -546,3 +561,288 @@ def publicar_delta(spark, tabelas, destinos, validar):
             ) from erro
         raise
     return persistidas, versoes
+
+
+def deslocar_mes(data, meses):
+    indice = data.year * 12 + data.month - 1 + meses
+    return date(indice // 12, indice % 12 + 1, 1)
+
+
+def qualificar(nome, partes=3):
+    segmentos = nome.split('.')
+    if len(segmentos) != partes or any(
+        not re.fullmatch(r'(?:[A-Za-z0-9_-]+|`[A-Za-z0-9_-]+`)', segmento) for segmento in segmentos
+    ):
+        raise ValueError(f'Identificador inválido: {nome}')
+    return '.'.join('`' + segmento.strip('`') + '`' for segmento in segmentos)
+
+
+def normalizar_identificador(nome, partes=3):
+    return qualificar(nome, partes).lower()
+
+
+def validar_destinos(schema, destinos, fontes):
+    if normalizar_identificador(schema, 2).split('.')[1] in {
+        '`bronze`',
+        '`silver`',
+        '`default`',
+        '`silver_revisoes`',
+    }:
+        raise ValueError('O destino deve ser um schema próprio da Gold')
+    if {normalizar_identificador(t) for t in destinos} & {
+        normalizar_identificador(t) for t in fontes
+    }:
+        raise ValueError('Uma tabela de destino coincide com uma fonte')
+
+
+def ler_snapshot_delta(spark, tabela, versao=None):
+    tabela = qualificar(tabela)
+    detalhe = spark.sql(f'DESCRIBE DETAIL {tabela}').first()
+    if detalhe['format'] != 'delta':
+        raise ValueError(f'A fonte precisa ser Delta: {tabela}')
+    if versao is None:
+        versao = spark.sql(f'DESCRIBE HISTORY {tabela} LIMIT 1').first()['version']
+    if type(versao) is not int or versao < 0:
+        raise ValueError('Versão Delta inválida')
+    return spark.read.option('versionAsOf', versao).table(tabela), {
+        'tabela': tabela,
+        'id_delta': detalhe['id'],
+        'versao_delta': versao,
+    }
+
+
+def validar_marcador_silver(linhas, principal, pendentes):
+    esperados = {normalizar_identificador(t) for t in (principal, pendentes)}
+    if len(esperados) != 2 or len(linhas) != 2:
+        raise ValueError('Publicação Silver ausente ou incompleta')
+    try:
+        ids = {r['id_execucao'] for r in linhas}
+        datas = {r['confirmado_em'] for r in linhas}
+        destinos = {normalizar_identificador(r['destino']) for r in linhas}
+        fontes = {normalizar_identificador(r['fonte']) for r in linhas}
+        if (
+            len(ids) != 1
+            or not re.fullmatch(r'[0-9a-f]{32}', next(iter(ids)))
+            or len(datas) != 1
+            or None in datas
+            or destinos != esperados
+            or len(fontes) != 2
+        ):
+            raise ValueError('Identidade da publicação Silver incoerente')
+        for r in linhas:
+            for campo in ('versao_fonte', 'versao_destino'):
+                if type(r[campo]) is not int or r[campo] < 0:
+                    raise ValueError('Versão da publicação Silver inválida')
+            destino = normalizar_identificador(r['destino']).split('.')
+            fonte = normalizar_identificador(r['fonte']).split('.')
+            nome = destino[-1].strip('`')
+            if (
+                fonte[:2] != [destino[0], '`silver_revisoes`']
+                or fonte[-1].strip('`') != f'{nome}_revisao_{r["id_execucao"]}'
+            ):
+                raise ValueError('Revisão Silver fora do protocolo de publicação')
+    except (KeyError, TypeError, StopIteration) as erro:
+        raise ValueError('Marcador Silver inválido') from erro
+    return linhas
+
+
+def ler_publicacao_silver(spark, marcador, principal, pendentes):
+    # Uma única ação materializa o marcador. Republicações não mudam este par.
+    linhas = spark.table(qualificar(marcador)).collect()
+    validar_marcador_silver(linhas, principal, pendentes)
+    quadros, fontes = {}, {}
+    for r in linhas:
+        chave = normalizar_identificador(r['destino'])
+        quadros[chave], fontes[chave] = ler_snapshot_delta(spark, r['fonte'], r['versao_fonte'])
+    return (
+        quadros[normalizar_identificador(principal)],
+        quadros[normalizar_identificador(pendentes)],
+        {
+            'marcador': qualificar(marcador),
+            'id_execucao': linhas[0]['id_execucao'],
+            'confirmado_em': str(linhas[0]['confirmado_em']),
+            'snapshots': fontes,
+        },
+    )
+
+
+@contextmanager
+def persistir_quadros(quadros):
+    """Persistência seletiva MEMORY_AND_DISK, sempre liberada inclusive na falha."""
+    from pyspark import StorageLevel
+
+    persistidos = []
+    try:
+        for df in quadros:
+            if not df.is_cached:
+                df.persist(StorageLevel.MEMORY_AND_DISK)
+                persistidos.append(df)
+        yield
+    finally:
+        for df in reversed(persistidos):
+            df.unpersist()
+
+
+def publicar_revisoes(spark, tabelas, schema, validar, metadados, antes_confirmar=lambda: None):
+    """Revisões exclusivas; só o overwrite do marcador promove o conjunto.
+
+    Escritor único obrigatório (job + ACL). Após interrupção, ler o marcador:
+    revisões não referidas são candidatas abandonadas, nunca publicação parcial.
+    Não tocar nas revisões após tentar confirmar: o commit pode ter ocorrido.
+    """
+    validar_destinos(schema, [], [])
+    if not tabelas:
+        raise ValueError('Publicação vazia')
+    schema = qualificar(schema, 2)
+    execucao = uuid4().hex
+    destinos = {n: f'{schema}.`tb_gold_faturas_{n}_revisao_{execucao}`' for n in tabelas}
+    fontes_consumidas = [v['tabela'] for v in metadados.get('fontes', {}).values()]
+    marcador_silver = metadados.get('publicacao_silver', {}).get('marcador')
+    if marcador_silver:
+        fontes_consumidas.append(marcador_silver)
+    validar_destinos(
+        schema, [*destinos.values(), f'{schema}.`tb_gold_faturas_publicacao`'], fontes_consumidas
+    )
+    for n in tabelas:
+        if not n.isidentifier():
+            raise ValueError(f'Nome inválido: {n}')
+    if any(spark.catalog.tableExists(t) for t in destinos.values()):
+        raise ValueError('Revisão já existe; UUID nunca pode ser reutilizado')
+    # Mantém a compensação RESTORE/DROP para exceções capturadas nas candidatas.
+    persistidas, versoes = publicar_delta(spark, tabelas, destinos, validar)
+    antes_confirmar()
+    linhas = [
+        (
+            execucao,
+            n,
+            v['tabela'],
+            int(v['versao_delta']),
+            json.dumps(metadados, ensure_ascii=False, sort_keys=True),
+        )
+        for n, v in versoes.items()
+    ]
+    marcador = spark.createDataFrame(
+        linhas, 'id_execucao string, nome string, fonte string, versao_fonte long, metadados string'
+    )
+    (
+        marcador.write.format('delta')
+        .mode('overwrite')
+        .saveAsTable(f'{schema}.`tb_gold_faturas_publicacao`')
+    )
+    return persistidas, versoes
+
+
+def ler_publicacao_gold(spark, schema, nomes):
+    schema = qualificar(schema, 2)
+    linhas = spark.table(f'{schema}.`tb_gold_faturas_publicacao`').collect()
+    if (
+        not nomes
+        or len(linhas) != len(nomes)
+        or {r['nome'] for r in linhas} != set(nomes)
+        or len({r['id_execucao'] for r in linhas}) != 1
+        or len({r['metadados'] for r in linhas}) != 1
+    ):
+        raise ValueError('Publicação Gold incompleta ou incoerente')
+    execucao = linhas[0]['id_execucao']
+    if not re.fullmatch(r'[0-9a-f]{32}', execucao):
+        raise ValueError('Identidade Gold inválida')
+    for r in linhas:
+        esperado = f'{schema}.`tb_gold_faturas_{r["nome"]}_revisao_{execucao}`'
+        if (
+            normalizar_identificador(r['fonte']) != normalizar_identificador(esperado)
+            or type(r['versao_fonte']) is not int
+            or r['versao_fonte'] < 0
+        ):
+            raise ValueError('Snapshot Gold inválido')
+    return {
+        r['nome']: ler_snapshot_delta(spark, r['fonte'], r['versao_fonte'])[0] for r in linhas
+    }, linhas
+
+
+def limpar_revisoes_gold(spark, schema, nomes):
+    """Manutenção explícita sob a mesma exclusividade do produtor; janela de 7 dias."""
+    from datetime import timedelta
+    from delta.tables import DeltaTable
+
+    validar_destinos(schema, [], [])
+    schema = qualificar(schema, 2)
+    _, linhas = ler_publicacao_gold(spark, schema, nomes)
+    protegidas = {normalizar_identificador(r['fonte']) for r in linhas}
+    padrao = (
+        r'tb_gold_faturas_(' + '|'.join(re.escape(n) for n in nomes) + r')_revisao_[0-9a-f]{32}'
+    )
+    candidatas = [
+        f'{schema}.`{r["tableName"]}`'
+        for r in spark.sql(f'SHOW TABLES IN {schema}').collect()
+        if re.fullmatch(padrao, r['tableName'])
+    ]
+    agora = datetime.now(timezone.utc)
+    retiradas = [(t, agora) for t in candidatas if normalizar_identificador(t) not in protegidas]
+    registro = f'{schema}.`tb_gold_faturas_retencao`'
+    spark.sql(
+        f'CREATE TABLE IF NOT EXISTS {registro} (nome STRING, aposentada_em TIMESTAMP) USING DELTA'
+    )
+    if retiradas:
+        novas = spark.createDataFrame(retiradas, 'nome string, aposentada_em timestamp')
+        (
+            DeltaTable.forName(spark, registro)
+            .alias('r')
+            .merge(novas.alias('n'), 'r.nome = n.nome')
+            .whenNotMatchedInsertAll()
+            .execute()
+        )
+    for r in spark.table(registro).collect():
+        aposentada_em = r['aposentada_em']
+        if aposentada_em is not None and aposentada_em.tzinfo is None:
+            aposentada_em = aposentada_em.replace(tzinfo=timezone.utc)
+        if (
+            r['nome'] in candidatas
+            and normalizar_identificador(r['nome']) not in protegidas
+            and aposentada_em is not None
+            and aposentada_em < agora - timedelta(days=7)
+        ):
+            spark.sql(f'DROP TABLE {qualificar(r["nome"])}')
+
+
+def hash_arquivo(arquivo):
+    with Path(arquivo).open('rb') as stream:
+        return hashlib.file_digest(stream, 'sha256').hexdigest()
+
+
+def conferir_arquivos_csv(esperado, arquivos):
+    """Confere os bytes entregues como multiconjunto, além de cabeçalho/contagem.
+
+    Não confia em _committed_*; uma parte órfã ou troca de valores de mesmo total
+    é detectada pelo exceptAll. Arquivos vazios/corrompidos também bloqueiam.
+    """
+    import csv
+
+    if not arquivos:
+        raise ValueError('Nenhum CSV exportado')
+    hashes = {str(p): hash_arquivo(p) for p in arquivos}
+    for arquivo in arquivos:
+        with Path(arquivo).open(newline='', encoding='utf-8') as stream:
+            leitor = csv.reader(stream, strict=True)
+            if next(leitor, None) != esperado.columns:
+                raise ValueError(f'Cabeçalho CSV divergente: {arquivo}')
+            for linha in leitor:
+                if len(linha) != len(esperado.columns):
+                    raise ValueError(f'Linha CSV divergente: {arquivo}')
+    entregue = (
+        esperado.sparkSession.read.schema(esperado.schema)
+        .option('header', 'true')
+        .option('mode', 'FAILFAST')
+        .option('multiLine', 'true')
+        .option('dateFormat', 'yyyy-MM-dd')
+        .option('nullValue', '')
+        .option('timestampFormat', "yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXX")
+        .csv([str(p) for p in arquivos])
+    )
+    if (
+        esperado.exceptAll(entregue).limit(1).count()
+        or entregue.exceptAll(esperado).limit(1).count()
+    ):
+        raise ValueError('Conteúdo CSV entregue diverge do DataFrame conferido')
+    if hashes != {str(p): hash_arquivo(p) for p in arquivos}:
+        raise ValueError('CSV mudou durante a conferência')
+    return hashes

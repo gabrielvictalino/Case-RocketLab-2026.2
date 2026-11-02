@@ -27,4 +27,8 @@ As regras, os grãos e as limitações das métricas estão no
 [dicionário de dados](docs/gold/faturas.md). O volume usado nas análises é um
 proxy de leituras utilizáveis; as fontes não comprovam kWh faturado nem parcelas
 isoladas de tarifa/bandeira. A referência do status de pagamento é um parâmetro
-explícito da carga. Os testes locais e a CI usam Spark com dados sintéticos.
+explícito da carga. A integração com `0.3.0-provisional` fornece consumo estimado com método e
+proveniência e grupos temporais; exportar as tabelas comerciais exige uma fonte
+complementar homologada de volume faturado, tarifa e adicional de bandeira.
+A [matriz de aderência](docs/gold/aderencia-faturas-0.3.md) identifica os bloqueios.
+Os testes locais e o job Gold no agregador `CI` usam Spark com dados sintéticos.

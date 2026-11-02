@@ -1,96 +1,75 @@
 # Gold de faturas
 
-O [notebook](silver_to_gold/silver-to-gold-faturas.ipynb) lê as tabelas Silver
-Delta, valida as entradas e produz:
+A Gold lê Silver por snapshots e prepara duas saídas comerciais do contrato
+`0.3.0-provisional`: `uc_consumo_faturamento_mensal` e `receita_volume_mensal`.
+Mantém detalhe, exclusões, agregado mensal e decomposição de preço efetivo como
+auxiliares reconciliáveis. Regras, fontes e operação estão no
+[dicionário](../docs/gold/faturas.md); requisitos e bloqueios, na
+[matriz de aderência](../docs/gold/aderencia-faturas-0.3.md).
 
-- `gold.tb_faturas`: detalhe das contas, valores e situação de pagamento;
-- `gold.tb_faturamento_mensal`: faturamento por competência, município, bairro e classe;
-- `gold.tb_variacao_receita`: primeiro ano × últimos 12 meses, com efeitos de volume,
-  preço efetivo e receita sem volume utilizável;
-- `gold.tb_faturas_excluidas`: faturas segregadas com motivo e valores reconciliáveis.
+## Execução no Databricks
 
-As transformações ficam em [gold_faturas.py](silver_to_gold/gold_faturas.py).
-O [dicionário e as decisões](../docs/gold/faturas.md) definem o grão de cada tabela,
-as fórmulas, os limites dos dados e as diferenças em relação ao contrato sintético
-provisório do portal.
+1. Sincronize o repositório inteiro em Git folder, preservando `contracts/`.
+   Use runtime com Python 3.12, Spark compatível com 4.0 e PyYAML; o notebook e
+   módulos `.py` devem permanecer juntos. Imports locais precisam estar habilitados.
+   O bundle inclui `.` e `../contracts` em `sync.paths` para preservar essa árvore;
+   use uma Databricks CLI que suporte sincronização fora da raiz do bundle.
+2. Confira os widgets do [notebook](silver_to_gold/silver-to-gold-faturas.ipynb).
+   O marcador padrão é `v-energy.silver.tb_faturas_publicacao`; ausência ou
+   incoerência bloqueia, sem ler os nomes finais como fallback. Cadastro e leituras
+   usam `v-energy.silver.tb_unidades_consumidoras` e `v-energy.silver.tb_leituras`.
+   GD usa `v-energy.silver.tb_geracao_distribuida`; inspeções usam o nome legado do
+   produtor, `venergy.silver.inspecoes`, parametrizável. Confirme disponibilidade.
+3. Informe `data_referencia` como data do retrato de status da extração; ela vira
+   `reference_date`. Não é automaticamente a ingestão ou o dia da execução.
+4. Execute desde o início em `modo=validar`: nenhuma escrita ou limpeza.
+   Sem `tabela_complemento_faturamento`, as validações disponíveis rodam e informam
+   bloqueio de volume faturado/tarifa/adicional homologados. O complemento exige
+   proveniência por fatura; não se obtém dividindo valor por leitura.
+5. A publicação só é possível com todas as fontes/gates satisfeitos, escritor
+   único por ACL e `diretorio_exportacao` em `/Volumes/...`. O código prepara
+   revisões exclusivas, reconcilia integralmente, confirma por marcador e exporta
+   arquivos com conferência de conteúdo final. O agendamento permanece `PAUSED`.
+6. Consuma Delta pelo marcador `gold.tb_gold_faturas_publicacao`, com uma única
+   leitura e `versionAsOf`; os nomes fixos legados não representam esta publicação.
+   Após interrupção, consulte o marcador para recuperar o conjunto confirmado.
+   Revisões fora dele só são limpas por manutenção explícita com retenção persistente.
 
-## Databricks
+O [bundle](databricks.yml) limita concorrência a uma execução. A definição da
+referência oficial de cada extração é pré-condição para eventual ativação futura.
+Não execute publicações manuais em paralelo. A manutenção, permissões, retenção e
+protocolo de arquivos ainda exigem homologação no runtime Databricks.
 
-1. Sincronize este diretório num Git folder do Databricks, mantendo o notebook
-   e `gold_faturas.py` lado a lado. O `%run ./gold_faturas` carrega as funções.
-2. Use compute com Unity Catalog e acesso às quatro fontes Delta e ao Volume
-   de exportação. O bundle usa Jobs serverless; para um workspace sem esse
-   recurso, configure compute na tarefa antes da execução.
-3. Abra o notebook e confira os widgets das fontes. Os padrões seguem a convenção
-   `v-energy.silver.tb_*`. Confirme que as Silvers foram publicadas nesses destinos;
-   para ambientes legados, informe os nomes físicos nos parâmetros do Job/widgets.
-4. Informe `data_referencia` como `AAAA-MM-DD`, correspondente ao retrato de status
-   da extração e igual ou posterior às emissões e pagamentos observados. A fonte
-   não informa a data oficial da extração; ela precisa ser fornecida pelo operador.
-   A Gold não usa `current_date()` para envelhecer uma base estática.
-5. Execute tudo com `modo=validar` para conferir os resultados sem escrita.
-6. Para gravar, configure `schema_gold`, `diretorio_exportacao` em um Volume
-   existente, `modo=publicar` e execute tudo desde o início. O schema de destino
-   é criado, e as quatro tabelas são substituídas após a validação.
+## Lote para o portal
 
-O diretório exportado será `<diretorio_exportacao>/<batch_id>/`, com subdiretórios
-por tabela e um `manifest.json`. Cada CSV tem cabeçalho, UTF-8, vírgula, decimal
-com ponto e datas ISO. Uma tabela pode ter várias partes: leia todos os
-`part-*.csv`, respeitando um cabeçalho por arquivo. O manifesto registra as versões
-Delta de origem/destino, tipos, contagens, totais de controle e SHA-256 das partes.
-Consuma apenas lotes com manifesto final e valide seus hashes e totais.
-
-Antes da primeira escrita, a publicação registra as versões anteriores dos quatro
-destinos. Se a escrita ou conferência falhar, tenta restaurar cada tabela afetada
-com `RESTORE TABLE` ou removê-la se for a primeira carga. A recuperação tenta todos
-os destinos, mesmo se uma restauração falhar, e informa as falhas junto do erro
-original. Uma falha de recuperação exige intervenção antes de consumir a Gold.
-As tabelas Delta são transações independentes: leitores diretos podem observar
-estados intermediários. A recuperação não fornece atomicidade entre tabelas.
-Se somente a exportação falhar, a Gold já conferida permanece publicada; o lote
-sem manifesto deve ser ignorado e a execução pode ser repetida.
-O manifesto só aparece após todas as escritas e conferências; um diretório sem
-manifesto está incompleto e deve ser ignorado. O Job limita a concorrência a 1;
-não publique manualmente ao mesmo tempo que ele.
-
-## Job
-
-O [databricks.yml](databricks.yml) define somente a etapa Gold. Não implanta nem
-executa Bronze ou Silver e não altera as rotinas existentes. No Workflow completo,
-use esta tarefa depois da publicação bem-sucedida de faturas, cadastro e leituras
-Silver. Nenhuma execução na plataforma é alegada por este repositório.
-
-Com Databricks CLI autenticado no workspace, a partir deste diretório:
+A pasta `<diretorio_exportacao>/<batch_id>/comercial/` contém os dois CSVs canônicos
+e `comercial.json`, recibo do domínio. `auxiliares/` usa formato próprio e não entra
+como substituto do contrato. O coordenador reúne as dez exportações dos demais
+domínios, prepara plano com hashes e proveniência comum e executa:
 
 ```bash
-export BUNDLE_VAR_data_referencia='AAAA-MM-DD'
-export BUNDLE_VAR_diretorio_exportacao='/Volumes/catalogo/schema/volume/gold-faturas'
-databricks bundle validate -t dev
-databricks bundle deploy -t dev
-databricks bundle run -t dev gold_faturas
+python data-engineering/silver_to_gold/montar_lote_gold.py --plano plano.json --destino /tmp/lote-gold
+uv run importador --origem /tmp/lote-gold --verificar
 ```
 
-Substitua os placeholders pelos dados da execução. O agendamento está **pausado**
-porque o case usa uma extração única. Para produção, a proposta é dia 5 de cada
-mês às 03h, `America/Fortaleza`, após o fechamento mensal e as tarefas Silver,
-atualizando a data de referência do novo retrato. O processamento é carga completa:
-~2,2 milhões de faturas permitem reprocessamento simples e inclusão de pagamentos
-tardios, mudanças cadastrais e correções históricas. A implantação/ativação efetiva
-do Job e o print de execução dependem do workspace Databricks.
+O montador reutiliza `contracts/manifesto.py` para gerar `manifest.json` de 12
+tabelas. O importador confere FKs, gates de negócio e índices e faz rollback em
+`--verificar`. Use banco de teste. Uma fixture aprovada não homologa dados reais.
+O [dicionário](../docs/gold/faturas.md) fornece o formato do plano e a divisão entre domínios.
 
-## Validação local
+## Testes locais e CI
 
-Requer Python 3.12 e Java 17 ou 21. PySpark já existe no Databricks; as dependências
-abaixo são para validação local e CI, não devem ser instaladas no cluster.
+Python 3.12 e Java 17/21:
 
 ```bash
 python -m pip install -r data-engineering/requirements-test.txt
 python -m ruff check data-engineering/silver_to_gold data-engineering/tests
+python -m ruff format --check data-engineering/silver_to_gold data-engineering/tests
 SPARK_LOCAL_IP=127.0.0.1 python -m unittest discover -s data-engineering/tests -v
 python -m unittest discover -s tests -v
+uv run pytest importador -q
 ```
 
-Execute esses comandos da raiz do repositório. Os testes usam Spark real e dados
-sintéticos, sem conexão ao Databricks ou aos arquivos brutos do case. O workflow
-GitHub Actions `Gold de faturas` repete lint e testes; as proteções administrativas
-do GitHub não são alteradas por esta implementação.
+A suíte Gold está no job `gold` de `.github/workflows/ci.yml` e no agregador `CI`.
+O workflow separado foi removido. Os testes não se conectam ao Databricks; o
+importador usa PostgreSQL 17 e Redis 7 locais via Testcontainers.

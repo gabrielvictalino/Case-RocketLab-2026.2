@@ -127,6 +127,10 @@ class GoldFaturasTest(unittest.TestCase):
         faturas = faturas.withColumn('flag_emissao_original_ambigua', F.lit(True))
         tabelas = self.construir(faturas=faturas)
         validar_reconciliacao(faturas, tabelas)
+        self.assertEqual(
+            tabelas['faturamento_mensal'].schema['cobertura_volume_pct'].dataType.simpleString(),
+            'decimal(5,2)',
+        )
         detalhe = {r.id_fatura: r for r in tabelas['faturas'].collect()}
         self.assertEqual(set(detalhe), {'FT1', 'FT2'})
         self.assertTrue(detalhe['FT1'].flag_emissao_original_ambigua)

@@ -1,6 +1,12 @@
 bundle:
   name: venergy-gold-faturas
 
+# O adaptador resolve contracts/ ao lado de data-engineering/ no repositório.
+sync:
+  paths:
+    - .
+    - ../contracts
+
 variables:
   data_referencia:
     description: Data AAAA-MM-DD do retrato de status da extração; não é a competência.
@@ -14,6 +20,15 @@ variables:
     default: v-energy.silver.tb_unidades_consumidoras
   tabela_leituras:
     default: v-energy.silver.tb_leituras
+  tabela_publicacao:
+    default: v-energy.silver.tb_faturas_publicacao
+  tabela_gd:
+    default: v-energy.silver.tb_geracao_distribuida
+  tabela_inspecoes:
+    default: venergy.silver.inspecoes
+  tabela_complemento_faturamento:
+    description: Fonte homologada por id_fatura; vazio bloqueia publicação contratual.
+    default: ''
   schema_gold:
     default: v-energy.gold
 
@@ -39,6 +54,10 @@ resources:
               tabela_pendentes: ${var.tabela_pendentes}
               tabela_cadastro: ${var.tabela_cadastro}
               tabela_leituras: ${var.tabela_leituras}
+              tabela_publicacao: ${var.tabela_publicacao}
+              tabela_gd: ${var.tabela_gd}
+              tabela_inspecoes: ${var.tabela_inspecoes}
+              tabela_complemento_faturamento: ${var.tabela_complemento_faturamento}
               schema_gold: ${var.schema_gold}
 
 targets:
