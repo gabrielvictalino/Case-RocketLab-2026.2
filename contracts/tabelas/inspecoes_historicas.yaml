@@ -1,4 +1,4 @@
-version: 0.2.0-provisional
+version: 0.3.0-provisional
 status: provisorio-nao-aprovado
 table: inspecoes_historicas
 grain: inspeção
@@ -8,42 +8,48 @@ columns:
   id_inspecao:
     type: text
     nullable: false
-    unit: identificador/texto
+    unit: —
     pattern: ^IN\d{7}$
+    description: Identificador único da inspeção histórica realizada em campo.
   id_uc:
     type: text
     nullable: false
-    unit: identificador/texto
+    unit: —
     pattern: ^UC\d{6}$
     references:
     - dim_uc
     - id_uc
+    description: Identificador da unidade consumidora inspecionada.
   data:
     type: date
     nullable: false
-    unit: data ISO
+    unit: —
+    description: Data em que a inspeção foi executada.
   inspetor:
     type: text
     nullable: false
-    unit: identificador/texto
+    unit: —
     pattern: ^INSP-(00[1-9]|0[1-3][0-9]|040)$
+    description: Código de identificação do inspetor ou equipe técnica de campo.
   resultado:
     type: text
     nullable: false
-    unit: identificador/texto
+    unit: —
     enum:
     - IRREGULARIDADE CONFIRMADA
     - SEM IRREGULARIDADE
+    description: Conclusão técnica da inspeção quanto à ocorrência de fraude.
   tipo_irregularidade:
     type: text
     nullable: true
-    unit: identificador/texto
+    unit: —
+    description: 'Classificação técnica da irregularidade constatada (ex.: DESVIO DIRETO, MEDIDOR ADULTERADO).'
   kwh_recuperado:
     type: numeric(18,2)
     nullable: false
     unit: kWh
     minimum: 0
-description: Contrato local sintético derivado do system design; sujeito à validação
-  do time de dados.
+    description: Energia em kWh recuperada após regularização da medição.
+description: Histórico de ordens e laudos de inspeções técnicas de perdas realizadas em campo.
 control_totals:
 - kwh_recuperado

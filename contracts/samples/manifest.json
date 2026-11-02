@@ -1,11 +1,12 @@
 {
   "batch_id": "amostra-sintetica-v1",
-  "contract_version": "0.2.0-provisional",
+  "contract_version": "0.3.0-provisional",
   "synthetic": true,
   "period": {
     "start": "2022-07",
     "end": "2026-06"
   },
+  "reference_date": "2026-07-01",
   "tables": {
     "atendimentos": {
       "file": "atendimentos.csv",
@@ -40,10 +41,10 @@
     "fila_inspecao": {
       "file": "fila_inspecao.csv",
       "rows": 12,
-      "sha256": "04437102a192f16214a849f06ed4dcfbfe8607d603b2e22f4a10b4895ea79c6b",
+      "sha256": "e61aa3271630cd7e34595d0c30ec040f8c0db8e4a81af8f45966dd10a25ec8dc",
       "totals": {
-        "energia_recuperar_kwh": "1266",
-        "energia_recuperar_reais": "1026"
+        "energia_recuperar_kwh": "1278",
+        "energia_recuperar_reais": "1038"
       }
     },
     "gd_uc": {
@@ -78,21 +79,21 @@
     "receita_volume_mensal": {
       "file": "receita_volume_mensal.csv",
       "rows": 1277,
-      "sha256": "d4bb02cba854476f3d16e3fdd3258f20f2b4d92e58bfc7c8c6fed4ebeb4fe580",
+      "sha256": "bcc84d775012bf73caf9e048f06fc4f66aef89762fd8537aa6524aa95d0d29fc",
       "totals": {
-        "volume_faturado_kwh": "1721480",
-        "receita": "1294533.40",
-        "receita_arrecadada": "1294262.20"
+        "volume_faturado_kwh": "1721365",
+        "receita": "1294441.40",
+        "receita_arrecadada": "1294170.20"
       }
     },
     "uc_consumo_faturamento_mensal": {
       "file": "uc_consumo_faturamento_mensal.csv",
       "rows": 14364,
-      "sha256": "55acee5a6f7f76608b2febcedbf81ab41fb0849375f40fddc6a16a5600a16a49",
+      "sha256": "9ecd9e2708ff05932e34d38909c64528cd954d7c57a7e7f12d11c9ca77c1e7cd",
       "totals": {
-        "volume_faturado_kwh": "1721480",
-        "valor_total": "1294533.40",
-        "valor_arrecadado": "1294262.20"
+        "volume_faturado_kwh": "1721365",
+        "valor_total": "1294441.40",
+        "valor_arrecadado": "1294170.20"
       }
     }
   }

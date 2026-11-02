@@ -1,4 +1,4 @@
-version: 0.2.0-provisional
+version: 0.3.0-provisional
 status: provisorio-nao-aprovado
 table: dim_uc
 grain: UC
@@ -8,54 +8,63 @@ columns:
   id_uc:
     type: text
     nullable: false
-    unit: identificador/texto
+    unit: —
     pattern: ^UC\d{6}$
+    description: Identificador único da unidade consumidora.
   titular:
     type: text
     nullable: false
-    unit: identificador/texto
+    unit: —
+    description: Nome do titular da unidade consumidora.
   documento_mascarado:
     type: text
     nullable: false
-    unit: identificador/texto
+    unit: —
+    description: Número de CPF ou CNPJ mascarado do titular para conformidade com privacidade.
   endereco:
     type: text
     nullable: false
-    unit: identificador/texto
+    unit: —
+    description: Endereço físico de fornecimento da unidade consumidora.
   municipio:
     type: text
     nullable: false
-    unit: identificador/texto
+    unit: —
+    description: Município de localização da unidade consumidora.
   bairro:
     type: text
     nullable: false
-    unit: identificador/texto
+    unit: —
+    description: Bairro de localização da unidade consumidora.
   classe:
     type: text
     nullable: false
-    unit: identificador/texto
+    unit: —
     enum:
     - Residencial
     - Comercial
     - Industrial
     - Rural
     - Poder Público
+    description: Classe de consumo da unidade consumidora.
   alimentador:
     type: text
     nullable: false
-    unit: identificador/texto
+    unit: —
     pattern: ^ALM-[A-Z]{3}-\d{3}$
     references:
     - dim_alimentador
     - alimentador
+    description: Alimentador elétrico que atende a unidade consumidora.
   flag_gd:
     type: boolean
     nullable: false
-    unit: flag
+    unit: —
+    description: Indica se a unidade consumidora possui geração distribuída ativa.
   flag_irregularidade_confirmada:
     type: boolean
     nullable: false
-    unit: flag
-description: Contrato local sintético derivado do system design; sujeito à validação
-  do time de dados.
+    unit: —
+    description: Indica se a unidade consumidora possui histórico de irregularidade confirmada em inspeção.
+description: Cadastro unificado das unidades consumidoras da distribuidora.
 control_totals: []
