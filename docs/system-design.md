@@ -174,18 +174,30 @@ agente, e vem do contrato.
   endereço, alimentador, medidor atual, GD (potência e data de conexão).
 - **Consumo analítico** dos últimos 12 meses ao lado dos mesmos meses do ano
   anterior, com marcação de leitura estimada e de troca de medidor. O tooltip
-  da troca diz "consumo estimado pela média da UC". O consumo original não
+  da troca diz "consumo estimado pela mediana da UC". O consumo original não
   aparece para o atendente.
 - **Explicação da conta** (determinística, sem LLM): compara a última fatura
   com a do mesmo mês do ano anterior e separa a variação em consumo, bandeira
-  e tarifa numa frase pronta.
+  e tarifa numa frase pronta. A troca de medidor e a leitura estimada são
+  citadas como fato, sem dizer que a fatura foi estimada.
 - Faturas em aberto, com dias de atraso.
-- **Interrupções da UC** nos últimos 12 meses (data, duração, causa) e o
-  resumo do alimentador no mesmo período (nº de ocorrências, DEC).
+- **Interrupções da UC** nos últimos 12 meses (data, duração, duração
+  efetiva, causa, sobreposição) e o resumo do alimentador no mesmo período
+  (nº de interrupções, DEC).
 - Chamados com histórico de tratativas e nota de satisfação.
 - Inspeções da UC (históricas e novas) e ordem ativa, se houver.
 
 A tela ignora o período global e usa sempre os últimos 12 meses da UC.
+
+Decisões de backend da Visão 360:
+- (D1) Data de referência obtida de `manifesto->>'reference_date'` da carga mais recente.
+- (D2) Janela de 12 meses pela maior competência da UC (ou fallback da carga), sem período global.
+- (D3) Resumo do alimentador agrega `Σ chi_horas ÷ numero_ucs` e arredonda uma única vez com HALF_UP.
+- (D4) Explicação da conta determinística por R5. O motivo principal é o efeito (consumo, tarifa,
+  bandeira ou outros) de maior módulo com o sinal da variação. Com base zero, a frase omite o
+  percentual e usa a variação absoluta. Os avisos de medição seguem a ordem cronológica.
+- (D5) Normalização devolve 422 `UC_INVALIDA` para formato inválido e 404 `UC_NAO_ENCONTRADA` se ausente.
+- (D6) Sessão do portal acessa `analytics.*`, `portal_read.inspecoes` e `operations.*` sem passar por `ai_read`.
 
 ### 4.4 Perdas (F4, F5, D1)
 
