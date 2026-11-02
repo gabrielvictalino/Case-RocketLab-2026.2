@@ -36,6 +36,17 @@ def manifest_for(origin):
         raise ContractError('Versão do contrato incompatível')
     if manifest['period']['start'] > manifest['period']['end']:
         raise ContractError('Período invertido no manifesto')
+    try:
+        ref_date = date.fromisoformat(manifest['reference_date'])
+    except (ValueError, TypeError):
+        raise ContractError(
+            f'manifesto.reference_date inválida (R6): {manifest.get("reference_date")}'
+        )
+    period_end = date.fromisoformat(manifest['period']['end'] + '-01')
+    if ref_date < period_end:
+        raise ContractError(
+            'manifesto.reference_date: data de referência anterior ao encerramento do período (R6)'
+        )
     return manifest
 
 
