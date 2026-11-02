@@ -15,8 +15,10 @@ from starlette.exceptions import HTTPException
 from app.core.config import get_settings
 from app.core.database import create_engines
 from app.modules.auth.router import router as auth_router
+from app.modules.kpis.router import router as kpis_router
 from app.modules.meta.router import router as meta_router
 from app.modules.perdas.router import router as perdas_router
+from app.modules.receita.router import router as receita_router
 from app.modules.ucs.router import router as ucs_router
 
 logger = logging.getLogger('venergy.requests')
@@ -117,7 +119,14 @@ def create_app(settings=None):
             )
         return {'status': 'ok', **checks}
 
-    for router in (auth_router, meta_router, perdas_router, ucs_router):
+    for router in (
+        auth_router,
+        meta_router,
+        perdas_router,
+        ucs_router,
+        kpis_router,
+        receita_router,
+    ):
         app.include_router(router, prefix='/api/v1')
     return app
 
