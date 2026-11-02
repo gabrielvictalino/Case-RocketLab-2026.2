@@ -1,5 +1,6 @@
 import asyncpg
 import pytest
+from importador.loader import PUBLICATION_LOCK
 
 pytestmark = pytest.mark.integration
 
@@ -92,6 +93,15 @@ async def test_ai_cannot_call_session_file_or_remote_functions(infrastructure, d
             'SELECT pg_sleep_until(now())',
             "SELECT pg_read_file('postgresql.conf')",
             "SELECT lo_import('/etc/hostname')",
+            # O lock que serializa as cargas, nas variantes de sessão.
+            f'SELECT pg_advisory_lock({PUBLICATION_LOCK})',
+            f'SELECT pg_advisory_lock_shared({PUBLICATION_LOCK})',
+            f'SELECT pg_try_advisory_lock({PUBLICATION_LOCK})',
+            f'SELECT pg_try_advisory_lock_shared({PUBLICATION_LOCK})',
+            'SELECT pg_advisory_lock(1, 2)',
+            'SELECT pg_advisory_lock_shared(1, 2)',
+            'SELECT pg_try_advisory_lock(1, 2)',
+            'SELECT pg_try_advisory_lock_shared(1, 2)',
         ):
             with pytest.raises(asyncpg.InsufficientPrivilegeError):
                 await ai.execute(query)
