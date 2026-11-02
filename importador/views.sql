@@ -37,7 +37,8 @@ GRANT SELECT ON ai_read.receita_volume_mensal TO ai_read;
 CREATE VIEW ai_read.uc_consumo_faturamento_mensal AS
  SELECT id_uc,competencia,consumo_kwh_original,consumo_kwh_analitico,metodo_consumo,
         tipo_leitura,flag_troca_medidor,id_fatura,volume_faturado_kwh,valor_total,
-        valor_arrecadado,tarifa_base,adicional_bandeira,bandeira,status_pagamento,grupo_uc
+        valor_arrecadado,tarifa_base,adicional_bandeira,bandeira,status_pagamento,
+        data_vencimento,grupo_uc
  FROM analytics.uc_consumo_faturamento_mensal;
 GRANT SELECT ON ai_read.uc_consumo_faturamento_mensal TO ai_read;
 CREATE VIEW ai_read.gd_uc AS
