@@ -187,6 +187,14 @@ agente, e vem do contrato.
 
 A tela ignora o período global e usa sempre os últimos 12 meses da UC.
 
+Decisões de backend da Visão 360:
+- (D1) Data de referência obtida de `manifesto->>'reference_date'` da carga mais recente.
+- (D2) Janela de 12 meses pela maior competência da UC (ou fallback da carga), sem período global.
+- (D3) Resumo do alimentador agrega `Σ chi_horas ÷ numero_ucs` e arredonda uma única vez com HALF_UP.
+- (D4) Explicação da conta determinística por R5 com motivo principal e avisos cronológicos.
+- (D5) Normalização devolve 422 `UC_INVALIDA` para formato inválido e 404 `UC_NAO_ENCONTRADA` se ausente.
+- (D6) Sessão do portal acessa `analytics.*`, `portal_read.inspecoes` e `operations.*` sem passar por `ai_read`.
+
 ### 4.4 Perdas (F4, F5, D1)
 
 Duas abas.

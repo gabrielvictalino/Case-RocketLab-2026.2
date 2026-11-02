@@ -158,10 +158,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ucs/{id_uc}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Obter Visao Uc */
+        get: operations["obter_visao_uc_api_v1_ucs__id_uc__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** Cabecalho */
+        Cabecalho: {
+            /** Titular */
+            titular: string;
+            /** Documento */
+            documento: string;
+            /** Classe */
+            classe: string;
+            /** Endereco */
+            endereco: string;
+            /** Municipio */
+            municipio: string;
+            /** Bairro */
+            bairro: string;
+            /** Alimentador */
+            alimentador: string;
+            medidor_atual: components["schemas"]["MedidorAtual"] | null;
+            gd: components["schemas"]["GD"] | null;
+        };
         /** Cancelamento */
         Cancelamento: {
             /** Motivo */
@@ -196,6 +232,51 @@ export interface components {
              */
             competencia_mais_recente: string;
         };
+        /** Chamado */
+        Chamado: {
+            /** Protocolo */
+            protocolo: string;
+            /**
+             * Aberto Em
+             * Format: date-time
+             */
+            aberto_em: string;
+            /** Assunto */
+            assunto: string;
+            /** Status */
+            status: string;
+            /** Nota */
+            nota: number | null;
+            /** Historico */
+            historico: components["schemas"]["ChamadoHistorico"][];
+        };
+        /** ChamadoHistorico */
+        ChamadoHistorico: {
+            /** Sequencia */
+            sequencia: number;
+            /**
+             * Data
+             * Format: date-time
+             */
+            data: string;
+            /** Descricao */
+            descricao: string;
+        };
+        /** Consumo */
+        Consumo: {
+            /**
+             * Competencia Inicial
+             * Format: date
+             */
+            competencia_inicial: string;
+            /**
+             * Competencia Final
+             * Format: date
+             */
+            competencia_final: string;
+            /** Meses */
+            meses: components["schemas"]["MesConsumo"][];
+        };
         /** CriarOrdens */
         CriarOrdens: {
             /** Ucs */
@@ -205,6 +286,81 @@ export interface components {
         Despacho: {
             /** Inspetor */
             inspetor: string;
+        };
+        /** EfeitosConta */
+        EfeitosConta: {
+            /** Consumo */
+            consumo: string;
+            /** Tarifa */
+            tarifa: string;
+            /** Bandeira */
+            bandeira: string;
+            /** Outros */
+            outros: string;
+        };
+        /** ExplicacaoConta */
+        ExplicacaoConta: {
+            /**
+             * Situacao
+             * @enum {string}
+             */
+            situacao: "COMPARADA" | "SEM_BASE" | "SEM_FATURA";
+            /** Frase */
+            frase: string;
+            atual: components["schemas"]["FaturaComparada"] | null;
+            anterior: components["schemas"]["FaturaComparada"] | null;
+            /** Variacao Valor */
+            variacao_valor: string | null;
+            /** Variacao Valor Pct */
+            variacao_valor_pct: string | null;
+            /** Variacao Consumo Pct */
+            variacao_consumo_pct: string | null;
+            efeitos: components["schemas"]["EfeitosConta"] | null;
+        };
+        /** FaturaAberta */
+        FaturaAberta: {
+            /** Id Fatura */
+            id_fatura: string;
+            /**
+             * Competencia
+             * Format: date
+             */
+            competencia: string;
+            /** Valor Total */
+            valor_total: string;
+            /**
+             * Data Vencimento
+             * Format: date
+             */
+            data_vencimento: string;
+            /** Bandeira */
+            bandeira: string;
+            /** Dias Atraso */
+            dias_atraso: number | null;
+        };
+        /** FaturaComparada */
+        FaturaComparada: {
+            /**
+             * Competencia
+             * Format: date
+             */
+            competencia: string;
+            /** Id Fatura */
+            id_fatura: string;
+            /** Volume Faturado Kwh */
+            volume_faturado_kwh: string;
+            /** Valor Total */
+            valor_total: string;
+            /** Tarifa Base */
+            tarifa_base: string;
+            /** Adicional Bandeira */
+            adicional_bandeira: string;
+            /** Bandeira */
+            bandeira: string;
+            /** Leitura Estimada */
+            leitura_estimada: boolean;
+            /** Troca Medidor */
+            troca_medidor: boolean;
         };
         /** Filtros */
         Filtros: {
@@ -219,10 +375,46 @@ export interface components {
             /** Alimentadores */
             alimentadores: string[];
         };
+        /** GD */
+        GD: {
+            /** Potencia Kw */
+            potencia_kw: string;
+            /**
+             * Data Conexao
+             * Format: date
+             */
+            data_conexao: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** Inspecao */
+        Inspecao: {
+            /** Id Inspecao */
+            id_inspecao: string;
+            /**
+             * Data
+             * Format: date
+             */
+            data: string;
+            /** Inspetor */
+            inspetor: string;
+            /** Resultado */
+            resultado: string;
+            /** Tipo Irregularidade */
+            tipo_irregularidade: string | null;
+            /** Kwh Recuperado */
+            kwh_recuperado: string;
+            /** Origem */
+            origem: string;
+        };
+        /** Interrupcoes */
+        Interrupcoes: {
+            /** Ocorrencias */
+            ocorrencias: components["schemas"]["OcorrenciaUC"][];
+            alimentador: components["schemas"]["ResumoAlimentador"];
         };
         /** Login */
         Login: {
@@ -240,6 +432,44 @@ export interface components {
             criadas: components["schemas"]["Ordem"][];
             /** Rejeitadas */
             rejeitadas: components["schemas"]["Rejeitada"][];
+        };
+        /** MedidorAtual */
+        MedidorAtual: {
+            /** Id Medidor */
+            id_medidor: string;
+            /** Tipo Medidor */
+            tipo_medidor: string;
+            /**
+             * Data Instalacao
+             * Format: date
+             */
+            data_instalacao: string;
+        };
+        /** MesConsumo */
+        MesConsumo: {
+            /**
+             * Competencia
+             * Format: date
+             */
+            competencia: string;
+            atual: components["schemas"]["PontoConsumo"] | null;
+            anterior: components["schemas"]["PontoConsumo"] | null;
+        };
+        /** OcorrenciaUC */
+        OcorrenciaUC: {
+            /** Id Ocorrencia */
+            id_ocorrencia: string;
+            /**
+             * Data Abertura
+             * Format: date-time
+             */
+            data_abertura: string;
+            /** Data Encerramento */
+            data_encerramento: string | null;
+            /** Duracao Min */
+            duracao_min: string;
+            /** Causa */
+            causa: string;
         };
         /** Ordem */
         Ordem: {
@@ -301,6 +531,22 @@ export interface components {
             /** Size */
             size: number;
         };
+        /** PontoConsumo */
+        PontoConsumo: {
+            /**
+             * Competencia
+             * Format: date
+             */
+            competencia: string;
+            /** Consumo Kwh */
+            consumo_kwh: string;
+            /** Leitura Estimada */
+            leitura_estimada: boolean;
+            /** Troca Medidor */
+            troca_medidor: boolean;
+            /** Consumo Ajustado */
+            consumo_ajustado: boolean;
+        };
         /** Rejeitada */
         Rejeitada: {
             /** Id Uc */
@@ -324,6 +570,15 @@ export interface components {
              * Format: date
              */
             data: string;
+        };
+        /** ResumoAlimentador */
+        ResumoAlimentador: {
+            /** Alimentador */
+            alimentador: string;
+            /** Ocorrencias */
+            ocorrencias: number;
+            /** Dec */
+            dec: string;
         };
         /**
          * Status
@@ -359,6 +614,24 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** VisaoUC */
+        VisaoUC: {
+            /** Id Uc */
+            id_uc: string;
+            /** Data Referencia */
+            data_referencia: string | null;
+            cabecalho: components["schemas"]["Cabecalho"];
+            consumo: components["schemas"]["Consumo"];
+            /** Faturas Abertas */
+            faturas_abertas: components["schemas"]["FaturaAberta"][];
+            interrupcoes: components["schemas"]["Interrupcoes"];
+            /** Chamados */
+            chamados: components["schemas"]["Chamado"][];
+            /** Inspecoes */
+            inspecoes: components["schemas"]["Inspecao"][];
+            ordem_ativa: components["schemas"]["Ordem"] | null;
+            explicacao_conta: components["schemas"]["ExplicacaoConta"];
         };
     };
     responses: never;
@@ -667,6 +940,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Ordem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obter_visao_uc_api_v1_ucs__id_uc__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id_uc: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VisaoUC"];
                 };
             };
             /** @description Validation Error */
