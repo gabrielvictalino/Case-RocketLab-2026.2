@@ -434,14 +434,13 @@ async def obter_visao_uc(db, id_uc_bruto: str) -> VisaoUC:
             )
             for h in hist_rows
         ]
-        nota = int(r['nota']) if (r['nota'] is not None and str(r['nota']).strip() != '') else None
         chamados.append(
             Chamado(
                 protocolo=r['protocolo'],
                 aberto_em=r['aberto_em'],
                 assunto=r['assunto'],
                 status=r['status'],
-                nota=nota,
+                nota=r['nota'],
                 historico=historico,
             )
         )
