@@ -126,17 +126,21 @@ async def test_faturas_em_aberto_dias_atraso(client, headers):
 
 async def test_interrupcoes_e_resumo_alimentador(client, headers):
     # P13-7: interrupções da UC na janela e resumo do alimentador:
-    # UC100000 (ALM-REC-001, 2025-07..2026-06) -> ocorrencias=12, dec=3.52 (211 ÷ 60).
+    # UC100000 (ALM-REC-001, 2025-07..2026-06) -> interrupcoes=12, dec=3.52 (211 ÷ 60).
     # Afirma que NÃO é 3.55 (a soma dos DEC mensais).
     res = await client.get(f'{BASE}/UC100000', headers=headers)
     assert res.status_code == 200
     interrupcoes = res.json()['interrupcoes']
     alm = interrupcoes['alimentador']
     assert alm['alimentador'] == 'ALM-REC-001'
-    assert alm['ocorrencias'] == 12
+    assert alm['interrupcoes'] == 12
+    assert 'ocorrencias' not in alm
     assert Decimal(str(alm['dec'])) == Decimal('3.52')
     assert Decimal(str(alm['dec'])) != Decimal('3.55')
     assert len(interrupcoes['ocorrencias']) == 12
+    for oc in interrupcoes['ocorrencias']:
+        assert Decimal(str(oc['duracao_efetiva_min'])) <= Decimal(str(oc['duracao_min']))
+        assert isinstance(oc['flag_sobreposicao'], bool)
 
 
 async def test_chamados_inspecoes_e_ordem_ativa(client, headers):

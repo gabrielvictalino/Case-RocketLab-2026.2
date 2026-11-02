@@ -88,6 +88,24 @@ def formatar_pct_br(p: Decimal) -> str:
     return f'{abs(p):.1f}%'.replace('.', ',')
 
 
+def formatar_kwh_br(q: Decimal) -> str:
+    s = f'{q.normalize():,f}'
+    return s.replace(',', 'X').replace('.', ',').replace('X', '.')
+
+
+def aviso_medicao(fat: FaturaComparada) -> str:
+    """Cita a troca de medidor ou a leitura estimada da competência da fatura.
+
+    Só cita o fato: a imputação da Gold altera o consumo analítico, não o volume faturado.
+    """
+    mes_ano = fat.competencia.strftime('%m/%Y')
+    if fat.troca_medidor:
+        return f' Em {mes_ano} houve troca de medidor.'
+    if fat.leitura_estimada:
+        return f' A leitura de {mes_ano} foi estimada.'
+    return ''
+
+
 def nome_bandeira(b: str) -> str:
     nomes = {
         'VERDE': 'Verde',
@@ -133,13 +151,7 @@ def explicar_conta(atual: Mapping | None, anterior: Mapping | None) -> Explicaca
             f'Não há fatura de {mes_ano_ant} para comparar: '
             'a UC não tem um ano de histórico de faturamento.'
         )
-        if fat_atual.troca_medidor:
-            frase += (
-                f' Em {comp_atual.strftime("%m/%Y")} houve troca de medidor, '
-                'e o consumo do mês foi estimado pela média da UC.'
-            )
-        elif fat_atual.leitura_estimada:
-            frase += f' A leitura de {comp_atual.strftime("%m/%Y")} foi estimada.'
+        frase += aviso_medicao(fat_atual)
 
         return ExplicacaoConta(
             situacao='SEM_BASE',
@@ -198,70 +210,65 @@ def explicar_conta(atual: Mapping | None, anterior: Mapping | None) -> Explicaca
         ((delta_q / q0) * 100).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP) if q0 != 0 else None
     )
 
-    pct_consumo_int = (
-        ((delta_q / q0) * 100).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
-        if q0 != 0
-        else Decimal(0)
-    )
-    if pct_consumo_int > 0:
-        parte_consumo = f'O consumo faturado subiu {pct_consumo_int}%'
-    elif pct_consumo_int < 0:
-        parte_consumo = f'O consumo faturado caiu {abs(pct_consumo_int)}%'
+    if q0 == 0:
+        # Sem base, o percentual é indefinido: a frase usa a variação absoluta.
+        if q1 > 0:
+            parte_consumo = f'O consumo faturado subiu de 0 para {formatar_kwh_br(q1)} kWh'
+        else:
+            parte_consumo = 'O consumo faturado ficou em 0 kWh'
     else:
-        parte_consumo = 'O consumo faturado ficou estável'
+        pct_consumo_int = ((delta_q / q0) * 100).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+        if pct_consumo_int > 0:
+            parte_consumo = f'O consumo faturado subiu {pct_consumo_int}%'
+        elif pct_consumo_int < 0:
+            parte_consumo = f'O consumo faturado caiu {abs(pct_consumo_int)}%'
+        else:
+            parte_consumo = 'O consumo faturado ficou estável'
 
     if delta_r == 0:
         parte_fatura = 'a fatura ficou igual'
     else:
         verbo = 'subiu' if delta_r > 0 else 'caiu'
         str_delta_r = formatar_moeda_br(abs(delta_r))
-        pct_r_val = variacao_valor_pct if variacao_valor_pct is not None else Decimal('0.0')
-        str_pct_r = formatar_pct_br(pct_r_val)
+        str_pct_r = (
+            f' ({formatar_pct_br(variacao_valor_pct)})' if variacao_valor_pct is not None else ''
+        )
 
+        # Os quatro efeitos somam delta_r, então ao menos um tem o mesmo sinal da variação.
         candidatos = [
             ('consumo', ef.volume),
             ('bandeira', ef.bandeira),
             ('tarifa', ef.reajuste),
+            ('outros', ef.mix),
         ]
         compativeis = [
             (nome, val) for nome, val in candidatos if (val > 0 if delta_r > 0 else val < 0)
         ]
-        if not compativeis:
-            motivo = 'por tributos e outros componentes'
-        else:
-            melhor_nome, _ = max(compativeis, key=lambda item: abs(item[1]))
-            if melhor_nome == 'consumo':
-                motivo = 'principalmente pela variação do consumo'
-            elif melhor_nome == 'bandeira':
-                nome_atual = nome_bandeira(str(fat_atual.bandeira))
-                nome_anterior = nome_bandeira(str(fat_anterior.bandeira))
-                if nome_atual != nome_anterior:
-                    motivo = (
-                        f'principalmente por causa da bandeira {nome_atual} (antes {nome_anterior})'
-                    )
-                else:
-                    motivo = f'principalmente por causa da bandeira {nome_atual}'
-            else:
-                t_ant_str = formatar_tarifa_br(fat_anterior.tarifa_base)
-                t_at_str = formatar_tarifa_br(fat_atual.tarifa_base)
+        melhor_nome, _ = max(compativeis, key=lambda item: abs(item[1]))
+        if melhor_nome == 'consumo':
+            motivo = 'principalmente pela variação do consumo'
+        elif melhor_nome == 'bandeira':
+            nome_atual = nome_bandeira(str(fat_atual.bandeira))
+            nome_anterior = nome_bandeira(str(fat_anterior.bandeira))
+            if nome_atual != nome_anterior:
                 motivo = (
-                    'principalmente pelo reajuste da tarifa '
-                    f'(de {t_ant_str} para {t_at_str} por kWh)'
+                    f'principalmente por causa da bandeira {nome_atual} (antes {nome_anterior})'
                 )
+            else:
+                motivo = f'principalmente por causa da bandeira {nome_atual}'
+        elif melhor_nome == 'tarifa':
+            t_ant_str = formatar_tarifa_br(fat_anterior.tarifa_base)
+            t_at_str = formatar_tarifa_br(fat_atual.tarifa_base)
+            motivo = (
+                f'principalmente pelo reajuste da tarifa (de {t_ant_str} para {t_at_str} por kWh)'
+            )
+        else:
+            motivo = 'principalmente por tributos e outros componentes'
 
-        parte_fatura = f'a fatura {verbo} {str_delta_r} ({str_pct_r}) {motivo}'
+        parte_fatura = f'a fatura {verbo} {str_delta_r}{str_pct_r} {motivo}'
 
     frase = f'{parte_consumo}; {parte_fatura}.'
-
-    for fat in (fat_anterior, fat_atual):
-        mes_ano = fat.competencia.strftime('%m/%Y')
-        if fat.troca_medidor:
-            frase += (
-                f' Em {mes_ano} houve troca de medidor, '
-                'e o consumo do mês foi estimado pela média da UC.'
-            )
-        elif fat.leitura_estimada:
-            frase += f' A leitura de {mes_ano} foi estimada.'
+    frase += aviso_medicao(fat_anterior) + aviso_medicao(fat_atual)
 
     return ExplicacaoConta(
         situacao='COMPARADA',
@@ -386,7 +393,9 @@ async def obter_visao_uc(db, id_uc_bruto: str) -> VisaoUC:
             data_abertura=r['data_abertura'],
             data_encerramento=r['data_encerramento'],
             duracao_min=Decimal(str(r['duracao_min'])),
+            duracao_efetiva_min=Decimal(str(r['duracao_efetiva_min'])),
             causa=r['causa'],
+            flag_sobreposicao=bool(r['flag_sobreposicao']),
         )
         for r in rows_ocorrencias
     ]
@@ -406,7 +415,7 @@ async def obter_visao_uc(db, id_uc_bruto: str) -> VisaoUC:
         dec = Decimal('0.00')
 
     resumo_alm = ResumoAlimentador(
-        alimentador=uc_row['alimentador'], ocorrencias=soma_interrupcoes, dec=dec
+        alimentador=uc_row['alimentador'], interrupcoes=soma_interrupcoes, dec=dec
     )
     interrupcoes = Interrupcoes(ocorrencias=ocorrencias, alimentador=resumo_alm)
 

@@ -72,13 +72,15 @@ class OcorrenciaUC(BaseModel):
     data_abertura: datetime
     data_encerramento: datetime | None
     duracao_min: Decimal
+    duracao_efetiva_min: Decimal
     causa: str
+    flag_sobreposicao: bool
 
 
 class ResumoAlimentador(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     alimentador: str
-    ocorrencias: int
+    interrupcoes: int
     dec: Decimal
 
 

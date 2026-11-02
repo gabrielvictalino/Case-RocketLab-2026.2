@@ -165,7 +165,8 @@ async def listar_ocorrencias_uc(db, id_uc: str, inicio, fim_plus_1m):
         (
             await db.execute(
                 text(
-                    'SELECT id_ocorrencia, data_abertura, data_encerramento, duracao_min, causa '
+                    'SELECT id_ocorrencia, data_abertura, data_encerramento, duracao_min, '
+                    'duracao_efetiva_min, causa, flag_sobreposicao '
                     'FROM analytics.ocorrencias_uc '
                     'WHERE id_uc = :uc AND data_abertura >= :inicio '
                     'AND data_abertura < :fim_plus_1m '

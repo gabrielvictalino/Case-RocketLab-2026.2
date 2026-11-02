@@ -468,8 +468,12 @@ export interface components {
             data_encerramento: string | null;
             /** Duracao Min */
             duracao_min: string;
+            /** Duracao Efetiva Min */
+            duracao_efetiva_min: string;
             /** Causa */
             causa: string;
+            /** Flag Sobreposicao */
+            flag_sobreposicao: boolean;
         };
         /** Ordem */
         Ordem: {
@@ -575,8 +579,8 @@ export interface components {
         ResumoAlimentador: {
             /** Alimentador */
             alimentador: string;
-            /** Ocorrencias */
-            ocorrencias: number;
+            /** Interrupcoes */
+            interrupcoes: number;
             /** Dec */
             dec: string;
         };

@@ -82,6 +82,25 @@ def test_decompor_casos_de_borda():
     assert ef_q1_zero.mix == Decimal('0.00')
 
 
+def test_decompor_q1_zero_com_cobranca_fecha_no_mix():
+    # Fatura anterior R$ 80 / 100 kWh; atual R$ 30 / 0 kWh: o mix preserva os R$ 30
+    ef = decompor(
+        q0=Decimal('100'),
+        r0=Decimal('80.00'),
+        t0=Decimal('80.00'),
+        b0=Decimal('0.00'),
+        q1=Decimal('0'),
+        r1=Decimal('30.00'),
+        t1=Decimal('0.00'),
+        b1=Decimal('0.00'),
+    )
+    assert ef.volume == Decimal('-80.00')
+    assert ef.reajuste == Decimal('0.00')
+    assert ef.bandeira == Decimal('0.00')
+    assert ef.mix == Decimal('30.00')
+    assert ef.volume + ef.reajuste + ef.bandeira + ef.mix == Decimal('-50.00')
+
+
 def test_normalizacao_id_uc():
     assert normalizar_id_uc('UC100123') == 'UC100123'
     assert normalizar_id_uc('uc100123') == 'UC100123'
@@ -259,10 +278,9 @@ def test_explicar_conta_avisos_troca_e_leitura_estimada():
         'flag_troca_medidor': False,
     }
     exp = explicar_conta(atual, anterior)
-    assert (
-        'Em 06/2025 houve troca de medidor, e o consumo do mês foi estimado pela média da UC.'
-        in exp.frase
-    )
+    # A troca só é citada: a imputação da Gold altera o consumo analítico, não a fatura
+    assert 'Em 06/2025 houve troca de medidor.' in exp.frase
+    assert 'estimado' not in exp.frase
     assert 'A leitura de 06/2026 foi estimada.' in exp.frase
 
 
@@ -311,6 +329,58 @@ def test_explicar_conta_delta_r_zero():
     assert exp.frase == 'O consumo faturado ficou estável; a fatura ficou igual.'
 
 
+def _fatura(competencia, volume, valor, tarifa='0.80', adicional='0.00', bandeira='VERDE'):
+    return {
+        'competencia': competencia,
+        'id_fatura': f'FT{competencia:%Y%m}',
+        'volume_faturado_kwh': Decimal(volume),
+        'valor_total': Decimal(valor),
+        'tarifa_base': Decimal(tarifa),
+        'adicional_bandeira': Decimal(adicional),
+        'bandeira': bandeira,
+        'tipo_leitura': 'REAL',
+        'flag_troca_medidor': False,
+    }
+
+
+def test_explicar_conta_motivo_outros_componentes():
+    # Alta de R$ 108: R$ 8 por consumo (100 -> 110 kWh a R$ 0,80) e R$ 100 de outros
+    anterior = _fatura(date(2025, 6, 1), '100', '80.00')
+    atual = _fatura(date(2026, 6, 1), '110', '188.00')
+    exp = explicar_conta(atual, anterior)
+    assert exp.efeitos.consumo == Decimal('8.00')
+    assert exp.efeitos.outros == Decimal('100.00')
+    assert 'principalmente por tributos e outros componentes' in exp.frase
+    assert 'pela variação do consumo' not in exp.frase
+
+
+def test_explicar_conta_base_zero():
+    # 0 -> 100 kWh e R$ 0 -> R$ 80: percentuais indefinidos ficam fora da frase
+    anterior = _fatura(date(2025, 6, 1), '0', '0.00')
+    atual = _fatura(date(2026, 6, 1), '100', '80.00')
+    exp = explicar_conta(atual, anterior)
+    assert exp.variacao_valor_pct is None
+    assert exp.variacao_consumo_pct is None
+    assert exp.frase == (
+        'O consumo faturado subiu de 0 para 100 kWh; '
+        'a fatura subiu R$ 80,00 principalmente pela variação do consumo.'
+    )
+
+
+def test_explicar_conta_volume_atual_zero_com_cobranca():
+    # R$ 80 / 100 kWh -> R$ 30 / 0 kWh: efeitos fecham em -R$ 50
+    anterior = _fatura(date(2025, 6, 1), '100', '80.00')
+    atual = _fatura(date(2026, 6, 1), '0', '30.00')
+    exp = explicar_conta(atual, anterior)
+    ef = exp.efeitos
+    assert ef.consumo + ef.tarifa + ef.bandeira + ef.outros == exp.variacao_valor
+    assert exp.variacao_valor == Decimal('-50.00')
+    assert exp.frase == (
+        'O consumo faturado caiu 100%; '
+        'a fatura caiu R$ 50,00 (62,5%) principalmente pela variação do consumo.'
+    )
+
+
 def test_ocorrencia_uc_duracao_fracionaria():
     from datetime import datetime
 
@@ -321,7 +391,9 @@ def test_ocorrencia_uc_duracao_fracionaria():
         data_abertura=datetime(2026, 1, 1, 10, 0),
         data_encerramento=datetime(2026, 1, 1, 10, 1, 20),
         duracao_min=Decimal('1.33'),
+        duracao_efetiva_min=Decimal('1.33'),
         causa='SINTETICA',
+        flag_sobreposicao=False,
     )
     dumped = oc.model_dump(mode='json')
     assert dumped['duracao_min'] == '1.33'
