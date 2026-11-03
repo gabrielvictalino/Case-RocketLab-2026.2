@@ -1,0 +1,61 @@
+from datetime import date
+
+import pytest
+from sqlalchemy.ext.asyncio import create_async_engine
+
+from venergy_ai.agente import AgenteTextoSQL
+from venergy_ai.executor import ConsultaFalhou, ExecutorAiRead
+from venergy_ai.interface import Contexto
+from test_agente import modelo_simulado
+
+pytestmark = pytest.mark.integration
+
+
+@pytest.fixture
+async def executor(infrastructure):
+    # Uma conexão só no pool: a consulta seguinte usa a mesma conexão da anterior.
+    engine = create_async_engine(
+        infrastructure['settings'].database_url_ai, pool_size=1, max_overflow=0
+    )
+    yield ExecutorAiRead(engine)
+    await engine.dispose()
+
+
+async def test_set_da_consulta_nao_sobrevive_na_conexao_do_pool(executor):
+    await executor.executar('SET statement_timeout = 0')
+    await executor.executar('SET default_transaction_read_only = off')
+    assert (await executor.executar('SHOW statement_timeout')).linhas == [['5s']]
+    assert (await executor.executar('SHOW transaction_read_only')).linhas == [['on']]
+
+
+async def test_executor_converte_os_valores_e_traz_as_colunas(executor):
+    resultado = await executor.executar(
+        "SELECT count(*) AS ucs, round(avg(score)::numeric, 2) AS score, DATE '2026-06-01' AS d "
+        'FROM ai_read.fila_inspecao'
+    )
+    assert resultado.colunas == ['ucs', 'score', 'd']
+    [[ucs, score, competencia]] = resultado.linhas
+    assert isinstance(ucs, int) and isinstance(score, float | int)
+    assert competencia == '2026-06-01'
+
+
+async def test_executor_devolve_o_erro_do_banco(executor):
+    with pytest.raises(ConsultaFalhou, match='permission denied'):
+        await executor.executar('SELECT * FROM operations.usuarios')
+    # A conexão continua utilizável depois do erro.
+    assert (await executor.executar('SELECT 1')).linhas == [[1]]
+
+
+async def test_pergunta_respondida_com_a_role_ai_read(executor):
+    plano = {
+        'tipo': 'consulta',
+        'metrica': 'UCs no cadastro',
+        'sql': "SELECT count(*) AS ucs FROM ucs WHERE bairro LIKE '%'",
+    }
+    modelo, _ = modelo_simulado(plano, 'O cadastro tem 300 UCs.')
+    contexto = Contexto(competencia_mais_recente=date(2026, 6, 1))
+    resposta = await AgenteTextoSQL(modelo, executor).responder('Quantas UCs há?', contexto)
+    assert resposta.tipo == 'resposta', resposta.motivo
+    [consulta] = resposta.consultas
+    assert 'ai_read.ucs' in consulta.sql_executado
+    assert consulta.linhas == [[300]]
