@@ -173,11 +173,13 @@ describe('Telas do portal e PainelAgente', () => {
       screen.getByRole('dialog', { name: 'Pergunte aos dados' }),
     ).toBeInTheDocument()
     expect(
-      screen.getByText(
-        'O agente ainda não está disponível nesta versão do portal.',
-      ),
+      screen.getByRole('button', {
+        name: 'Qual bairro mais perdeu volume residencial no último ano?',
+      }),
     ).toBeInTheDocument()
-    expect(screen.getByLabelText('Pergunte sobre os dados')).toBeDisabled()
+    expect(screen.getByLabelText('Pergunte sobre os dados')).toBeEnabled()
+    // Sem texto, não há o que enviar.
+    expect(screen.getByRole('button', { name: 'Enviar pergunta' })).toBeDisabled()
   })
 
   it('renderiza Receita populando selects de /meta/filtros e limpa recortes mantendo período', async () => {
