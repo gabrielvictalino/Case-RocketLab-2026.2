@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button'
 
 export type ConsumoMensal = {
   competencia: string
-  consumoKwh: number
+  consumoKwh: number | null
   consumoAnoAnteriorKwh: number | null
   estimado: boolean
   trocaMedidor: boolean
@@ -37,7 +37,7 @@ export type InterrupcaoUC = {
 export type EventoChamado = {
   id: string
   data: string
-  responsavel: string
+  responsavel?: string
   descricao: string
 }
 
@@ -46,7 +46,7 @@ export type ChamadoUC = {
   titulo: string
   protocolo: string
   abertura: string
-  canal: string
+  canal?: string
   status: string
   avaliacao: number | null
   historico: EventoChamado[]
@@ -151,7 +151,7 @@ export function GraficoConsumo({ dados }: { dados: ConsumoMensal[] }) {
   const maiorConsumo = Math.max(
     1,
     ...dados.flatMap((item) => [
-      item.consumoKwh,
+      item.consumoKwh ?? 0,
       item.consumoAnoAnteriorKwh ?? 0,
     ]),
   )
@@ -176,7 +176,7 @@ export function GraficoConsumo({ dados }: { dados: ConsumoMensal[] }) {
             className="flex h-full min-w-12 flex-1 flex-col justify-end gap-1"
             title={[
               item.competencia,
-              `${item.consumoKwh} kWh`,
+              item.consumoKwh === null ? 'Sem leitura registrada' : `${item.consumoKwh} kWh`,
               item.estimado ? 'consumo estimado pela média da UC' : '',
               item.trocaMedidor ? 'Troca de medidor' : '',
             ].filter(Boolean).join(' · ')}
@@ -191,12 +191,13 @@ export function GraficoConsumo({ dados }: { dados: ConsumoMensal[] }) {
               <div
                 className="w-3 rounded-t-sm bg-foreground"
                 style={{
-                  height: `${(item.consumoKwh / maiorConsumo) * 100}%`,
+                  height: `${((item.consumoKwh ?? 0) / maiorConsumo) * 100}%`,
                 }}
               />
             </div>
             <span className="min-h-4 text-center text-xs">
-              {item.estimado ? '●' : item.trocaMedidor ? '◆' : ''}
+              {item.estimado && '\u25cf'}
+              {item.trocaMedidor && '\u25c6'}
             </span>
             <span className="text-center text-[11px] text-muted-foreground">
               {item.competencia}
@@ -209,7 +210,7 @@ export function GraficoConsumo({ dados }: { dados: ConsumoMensal[] }) {
         {dados.map((item) => (
           <tr key={item.competencia}>
             <td className="px-3 py-3">{item.competencia}</td>
-            <td className="px-3 py-3">{item.consumoKwh} kWh</td>
+            <td className="px-3 py-3">{item.consumoKwh === null ? "?" : `${item.consumoKwh} kWh`}</td>
             <td className="px-3 py-3">
               {item.consumoAnoAnteriorKwh === null
                 ? '—'
@@ -228,7 +229,20 @@ export function GraficoConsumo({ dados }: { dados: ConsumoMensal[] }) {
   )
 }
 
-function ExplicacaoConta({ texto }: { texto: string | null }) {
+export function ExplicacaoConta({
+  texto,
+  efeitos,
+  semCartao = false,
+}: {
+  texto: string | null
+  efeitos?: {
+    consumo: number | string
+    tarifa: number | string
+    bandeira: number | string
+    outros: number | string
+  } | null
+  semCartao?: boolean
+}) {
   const [copiado, setCopiado] = useState(false)
 
   async function copiar() {
@@ -242,60 +256,109 @@ function ExplicacaoConta({ texto }: { texto: string | null }) {
     }
   }
 
-  return (
-    <Cartao
-      titulo="Por que a conta mudou"
-      subtitulo="Explicação da última fatura em comparação ao ano anterior"
-    >
+  const conteudo = (
+    <div className="space-y-4">
       {texto ? (
-        <div className="space-y-4">
+        <>
           <p className="text-sm leading-7">{texto}</p>
+          {efeitos && (
+            <dl className="grid grid-cols-2 gap-3">
+              {([
+                ['Consumo', efeitos.consumo],
+                ['Tarifa', efeitos.tarifa],
+                ['Bandeira', efeitos.bandeira],
+                ['Outros', efeitos.outros],
+              ] as const).map(([rotulo, valor]) => (
+                <div key={rotulo} className="rounded-md border p-3">
+                  <dt className="text-xs text-muted-foreground">{rotulo}</dt>
+                  <dd className="mt-1 font-semibold">
+                    {Number(valor).toLocaleString('pt-BR', {
+                      style: 'currency',
+                      currency: 'BRL',
+                    })}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          )}
           <Button type="button" variant="outline" onClick={copiar}>
             <Copy className="size-4" />
             {copiado ? 'Frase copiada' : 'Copiar frase'}
           </Button>
-        </div>
+        </>
       ) : (
-        <SemDados mensagem="A explicação da conta ainda não está disponível." />
+        <SemDados mensagem="A explica\u00e7\u00e3o da conta ainda n\u00e3o est\u00e1 dispon\u00edvel." />
       )}
+    </div>
+  )
+
+  if (semCartao) return conteudo
+
+  return (
+    <Cartao
+      titulo="Por que a conta mudou"
+      subtitulo="Explica\u00e7\u00e3o da \u00faltima fatura em compara\u00e7\u00e3o ao ano anterior"
+    >
+      {conteudo}
     </Cartao>
   )
 }
 
-function Faturas({ dados }: { dados: FaturaUC[] }) {
-  return (
-    <Cartao
-      titulo="Faturas em aberto"
-      subtitulo={`${dados.length} fatura(s) em aberto`}
-    >
+export function Faturas({
+  dados,
+  semCartao = false,
+}: {
+  dados: FaturaUC[]
+  semCartao?: boolean
+}) {
+  const conteudo = (
+    <div className="space-y-4">
       {dados.length === 0 ? (
-        <SemDados mensagem="Informações de faturas ainda não disponíveis." />
+        <SemDados mensagem="Nenhuma fatura em aberto." />
       ) : (
-        <Tabela colunas={['Competência', 'Vencimento', 'Valor', 'Atraso']}>
+        <Tabela colunas={['Compet?ncia', 'Vencimento', 'Valor', 'Atraso']}>
           {dados.map((fatura) => (
             <tr key={fatura.id}>
               <td className="px-3 py-3">{fatura.competencia}</td>
               <td className="px-3 py-3">{fatura.vencimento}</td>
               <td className="px-3 py-3">{formatarMoeda(fatura.valor)}</td>
-              <td className="px-3 py-3">{fatura.diasAtraso} dias</td>
+              <td className="px-3 py-3">
+                {fatura.diasAtraso == null || fatura.diasAtraso <= 0
+                  ? 'Em dia'
+                  : `${fatura.diasAtraso} dias`}
+              </td>
             </tr>
           ))}
         </Tabela>
       )}
+    </div>
+  )
+
+  if (semCartao) return conteudo
+
+  return (
+    <Cartao
+      titulo="Faturas em aberto"
+      subtitulo={`${dados.length} fatura(s) em aberto`}
+    >
+      {conteudo}
     </Cartao>
   )
 }
 
-function Interrupcoes({ dados }: { dados: InterrupcaoUC[] }) {
-  return (
-    <Cartao
-      titulo="Interrupções — últimos 12 meses"
-      subtitulo="Histórico de interrupções da unidade consumidora"
-    >
+export function Interrupcoes({
+  dados,
+  semCartao = false,
+}: {
+  dados: InterrupcaoUC[]
+  semCartao?: boolean
+}) {
+  const conteudo = (
+    <div className="space-y-4">
       {dados.length === 0 ? (
-        <SemDados mensagem="Histórico de interrupções ainda não disponível." />
+        <SemDados mensagem="Nenhuma interrupcao registrada." />
       ) : (
-        <Tabela colunas={['Data', 'Duração', 'Causa']}>
+        <Tabela colunas={['Data', 'Duracao', 'Causa']}>
           {dados.map((interrupcao) => (
             <tr key={interrupcao.id}>
               <td className="px-3 py-3">{interrupcao.data}</td>
@@ -305,11 +368,22 @@ function Interrupcoes({ dados }: { dados: InterrupcaoUC[] }) {
           ))}
         </Tabela>
       )}
+    </div>
+  )
+
+  if (semCartao) return conteudo
+
+  return (
+    <Cartao
+      titulo="Interrupcoes"
+      subtitulo="Historico de interrupcoes da unidade consumidora"
+    >
+      {conteudo}
     </Cartao>
   )
 }
 
-function Chamados({ dados }: { dados: ChamadoUC[] }) {
+export function Chamados({ dados, semCartao = false }: { dados: ChamadoUC[]; semCartao?: boolean }) {
   const [expandidos, setExpandidos] = useState<string[]>([])
 
   function alternar(id: string) {
@@ -320,11 +394,9 @@ function Chamados({ dados }: { dados: ChamadoUC[] }) {
     )
   }
 
-  return (
-    <Cartao
-      titulo="Chamados"
-      subtitulo={`${dados.length} chamado(s) · histórico de atendimento`}
-    >
+  const conteudo = (
+    <div className="space-y-4">
+
       {dados.length === 0 ? (
         <SemDados mensagem="Histórico de chamados ainda não disponível." />
       ) : (
@@ -343,7 +415,7 @@ function Chamados({ dados }: { dados: ChamadoUC[] }) {
                   <span className="space-y-1">
                     <span className="block font-medium">{chamado.titulo}</span>
                     <span className="block text-xs text-muted-foreground">
-                      Protocolo {chamado.protocolo} · {chamado.abertura} · {chamado.canal}
+                      Protocolo {chamado.protocolo} · {chamado.abertura}{chamado.canal ? ` · ${chamado.canal}` : ''}
                     </span>
                     <span className="block text-xs text-muted-foreground">
                       {chamado.status}
@@ -369,7 +441,7 @@ function Chamados({ dados }: { dados: ChamadoUC[] }) {
                       chamado.historico.map((evento) => (
                         <div key={evento.id} className="border-l-2 pl-3">
                           <p className="text-xs font-medium">
-                            {evento.data} · {evento.responsavel}
+                            {evento.data}{evento.responsavel ? ` · ${evento.responsavel}` : ''}
                           </p>
                           <p className="mt-1 text-sm text-muted-foreground">
                             {evento.descricao}
@@ -384,21 +456,34 @@ function Chamados({ dados }: { dados: ChamadoUC[] }) {
           })}
         </div>
       )}
+    </div>
+  )
+
+  if (semCartao) return conteudo
+
+  return (
+    <Cartao
+      titulo="Chamados"
+      subtitulo={`${dados.length} chamado(s) ? hist?rico de atendimento`}
+    >
+      {conteudo}
     </Cartao>
   )
 }
 
-function Inspecoes({
+export function Inspecoes({
+  semCartao = false,
   dados,
   ordemAtiva,
   motivoSuspeita,
 }: {
+  semCartao?: boolean
   dados: InspecaoUC[]
   ordemAtiva: string | null
   motivoSuspeita: string | null
 }) {
-  return (
-    <Cartao titulo="Inspeções" subtitulo="Histórico de inspeções e ordens">
+  const conteudo = (
+    <div className="space-y-4">
       {ordemAtiva && (
         <div role="status" className="mb-4 rounded-md border p-3 text-sm">
           <p className="flex items-center gap-2 font-medium">
@@ -424,6 +509,14 @@ function Inspecoes({
           ))}
         </Tabela>
       )}
+    </div>
+  )
+
+  if (semCartao) return conteudo
+
+  return (
+    <Cartao titulo="Inspe??es" subtitulo="Hist?rico de inspe??es e ordens">
+      {conteudo}
     </Cartao>
   )
 }

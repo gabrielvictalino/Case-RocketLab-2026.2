@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { rotas } from '@/app/rotas'
@@ -49,6 +49,45 @@ const ORDENS_VAZIA = {
   size: 25,
 }
 
+const VISAO_UC_AMOSTRA = {
+  id_uc: 'UC100123',
+  data_referencia: null,
+  cabecalho: {
+    titular: 'Titular de teste',
+    documento: '12345678901',
+    classe: 'Residencial',
+    endereco: 'Endereco de teste',
+    municipio: 'Recife',
+    bairro: 'Centro',
+    alimentador: 'AL-01',
+    medidor_atual: null,
+    gd: null,
+  },
+  consumo: {
+    competencia_inicial: '2025-07',
+    competencia_final: '2026-06',
+    meses: [],
+  },
+  faturas_abertas: [],
+  interrupcoes: {
+    ocorrencias: [],
+    alimentador: { alimentador: 'AL-01', interrupcoes: 0, dec: 0 },
+  },
+  chamados: [],
+  inspecoes: [],
+  ordem_ativa: null,
+  explicacao_conta: {
+    situacao: 'SEM_FATURA',
+    frase: 'Nao ha fatura para comparacao.',
+    atual: null,
+    anterior: null,
+    variacao_valor: null,
+    variacao_valor_pct: null,
+    variacao_consumo_pct: null,
+    efeitos: null,
+  },
+}
+
 beforeEach(() => {
   localStorage.clear()
   encerrarSessao()
@@ -60,8 +99,10 @@ beforeEach(() => {
     'fetch',
     vi.fn(async (req: Request | string | URL) => {
       const url = typeof req === 'string' ? req : req instanceof URL ? req.href : req.url
-      const corpo = url.includes('/api/v1/meta/filtros')
-        ? FILTROS_AMOSTRA
+      const corpo = /\/api\/v1\/ucs\/UC\d{6}(?:\?|$)/.test(url)
+        ? { ...VISAO_UC_AMOSTRA, id_uc: url.match(/UC\d{6}/)?.[0] ?? 'UC100123' }
+        : url.includes('/api/v1/meta/filtros')
+          ? FILTROS_AMOSTRA
         : url.includes('/api/v1/ordens-inspecao')
           ? ORDENS_VAZIA
           : CARGA_AMOSTRA
@@ -98,6 +139,44 @@ function renderizarRota(caminhoInicial: string) {
 }
 
 describe('rotas do portal', () => {
+
+  it('sincroniza a busca ao voltar e avancar entre unidades consumidoras', async () => {
+    const { router } = renderizarRota('/unidade-consumidora')
+
+    const campo = () => screen.getByRole('textbox', { name: 'N\u00famero da UC' })
+
+    expect(await screen.findByRole('heading', {
+      level: 1,
+      name: 'Unidade Consumidora',
+    })).toBeInTheDocument()
+
+    fireEvent.change(campo(), { target: { value: '100123' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar' }))
+
+    await waitFor(() => {
+      expect(router.state.location.search).toContain('uc=UC100123')
+      expect(campo()).toHaveValue('UC100123')
+    })
+
+    fireEvent.change(campo(), { target: { value: '100456' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar' }))
+
+    await waitFor(() => {
+      expect(router.state.location.search).toContain('uc=UC100456')
+      expect(campo()).toHaveValue('UC100456')
+    })
+
+    await act(async () => {
+      await router.navigate(-1)
+    })
+    expect(campo()).toHaveValue('UC100123')
+
+    await act(async () => {
+      await router.navigate(1)
+    })
+    expect(campo()).toHaveValue('UC100456')
+  })
+
   it('redireciona para /login preservando retorno quando não há sessão', async () => {
     encerrarSessao()
     const { router } = renderizarRota('/receita?municipio=Recife')

@@ -1,15 +1,28 @@
 import { useState, type FormEvent } from 'react'
 import { Search } from 'lucide-react'
-import { useSearchParams } from 'react-router'
+import { useNavigate, useParams, useSearchParams } from 'react-router'
 import { EstadoIndisponivel } from '@/components/Estados'
 import { Etiqueta } from '@/components/Etiqueta'
 import { Painel } from '@/components/Painel'
+import { adaptarConsumoUC } from '@/features/unidade-consumidora/adaptarConsumoUC'
+import { mascararDocumento } from '@/features/unidade-consumidora/mascararDocumento'
+import { Chamados, ExplicacaoConta, Faturas, GraficoConsumo, Inspecoes, Interrupcoes } from '@/features/unidade-consumidora/SecoesUnidadeConsumidora'
 import { normalizarUc } from '@/features/unidade-consumidora/normalizarUc'
+import { useUnidadeConsumidora } from '@/features/unidade-consumidora/useUnidadeConsumidora'
 
 export function PaginaUnidadeConsumidora() {
+  const { id } = useParams<{ id: string }>()
+  const [searchParams] = useSearchParams()
+  const ucParametro = id ?? searchParams.get('uc') ?? ''
+
+  return <ConteudoUnidadeConsumidora key={ucParametro} ucParametro={ucParametro} rotaComId={id !== undefined} />
+}
+
+function ConteudoUnidadeConsumidora({ ucParametro, rotaComId }: { ucParametro: string; rotaComId: boolean }) {
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const ucParametro = searchParams.get('uc') ?? ''
   const ucNormalizadaUrl = normalizarUc(ucParametro)
+  const consultaUC = useUnidadeConsumidora(ucNormalizadaUrl)
 
   const [entrada, setEntrada] = useState<string>(
     ucNormalizadaUrl ?? ucParametro,
@@ -27,6 +40,11 @@ export function PaginaUnidadeConsumidora() {
     }
     setErroValidacao(null)
     setEntrada(normalizada)
+    if (rotaComId) {
+      navigate(`/ucs/${normalizada}`)
+      return
+    }
+
     const proximo = new URLSearchParams(searchParams)
     proximo.set('uc', normalizada)
     setSearchParams(proximo)
@@ -120,7 +138,45 @@ export function PaginaUnidadeConsumidora() {
         subtitulo="Dados cadastrais, classe, alimentador, medidor e geração distribuída"
         acoes={<Etiqueta>Últimos 12 meses da UC</Etiqueta>}
       >
-        <EstadoIndisponivel compacto />
+        {!ucNormalizadaUrl ? (
+          <EstadoIndisponivel compacto />
+        ) : consultaUC.isPending ? (
+          <p role="status">Carregando dados da unidade consumidora...</p>
+        ) : consultaUC.isError ? (
+          <p role="alert">
+            {consultaUC.error.status === 404
+              ? 'Unidade consumidora não encontrada.'
+              : 'Não foi possível carregar os dados da unidade consumidora.'}
+          </p>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <strong className="text-lg">{consultaUC.data.cabecalho.titular}</strong>
+              {consultaUC.data.cabecalho.gd && (
+                <Etiqueta>
+                  GD {Number(consultaUC.data.cabecalho.gd.potencia_kw).toLocaleString('pt-BR')} kWp
+                </Etiqueta>
+              )}
+            </div>
+            <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                ['CPF/CNPJ', mascararDocumento(consultaUC.data.cabecalho.documento)],
+                ['Classe', consultaUC.data.cabecalho.classe],
+                ['Endereço', consultaUC.data.cabecalho.endereco],
+                ['Município', consultaUC.data.cabecalho.municipio],
+                ['Bairro', consultaUC.data.cabecalho.bairro],
+                ['Alimentador', consultaUC.data.cabecalho.alimentador],
+                ['Medidor atual', consultaUC.data.cabecalho.medidor_atual?.id_medidor],
+                ['Conexão GD', consultaUC.data.cabecalho.gd?.data_conexao],
+              ].map(([rotulo, valor]) => (
+                <div key={rotulo}>
+                  <dt className="text-xs text-muted-foreground">{rotulo}</dt>
+                  <dd className="mt-1 text-sm font-medium">{valor || '—'}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        )}
       </Painel>
 
       <div
@@ -136,7 +192,11 @@ export function PaginaUnidadeConsumidora() {
           subtitulo="kWh por competência · cinza = mesmos meses do ano anterior"
           preencher
         >
+          {consultaUC.isSuccess ? (
+          <GraficoConsumo dados={adaptarConsumoUC(consultaUC.data.consumo)} />
+        ) : (
           <EstadoIndisponivel compacto />
+        )}
         </Painel>
 
         <Painel
@@ -144,7 +204,15 @@ export function PaginaUnidadeConsumidora() {
           subtitulo="Última fatura × mesmo mês do ano anterior"
           preencher
         >
-          <EstadoIndisponivel compacto />
+          {consultaUC.isSuccess ? (
+            <ExplicacaoConta
+              texto={consultaUC.data.explicacao_conta.frase}
+              efeitos={consultaUC.data.explicacao_conta.efeitos}
+              semCartao
+            />
+          ) : (
+            <EstadoIndisponivel compacto />
+          )}
         </Painel>
       </div>
 
@@ -161,7 +229,20 @@ export function PaginaUnidadeConsumidora() {
           subtitulo="Competência, vencimento, valor e atraso"
           preencher
         >
-          <EstadoIndisponivel compacto />
+          {consultaUC.isSuccess ? (
+            <Faturas
+              semCartao
+              dados={consultaUC.data.faturas_abertas.map((fatura) => ({
+                id: fatura.id_fatura,
+                competencia: fatura.competencia.slice(0, 7),
+                vencimento: fatura.data_vencimento,
+                valor: Number(fatura.valor_total),
+                diasAtraso: fatura.dias_atraso ?? 0,
+              }))}
+            />
+          ) : (
+            <EstadoIndisponivel compacto />
+          )}
         </Painel>
 
         <Painel
@@ -169,7 +250,19 @@ export function PaginaUnidadeConsumidora() {
           subtitulo="Da UC e do alimentador no mesmo período"
           preencher
         >
-          <EstadoIndisponivel compacto />
+          {consultaUC.isSuccess ? (
+            <Interrupcoes
+              semCartao
+              dados={consultaUC.data.interrupcoes.ocorrencias.map((ocorrencia) => ({
+                id: ocorrencia.id_ocorrencia,
+                data: new Date(ocorrencia.data_abertura).toLocaleDateString('pt-BR'),
+                duracao: `${Number(ocorrencia.duracao_efetiva_min).toLocaleString('pt-BR')} min`,
+                causa: ocorrencia.causa,
+              }))}
+            />
+          ) : (
+            <EstadoIndisponivel compacto />
+          )}
         </Painel>
       </div>
 
@@ -186,7 +279,26 @@ export function PaginaUnidadeConsumidora() {
           subtitulo="Últimos 12 meses · mais recente primeiro"
           preencher
         >
-          <EstadoIndisponivel compacto />
+          {consultaUC.isSuccess ? (
+            <Chamados
+              semCartao
+              dados={consultaUC.data.chamados.map((chamado) => ({
+                id: chamado.protocolo,
+                titulo: chamado.assunto,
+                protocolo: chamado.protocolo,
+                abertura: new Date(chamado.aberto_em).toLocaleDateString('pt-BR'),
+                status: chamado.status,
+                avaliacao: chamado.nota,
+                historico: chamado.historico.map((evento) => ({
+                  id: `${chamado.protocolo}-${evento.sequencia}`,
+                  data: new Date(evento.data).toLocaleDateString('pt-BR'),
+                  descricao: evento.descricao,
+                })),
+              }))}
+            />
+          ) : (
+            <EstadoIndisponivel compacto />
+          )}
         </Painel>
 
         <Painel
@@ -194,7 +306,27 @@ export function PaginaUnidadeConsumidora() {
           subtitulo="Históricas e ordem de inspeção ativa"
           preencher
         >
-          <EstadoIndisponivel compacto />
+          {consultaUC.isSuccess ? (
+            <Inspecoes
+              semCartao
+              dados={consultaUC.data.inspecoes.map((inspecao) => ({
+                id: inspecao.id_inspecao,
+                data: new Date(inspecao.data).toLocaleDateString('pt-BR'),
+                resultado: inspecao.resultado,
+                observacao: inspecao.tipo_irregularidade ?? inspecao.origem,
+              }))}
+              ordemAtiva={
+                consultaUC.data.ordem_ativa
+                  ? `${consultaUC.data.ordem_ativa.id} (${consultaUC.data.ordem_ativa.status})`
+                  : null
+              }
+              motivoSuspeita={
+                consultaUC.data.ordem_ativa?.motivos.join(', ') ?? null
+              }
+            />
+          ) : (
+            <EstadoIndisponivel compacto />
+          )}
         </Painel>
       </div>
     </div>
