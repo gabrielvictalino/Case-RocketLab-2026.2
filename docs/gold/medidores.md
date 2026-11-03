@@ -3,9 +3,9 @@
 | Item | Referência |
 | :--- | :--- |
 | **Notebook** | `data-engineering/silver_to_gold/silver-to-gold-medidores.ipynb` (autocontido; sem módulo `.py` e sem `%run`) |
-| **Fonte Silver lida** | `` `v-energy`.silver.tb_medidores `` (PR #22; regras em `docs/silver/silver_medidores.md`) |
+| **Fontes Silver lidas** | `` `v-energy`.silver.tb_medidores `` (PR #22; regras em `docs/silver/silver_medidores.md`) e `` `v-energy`.silver.tb_unidades_consumidoras ``, só o `id_uc`, para a referência à `dim_uc` |
 | **Tabelas Gold publicadas** | `` `v-energy`.gold.medidores_historico `` (contrato do portal) e `` `v-energy`.gold.tb_medidores_historico `` (analítica) |
-| **Contrato** | `contracts/tabelas/medidores_historico.yaml` (`0.3.0-provisional`) |
+| **Contrato** | `contracts/tabelas/medidores_historico.yaml` (`0.3.0-provisional`), lido pelo notebook a cada execução |
 | **Versão das regras** | `GOLD_MEDIDORES_V1` |
 
 ---
@@ -27,7 +27,7 @@ A regra de nomes da Gold (`docs/gold/decisoes_silver_to_gold.md`) diz que a tabe
 | `medidores_historico` | Exatamente as 5 do contrato, na ordem do YAML | Exportação para o Postgres do portal (`analytics.medidores_historico`) |
 | `tb_medidores_historico` | As 5 do contrato, 10 derivadas e a versão das regras | Consultas no Databricks e proposta de colunas para a próxima versão do contrato |
 
-As duas têm as mesmas linhas, e uma regra crítica confere que as 5 colunas do contrato são idênticas nas duas.
+As duas têm as mesmas linhas, e uma regra crítica confere, nas tabelas gravadas, que as 5 colunas do contrato são idênticas nas duas.
 
 ---
 
@@ -52,7 +52,8 @@ O contrato define a chave `id_medidor` + `data_instalacao`, que permitiria o mes
 * exatamente 1 `flag_medidor_atual` por UC;
 * o atual é o último da sequência;
 * `flag_instalado_em_troca` ⇔ `ordem_na_uc > 1`;
-* o medidor anterior é exatamente o da posição anterior e está `RETIRADO`.
+* o medidor anterior é exatamente o da posição anterior e está `RETIRADO`;
+* `tipo_medidor_anterior` é a tecnologia do medidor da posição anterior. Ele vem da Silver, e a Gold confere com a própria ordem, como faz com `id_medidor_anterior`: se a Silver desempatar de outro jeito, a carga para em vez de gravar a tecnologia errada.
 
 ### 3.4. Competências como data
 O contrato usa a competência como **data do primeiro dia do mês** (`AAAA-MM-01`, `contracts/README.md`). `competencia_instalacao`, `competencia_retirada` e `competencia_troca` seguem essa convenção.
@@ -65,12 +66,22 @@ A Silver aceita uma lacuna entre a retirada do anterior e a instalação do novo
 ### 3.6. Versão das regras
 Cada linha da `tb_medidores_historico` grava `versao_regras_gold` (`GOLD_MEDIDORES_V1`), como as tabelas `tb_` da Gold de GD. A tabela do contrato fica só com as 5 colunas do YAML.
 
-### 3.7. Leitura e publicação
+### 3.7. Contrato lido do YAML
+As colunas (nome, tipo e ordem), a chave, as colunas obrigatórias e o padrão do `id_uc` vêm de `contracts/tabelas/medidores_historico.yaml`, lido a cada execução (widget `contrato_yaml`, relativo à pasta do notebook no Git folder). Os tipos do YAML viram tipos do Spark (`text` → `string`, `numeric(p,s)` → `decimal(p,s)`); um tipo sem equivalente para a carga.
+
+Quando o YAML mudar (#111), a regra de colunas acusa a diferença, em vez de passar contra uma cópia antiga no código. Uma coluna da `tb_` que entrar no contrato passa a sair também na tabela do contrato, na posição do YAML.
+
+### 3.8. `id_uc` no cadastro
+O YAML declara `references: [dim_uc, id_uc]`. A `dim_uc` sai da Silver de cadastro, então a Gold confere todo `id_uc` contra `` `v-energy`.silver.tb_unidades_consumidoras ``, como as Golds de GD e de continuidade. Sem essa regra, um medidor de UC removida do cadastro (uma `TESTE*` ou uma duplicata) passaria por todas as regras e só seria barrado no importador, que rejeita a exportação inteira pela chave estrangeira. Na base atual, todo `id_uc` de medidores está no cadastro.
+
+### 3.9. Leitura e publicação
 Mesmo padrão das Golds de GD (#94) e de continuidade (#98):
-* **Widgets:** `tabela_medidores`, `schema_gold` e `modo`.
-* **Leitura** da Silver por versão fixa (`VERSION AS OF`).
+* **Widgets:** `tabela_medidores`, `tabela_cadastro`, `contrato_yaml`, `schema_gold` e `modo`.
+* **Leitura** das Silvers por versão fixa (`VERSION AS OF`).
 * **`modo=validar`** (padrão) monta e confere tudo em memória, sem gravar.
-* **`modo=publicar`** grava, confere schema e conteúdo gravados, repete as validações sobre as tabelas gravadas e, se algo falhar, volta cada tabela com `RESTORE TABLE ... TO VERSION AS OF` (ou a remove, na primeira carga).
+* **`modo=publicar`** grava, confere schema e conteúdo gravados e repete as validações sobre as tabelas gravadas.
+* **Recuperação:** se algo falhar, cada tabela volta à versão de antes da execução com `RESTORE TABLE ... TO VERSION AS OF` (ou é removida, na primeira carga). Antes, o notebook confere no `DESCRIBE HISTORY` que a versão gravada é a última e que a anterior a ela é a guardada no início. Se outra escrita entrou nesse meio, o `RESTORE` descartaria o commit dela, então o notebook para com as versões na mensagem, para a recuperação manual.
+* **Destino:** o schema da Gold não pode ser `silver`, `bronze` ou `default`, e nenhum destino pode ser uma das fontes. As duas conferências ignoram maiúsculas, como o Unity Catalog.
 
 ---
 
@@ -110,25 +121,26 @@ As descrições também ficam gravadas como comentários das colunas no Unity Ca
 
 ## 5. Validações
 
-Todas as regras são críticas: qualquer violação interrompe a execução com a lista das regras violadas e a quantidade de linhas. Em `modo=publicar`, elas rodam em memória e de novo sobre as tabelas gravadas.
+Todas as regras são críticas: qualquer violação interrompe a execução com a lista das regras violadas e a quantidade de linhas. Em `modo=publicar`, elas rodam em memória e de novo sobre as tabelas gravadas. A última da tabela só roda nas tabelas gravadas: em memória, a tabela do contrato é um `select` da analítica.
 
 | Regra | Hoje |
 | :--- | :---: |
-| **Silver:** `id_medidor` nulo ou fora do padrão, `id_medidor` repetido, `id_uc` nulo, `tipo`/`status` fora do domínio, `data_instalacao` nula, `status` incoerente com `data_retirada`, UC sem exatamente 1 `ATIVO` | 0 |
+| **Silver:** `id_medidor` nulo ou fora do padrão, `id_medidor` repetido, `id_uc` nulo, `tipo`/`status` fora do domínio, `data_instalacao` nula, `data_retirada` anterior à instalação, `status` incoerente com `data_retirada`, UC sem exatamente 1 `ATIVO` | 0 |
 | **Contrato:** chave (`id_medidor`, `data_instalacao`) repetida | 0 |
 | **Contrato:** coluna obrigatória nula | 0 |
-| **Contrato:** `id_uc` fora de `^UC\d{6}$` | 0 |
+| **Contrato:** `id_uc` fora do padrão do YAML (`^UC\d{6}$`) | 0 |
 | **Contrato:** `tipo_medidor` fora do domínio | 0 |
-| **Contrato:** `data_retirada` anterior à instalação | 0 |
 | **Contrato:** colunas, tipos ou ordem diferentes do YAML | 0 |
 | **Contrato:** linhas diferentes da Silver | 0 |
+| **Contrato:** `id_uc` sem cadastro (referência à `dim_uc`) | 0 |
 | **Analítica:** UC sem exatamente 1 medidor atual / atual não é o último da UC | 0 |
 | **Analítica:** troca incoerente com `ordem_na_uc` | 0 |
 | **Analítica:** medidor anterior diferente da ordem ou não `RETIRADO` | 0 |
 | **Analítica:** competência diferente do mês da data | 0 |
+| **Analítica:** `tipo_medidor_anterior` diferente do tipo do medidor anterior | 0 |
 | **Analítica:** `competencia_troca` diferente da retirada do medidor anterior | 0 |
 | **Analítica:** linhas diferentes da Silver | 0 |
-| **Analítica:** as 5 colunas do contrato diferentes da tabela do contrato | 0 |
+| **Analítica:** as 5 colunas do contrato diferentes da tabela do contrato (só nas tabelas gravadas) | 0 |
 
 ---
 
@@ -179,22 +191,25 @@ WHERE flag_instalado_em_troca;
 | Competência como data `AAAA-MM-01` | Texto `AAAA-MM` | Convenção do contrato e das outras Golds |
 | `tipo` → `tipo_medidor` | Manter o nome da Silver | Nome do contrato |
 | Ler a Silver por versão fixa e publicar com `RESTORE` | `overwrite` direto | Mesmo padrão das outras Golds; uma carga reprovada nunca substitui a Gold boa |
+| `RESTORE` só se nenhuma outra escrita entrou no meio | `RESTORE` direto à versão guardada | Um `RESTORE` às cegas descartaria o commit de outra tarefa do Job ou de outra pessoa |
+| Contrato lido do YAML a cada execução | Cópia das colunas no notebook | Com o contrato `0.3.0-provisional` e o #111 propondo colunas novas, a cópia passaria a conferir a Gold contra um contrato antigo |
+| `id_uc` conferido contra a Silver de cadastro | Deixar para o importador | O importador rejeita a exportação inteira; a Gold aponta a linha antes de publicar |
 
 ---
 
 ## 8. Como executar no Databricks
 
-1. **Pré-requisito:** `` SELECT COUNT(*) FROM `v-energy`.silver.tb_medidores `` → 51.299. Se não existir, rode antes a Bronze unificada e a Silver de medidores.
-2. **Importar** `silver-to-gold-medidores.ipynb` (Workspace → Import → File, ou pelo Git folder) e conectar em **Serverless**.
+1. **Pré-requisito:** `` SELECT COUNT(*) FROM `v-energy`.silver.tb_medidores `` → 51.299 e `` SELECT COUNT(*) FROM `v-energy`.silver.tb_unidades_consumidoras `` → 45.000. Se não existirem, rode antes a Bronze unificada e as Silvers de medidores e de cadastro.
+2. **Abrir** `silver-to-gold-medidores.ipynb` pelo Git folder do repositório e conectar em **Serverless**. O notebook lê o YAML do contrato pelo caminho relativo; se for importado avulso, informe o caminho do YAML no widget `contrato_yaml`.
 3. **Validar:** **Run all** com o widget `modo = validar`. Nada é gravado.
 4. **Publicar:** troque o widget `modo` para `publicar` e rode **Run all** de novo.
 5. **Conferir:**
-   * tabela de regras com 23 linhas `OK`;
+   * tabela de regras com 24 linhas `OK`;
    * `[OK] medidores_historico: 51,299 registros` e o mesmo para a `tb_`;
    * a Visão 360 da `UC100015`;
    * o parque atual por tecnologia e as trocas por competência;
    * no fim, `Publicada: ... medidores_historico` e `Publicada: ... tb_medidores_historico`.
-6. **No Workflow (#97):** a tarefa depende da Silver de medidores e passa `modo=publicar`.
+6. **No Workflow (#97):** a tarefa depende das Silvers de medidores e de cadastro e passa `modo=publicar`.
 
 ---
 
@@ -212,8 +227,15 @@ A cadeia Bronze → Silver → Gold rodou localmente em Spark 4.0.1 + Delta 4.0.
   * `id_uc` com 7 dígitos;
   * medidor repetido;
   * tipo fora do domínio;
-* troca com lacuna (retirada do `MD500015` em 30/09/2025 e instalação do `MD545821` em 01/10/2025, na `UC100015`): as 23 regras passam, e a troca fica em 2025-09, com `competencia_instalacao` em 2025-10;
+* troca com lacuna (retirada do `MD500015` em 30/09/2025 e instalação do `MD545821` em 01/10/2025, na `UC100015`): as 24 regras passam, e a troca fica em 2025-09, com `competencia_instalacao` em 2025-10;
 * `competencia_troca` adulterada numa linha bloqueia a carga pela regra nova;
+* cada regra da segunda review bloqueia o defeito que deve bloquear:
+  * a `UC100015` fora do cadastro para em `id_uc sem cadastro`;
+  * `tipo_medidor_anterior` trocado numa troca para na regra do tipo anterior;
+  * `schema_gold = spark_catalog.Silver` é recusado;
+  * uma retirada anterior à instalação na Silver para nas regras da Silver;
+  * um YAML com outro tipo em `data_retirada` para na regra de colunas, e um YAML com uma coluna nova (`flag_medidor_atual`) leva a coluna para a tabela do contrato;
+* recuperação: com uma falha depois da gravação, a tabela volta com `RESTORE`; com outra escrita entre a gravação e a falha, o notebook não restaura e para com as versões;
 * a Gold de continuidade do #98 também rodou na mesma cadeia (5.856 linhas).
 
 ---
