@@ -75,3 +75,34 @@ async def serie(db, periodo, recorte):
         .mappings()
         .all()
     )
+
+
+async def por_subgrao(db, atual, anterior, recorte):
+    campos = {
+        'q': 'volume_faturado_kwh',
+        'r': 'receita',
+        't': 'componente_tarifa_reais',
+        'b': 'componente_bandeira_reais',
+    }
+    somas = ', '.join(
+        f'coalesce(sum(m.{campo}) FILTER (WHERE m.competencia BETWEEN :i{n} AND :f{n}), 0) '
+        f'AS {sigla}{n}'
+        for n in (0, 1)
+        for sigla, campo in campos.items()
+    )
+    query = text(f"""
+        SELECT m.municipio, m.bairro, m.classe, m.grupo_uc, {somas}
+        FROM analytics.receita_volume_mensal m
+        WHERE (m.competencia BETWEEN :i0 AND :f0 OR m.competencia BETWEEN :i1 AND :f1)
+              {recorte.condicoes('m')}
+        GROUP BY m.municipio, m.bairro, m.classe, m.grupo_uc
+        ORDER BY m.municipio, m.bairro, m.classe, m.grupo_uc
+    """)
+    params = dict(
+        i0=anterior.inicio,
+        f0=anterior.fim,
+        i1=atual.inicio,
+        f1=atual.fim,
+        **recorte.parametros(),
+    )
+    return (await db.execute(query, params)).mappings().all()
