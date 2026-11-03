@@ -8,7 +8,9 @@ async def carga_atual(db):
                 text(
                     'SELECT id, batch_id, versao_contrato, sintetica, carregado_em, '
                     'periodo_inicio AS competencia_inicial, '
-                    'periodo_fim AS competencia_mais_recente '
+                    'periodo_fim AS competencia_mais_recente, '
+                    # Data do instantâneo financeiro: o agente separa a conta atrasada da aberta.
+                    "(manifesto->>'reference_date')::date AS data_referencia "
                     'FROM operations.cargas ORDER BY ordem_publicacao DESC LIMIT 1'
                 )
             )
