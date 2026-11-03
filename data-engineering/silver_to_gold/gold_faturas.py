@@ -1,5 +1,6 @@
 """Transformações e exportação da Gold de faturas, sem dependência de dbutils."""
 
+from dataclasses import dataclass
 from datetime import date
 import hashlib
 import json
@@ -12,6 +13,13 @@ from pathlib import Path
 from pyspark.sql import DataFrame, Window
 from pyspark.sql import functions as F
 
+# Nome Silver -> (enum contratual, adicional fixo do case em R$/kWh).
+BANDEIRAS = {
+    'Verde': ('VERDE', '0'),
+    'Amarela': ('AMARELA', '0.01885'),
+    'Vermelha P1': ('VERMELHA_P1', '0.04463'),
+    'Vermelha P2': ('VERMELHA_P2', '0.07877'),
+}
 VERSAO_REGRAS = 'GOLD_FATURAS_V2'
 COMPETENCIA_REGEX = r'^[1-9][0-9]{3}-(0[1-9]|1[0-2])$'
 DIMENSOES = ['municipio', 'bairro', 'classe']
@@ -86,19 +94,22 @@ def _soma(coluna):
     return F.coalesce(F.sum(coluna), F.lit(0)).cast('decimal(28,2)')
 
 
-def construir_faturas(
-    faturas: DataFrame,
-    cadastro: DataFrame,
-    leituras: DataFrame,
-    data_referencia: str,
-) -> dict[str, DataFrame]:
-    """Retorna detalhe elegível, exclusões reconciliáveis e resumo mensal.
+@dataclass(frozen=True)
+class FontesValidadas:
+    cadastro: DataFrame
+    leituras: DataFrame
 
-    Faturas inclui as duas saídas Silver, principal e pendentes, via unionByName.
-    A data é a data de referência do retrato de status da extração, não hoje.
-    """
-    referencia = validar_data_referencia(data_referencia)
-    _exigir_colunas(faturas, COLUNAS_FATURAS, 'faturas')
+
+def validar_fontes_comuns(cadastro, leituras, validacao=None):
+    """Valida uma vez por par de DataFrames; APIs isoladas mantêm seus gates."""
+    if validacao is not None:
+        if (
+            not isinstance(validacao, FontesValidadas)
+            or validacao.cadastro is not cadastro
+            or validacao.leituras is not leituras
+        ):
+            raise ValueError('Validação pertence a outros DataFrames')
+        return validacao
     _exigir_colunas(cadastro, ['id_uc', *DIMENSOES], 'cadastro')
     _exigir_colunas(
         leituras, ['id_uc', 'mes_referencia', 'consumo_kwh', *FLAGS_LEITURAS], 'leituras'
@@ -106,24 +117,6 @@ def construir_faturas(
     for flag in FLAGS_LEITURAS:
         if leituras.schema[flag].dataType.simpleString() != 'boolean':
             raise ValueError(f'leituras: {flag} precisa ser boolean')
-    tipos = {c: 'decimal(18,2)' for c in DINHEIRO}
-    tipos.update({c: 'date' for c in ['data_emissao', 'data_vencimento', 'data_pagamento']})
-    tipos.update(
-        {
-            c: 'string'
-            for c in [
-                'id_fatura',
-                'id_uc',
-                'mes_referencia',
-                'bandeira_tarifaria',
-                'status',
-            ]
-        }
-    )
-    tipos['flag_uc_sem_cadastro'] = 'boolean'
-    for coluna, esperado in tipos.items():
-        if faturas.schema[coluna].dataType.simpleString() != esperado:
-            raise ValueError(f'faturas: {coluna} precisa ser {esperado}')
     if leituras.schema['consumo_kwh'].dataType.typeName() not in {
         'integer',
         'long',
@@ -131,39 +124,6 @@ def construir_faturas(
         'decimal',
     }:
         raise ValueError('leituras: consumo_kwh precisa ser inteiro ou decimal')
-    faturas = faturas.select(
-        *COLUNAS_FATURAS,
-        *[c for c in COLUNAS_AUDITORIA if c in faturas.columns],
-    )
-    obrigatorias = [c for c in COLUNAS_FATURAS if c != 'data_pagamento']
-    regras = {f'{c}_nulo': F.col(c).isNull() for c in obrigatorias}
-    regras.update(
-        {
-            'id_fatura_vazio': F.trim(F.col('id_fatura')) == '',
-            'id_uc_invalido': ~F.col('id_uc').rlike(r'^UC[0-9]+$'),
-            'competencia_invalida': ~F.col('mes_referencia').rlike(COMPETENCIA_REGEX),
-            'status_invalido': ~F.col('status').isin('PAGA', 'EM ABERTO'),
-            'bandeira_invalida': ~F.col('bandeira_tarifaria').isin(
-                'Verde', 'Amarela', 'Vermelha P1', 'Vermelha P2'
-            ),
-            'total_divergente': F.col('valor_total') != F.col('valor_energia') + F.col('tributos'),
-            'paga_sem_pagamento': (F.col('status') == 'PAGA') & F.col('data_pagamento').isNull(),
-            'aberta_com_pagamento': (
-                (F.col('status') == 'EM ABERTO') & F.col('data_pagamento').isNotNull()
-            ),
-            'pagamento_futuro': F.col('data_pagamento') > F.lit(referencia),
-            'emissao_futura': F.col('data_emissao') > F.lit(referencia),
-            'emissao_apos_vencimento': F.col('data_emissao') > F.col('data_vencimento'),
-            'pagamento_antes_emissao': F.col('data_pagamento') < F.col('data_emissao'),
-        }
-    )
-    regras.update({f'{c}_negativo': F.col(c) < 0 for c in DINHEIRO})
-    _validar_regras(faturas, regras, 'faturas')
-    _exigir_chave(faturas, ['id_fatura'], 'faturas')
-    if not faturas.limit(1).count():
-        raise ValueError('faturas: fonte vazia')
-
-    cadastro = cadastro.select('id_uc', *DIMENSOES)
     _exigir_chave(cadastro, ['id_uc'], 'cadastro')
     _validar_regras(
         cadastro,
@@ -183,6 +143,73 @@ def construir_faturas(
         'leituras',
     )
 
+    return FontesValidadas(cadastro, leituras)
+
+
+def construir_faturas(
+    faturas: DataFrame,
+    cadastro: DataFrame,
+    leituras: DataFrame,
+    data_referencia: str,
+    fontes_validadas=None,
+) -> dict[str, DataFrame]:
+    """Retorna detalhe elegível, exclusões reconciliáveis e resumo mensal.
+
+    Faturas inclui as duas saídas Silver, principal e pendentes, via unionByName.
+    A data é a data de referência do retrato de status da extração, não hoje.
+    """
+    referencia = validar_data_referencia(data_referencia)
+    _exigir_colunas(faturas, COLUNAS_FATURAS, 'faturas')
+    validar_fontes_comuns(cadastro, leituras, fontes_validadas)
+    tipos = {c: 'decimal(18,2)' for c in DINHEIRO}
+    tipos.update({c: 'date' for c in ['data_emissao', 'data_vencimento', 'data_pagamento']})
+    tipos.update(
+        {
+            c: 'string'
+            for c in [
+                'id_fatura',
+                'id_uc',
+                'mes_referencia',
+                'bandeira_tarifaria',
+                'status',
+            ]
+        }
+    )
+    tipos['flag_uc_sem_cadastro'] = 'boolean'
+    for coluna, esperado in tipos.items():
+        if faturas.schema[coluna].dataType.simpleString() != esperado:
+            raise ValueError(f'faturas: {coluna} precisa ser {esperado}')
+    faturas = faturas.select(
+        *COLUNAS_FATURAS,
+        *[c for c in COLUNAS_AUDITORIA if c in faturas.columns],
+    )
+    obrigatorias = [c for c in COLUNAS_FATURAS if c != 'data_pagamento']
+    regras = {f'{c}_nulo': F.col(c).isNull() for c in obrigatorias}
+    regras.update(
+        {
+            'id_fatura_vazio': F.trim(F.col('id_fatura')) == '',
+            'id_uc_invalido': ~F.col('id_uc').rlike(r'^UC[0-9]+$'),
+            'competencia_invalida': ~F.col('mes_referencia').rlike(COMPETENCIA_REGEX),
+            'status_invalido': ~F.col('status').isin('PAGA', 'EM ABERTO'),
+            'bandeira_invalida': ~F.col('bandeira_tarifaria').isin(*BANDEIRAS),
+            'total_divergente': F.col('valor_total') != F.col('valor_energia') + F.col('tributos'),
+            'paga_sem_pagamento': (F.col('status') == 'PAGA') & F.col('data_pagamento').isNull(),
+            'aberta_com_pagamento': (
+                (F.col('status') == 'EM ABERTO') & F.col('data_pagamento').isNotNull()
+            ),
+            'pagamento_futuro': F.col('data_pagamento') > F.lit(referencia),
+            'emissao_futura': F.col('data_emissao') > F.lit(referencia),
+            'emissao_apos_vencimento': F.col('data_emissao') > F.col('data_vencimento'),
+            'pagamento_antes_emissao': F.col('data_pagamento') < F.col('data_emissao'),
+        }
+    )
+    regras.update({f'{c}_negativo': F.col(c) < 0 for c in DINHEIRO})
+    _validar_regras(faturas, regras, 'faturas')
+    _exigir_chave(faturas, ['id_fatura'], 'faturas')
+    if not faturas.limit(1).count():
+        raise ValueError('faturas: fonte vazia')
+
+    cadastro = cadastro.select('id_uc', *DIMENSOES)
     base = (
         faturas.withColumn('competencia', F.to_date(F.concat('mes_referencia', F.lit('-01'))))
         .withColumn(
@@ -446,7 +473,7 @@ def exportar_csv(tabelas: dict[str, DataFrame], diretorio: str, metadados: dict)
         if not nome.isidentifier():
             raise ValueError(f'Nome de tabela inválido: {nome}')
         pasta_tabela = pasta_lote / nome
-        df.write.mode('errorifexists').option('header', 'true').option(
+        df.write.mode('errorifexists').option('header', 'true').option('escape', '"').option(
             'dateFormat', 'yyyy-MM-dd'
         ).option('nullValue', '').option('encoding', 'UTF-8').option(
             'timestampFormat', "yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXX"
@@ -455,16 +482,13 @@ def exportar_csv(tabelas: dict[str, DataFrame], diretorio: str, metadados: dict)
         hashes_conferidos = conferir_arquivos_csv(df, partes)
         arquivos = []
         for arquivo in partes:
-            digest = hashlib.sha256()
-            with arquivo.open('rb') as stream:
-                for bloco in iter(lambda: stream.read(1024 * 1024), b''):
-                    digest.update(bloco)
-            if digest.hexdigest() != hashes_conferidos[str(arquivo)]:
+            digest = hash_arquivo(arquivo)
+            if digest != hashes_conferidos[str(arquivo)]:
                 raise ValueError(f'CSV mudou após a conferência: {arquivo}')
             arquivos.append(
                 {
                     'arquivo': str(arquivo.relative_to(pasta_lote)),
-                    'sha256': digest.hexdigest(),
+                    'sha256': digest,
                 }
             )
         if not arquivos:
@@ -830,6 +854,7 @@ def conferir_arquivos_csv(esperado, arquivos):
     entregue = (
         esperado.sparkSession.read.schema(esperado.schema)
         .option('header', 'true')
+        .option('escape', '"')
         .option('mode', 'FAILFAST')
         .option('multiLine', 'true')
         .option('dateFormat', 'yyyy-MM-dd')

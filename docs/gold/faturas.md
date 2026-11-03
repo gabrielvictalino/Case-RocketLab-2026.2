@@ -257,7 +257,7 @@ alinhadas ao significado aprovado para o case. Isso não aprova os demais domín
   leitura, no grão comercial: permite somar observado/estimado e calcular a cobertura.
   `LEITURA_UTILIZAVEL` com tipo `ESTIMADA` continua distinguível de leitura `REAL`.
 - O complemento é derivado quando o widget está vazio. Um complemento explícito
-  continua sujeito aos gates, inclusive volume igual ao analítico. O importador
+  fornece somente tarifas e proveniência; o volume é sempre derivado do analítico. O importador
   também verifica essa igualdade para toda linha com fatura.
 - Os componentes da R5 somam produtos decimais antes de arredondar por grão.
   Não se fixa `k₀ = 4/3`: resíduos e composição podem mudar o fator e o mix.
@@ -320,7 +320,7 @@ os dados de negócio. O instante técnico da nova tentativa e seus UUIDs mudam.
 `ingestion_datetime` prova ingestão, não necessariamente extração oficial. A data
 22/10/2026 citada anteriormente é uma referência operacional observada; sua
 oficialização continua dependente do responsável pela extração. O agendamento
-permanece `PAUSED`; cada novo retrato exige atualizar explicitamente a referência.
+foi removido do bundle; cada novo retrato exige informar explicitamente a referência.
 
 ## Publicação, interrupção e recuperação
 
@@ -408,6 +408,7 @@ Estrutura do plano (repita a entrada para cada uma das 12 tabelas, com hash real
     "uc_consumo_faturamento_mensal": {
       "file": "/caminho/comercial/uc_consumo_faturamento_mensal.csv",
       "sha256": "SHA256_DO_ARQUIVO",
+      "receipt": "/caminho/comercial/comercial.json",
       "period": {"start": "2022-07", "end": "2026-06"},
       "reference_date": "2026-10-22",
       "synthetic": false
@@ -469,3 +470,29 @@ rename/recibo no runtime. A hipótese de part files órfãos não foi reproduzid
 Databricks; os testes locais comprovam rejeição de conteúdo divergente injetado.
 A referência oficial da extração, a disponibilidade de GD/inspeções e os doadores
 de tarifa permanecem dependências identificadas acima.
+
+## Correções da revisão 5746693852
+
+O Job não tem agendamento: data_referencia continua sendo a data explícita do
+retrato, não o relógio da execução. Uma futura recorrência requer política própria.
+As duas saídas usam a mesma leitura enriquecida com trocas de medidor; as
+auxiliares continuam usando apenas volume observado utilizável e as comerciais
+incluem imputação, com método e cobertura explícitos. Leituras e cadastro são
+persistidos no escopo da execução; a validação comum é reaproveitada pelo par de
+DataFrames, e as APIs isoladas continuam validando suas entradas.
+
+O complemento exige id_fatura, tarifa_base, adicional_bandeira e proveniencia.
+volume_faturado_kwh recebido em um complemento legado é ignorado: o volume
+canônico vem sempre de consumo_kwh_analitico. Bandeiras e adicionais usam um
+único domínio no módulo. Datas, textos e booleanos são exigidos nos tipos exatos
+antes dos casts; timestamps não são truncados silenciosamente.
+
+Para montar o lote, cada CSV precisa de recibo do produtor (comercial.json ou
+manifest.json adjacente, ou caminho receipt na entrada do plano). O montador
+confere versão, período, referência, synthetic booleano, nome/caminho e hash da
+tabela contra esse recibo, além de conferir a cópia. Um plano real apontando para
+contracts/samples é rejeitado pelo manifesto sintético de origem. Recibos são
+evidências dos produtores e devem vir de fonte confiável; não são assinaturas
+digitais. Produtores dos outros dez domínios precisam fornecer seus recibos.
+Os escritores e a releitura Spark usam escape com aspas duplicadas, compatível
+com o parser CSV da stdlib e o importador, inclusive aspas, barras e quebras.

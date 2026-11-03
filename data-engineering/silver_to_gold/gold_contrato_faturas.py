@@ -7,18 +7,19 @@ from pyspark.sql import functions as F
 from pyspark.sql import Window
 
 from gold_faturas import (
-    COMPETENCIA_REGEX,
+    BANDEIRAS,
     DIMENSOES,
     FLAGS_LEITURAS,
     _exigir_chave,
     _exigir_colunas,
     _validar_regras,
     validar_data_referencia,
+    validar_fontes_comuns,
 )
 
 CONTRATOS = Path(__file__).resolve().parents[2] / 'contracts'
 COMERCIAIS = ('uc_consumo_faturamento_mensal', 'receita_volume_mensal')
-CAMPOS_COMPLEMENTO = ['volume_faturado_kwh', 'tarifa_base', 'adicional_bandeira']
+CAMPOS_COMPLEMENTO = ['tarifa_base', 'adicional_bandeira']
 
 
 def especificacoes(raiz=CONTRATOS):
@@ -46,6 +47,8 @@ def validar_tabela_contratual(df, spec):
         if col.get('month'):
             regras[f'{nome}_mes'] = F.dayofmonth(valor) != 1
         tipo = col['type'].replace('numeric', 'decimal').replace('text', 'string')
+        if not tipo.startswith('decimal') and df.schema[nome].dataType.simpleString() != tipo:
+            raise ValueError(f'{spec["table"]}.{nome}: precisa ser {tipo}')
         if tipo.startswith('decimal'):
             if df.schema[nome].dataType.typeName() not in {'integer', 'long', 'short', 'decimal'}:
                 raise ValueError(f'{spec["table"]}.{nome}: precisa ser inteiro ou Decimal')
@@ -65,62 +68,8 @@ def validar_tabela_contratual(df, spec):
     )
 
 
-def construir_consumo_contratual(
-    leituras, cadastro, gd, inspecoes, data_referencia, medidores=None
-):
-    """Métodos da GD generalizados para todas as UCs, com proveniência auxiliar.
-
-    Mediana aproximada Spark (mesma convenção da Gold GD), apenas de leituras
-    utilizáveis da própria UC; nunca do gerador sintético. Sem doadores, bloqueia.
-    """
-    referencia = validar_data_referencia(data_referencia)
-    _exigir_colunas(
-        leituras,
-        ['id_uc', 'mes_referencia', 'consumo_kwh', 'tipo_leitura', *FLAGS_LEITURAS],
-        'leituras',
-    )
-    _exigir_colunas(cadastro, ['id_uc', *DIMENSOES], 'cadastro')
-    _exigir_colunas(gd, ['id_uc', 'data_conexao'], 'gd')
-    _exigir_colunas(inspecoes, ['id_uc', 'data', 'resultado'], 'inspecoes')
-    if leituras.schema['consumo_kwh'].dataType.typeName() not in {
-        'integer',
-        'long',
-        'short',
-        'decimal',
-    }:
-        raise ValueError('leituras: consumo_kwh precisa ser inteiro ou decimal')
-    for flag in FLAGS_LEITURAS:
-        if leituras.schema[flag].dataType.simpleString() != 'boolean':
-            raise ValueError(f'leituras: {flag} precisa ser boolean')
-    for df, chaves, nome in [
-        (leituras, ['id_uc', 'mes_referencia'], 'leituras'),
-        (cadastro, ['id_uc'], 'cadastro'),
-        (gd, ['id_uc'], 'gd'),
-    ]:
-        _exigir_chave(df, chaves, nome)
-    for df, coluna, nome in [(gd, 'data_conexao', 'gd'), (inspecoes, 'data', 'inspecoes')]:
-        if df.schema[coluna].dataType.simpleString() != 'date':
-            raise ValueError(f'{nome}: {coluna} precisa ser date')
-        _validar_regras(
-            df, {'id_nulo': F.col('id_uc').isNull(), 'data_nula': F.col(coluna).isNull()}, nome
-        )
-    _validar_regras(inspecoes, {'resultado_nulo': F.col('resultado').isNull()}, 'inspecoes')
-    _validar_regras(
-        leituras,
-        {
-            'chave_nula': F.col('id_uc').isNull() | F.col('mes_referencia').isNull(),
-            'competencia_invalida': ~F.col('mes_referencia').rlike(COMPETENCIA_REGEX),
-            'consumo_nulo': F.col('consumo_kwh').isNull(),
-            'consumo_precisao': (
-                F.col('consumo_kwh').try_cast('decimal(18,2)').isNull()
-                | (F.col('consumo_kwh').try_cast('decimal(18,2)') != F.col('consumo_kwh'))
-            ),
-            'tipo_invalido': F.col('tipo_leitura').isNull()
-            | ~F.col('tipo_leitura').isin('REAL', 'ESTIMADA'),
-            **{f'{f}_nula': F.col(f).isNull() for f in FLAGS_LEITURAS},
-        },
-        'leituras contratuais',
-    )
+def aplicar_trocas_medidor(leituras, medidores):
+    """Uma regra de troca compartilhada pelas saídas auxiliares e comerciais."""
     # A retirada identifica também trocas sem leitura anterior (regra da #105).
     if medidores is not None:
         _exigir_colunas(
@@ -147,6 +96,50 @@ def construir_consumo_contratual(
             )
             .drop('_troca_cadastral')
         )
+    return leituras
+
+
+def construir_consumo_contratual(
+    leituras, cadastro, gd, inspecoes, data_referencia, medidores=None, fontes_validadas=None
+):
+    """Métodos da GD generalizados para todas as UCs, com proveniência auxiliar.
+
+    Mediana aproximada Spark (mesma convenção da Gold GD), apenas de leituras
+    utilizáveis da própria UC; nunca do gerador sintético. Sem doadores, bloqueia.
+    """
+    referencia = validar_data_referencia(data_referencia)
+    _exigir_colunas(
+        leituras,
+        ['id_uc', 'mes_referencia', 'consumo_kwh', 'tipo_leitura', *FLAGS_LEITURAS],
+        'leituras',
+    )
+    _exigir_colunas(cadastro, ['id_uc', *DIMENSOES], 'cadastro')
+    _exigir_colunas(gd, ['id_uc', 'data_conexao'], 'gd')
+    _exigir_colunas(inspecoes, ['id_uc', 'data', 'resultado'], 'inspecoes')
+    validar_fontes_comuns(cadastro, leituras, fontes_validadas)
+    _exigir_chave(gd, ['id_uc'], 'gd')
+    for df, coluna, nome in [(gd, 'data_conexao', 'gd'), (inspecoes, 'data', 'inspecoes')]:
+        if df.schema[coluna].dataType.simpleString() != 'date':
+            raise ValueError(f'{nome}: {coluna} precisa ser date')
+        _validar_regras(
+            df, {'id_nulo': F.col('id_uc').isNull(), 'data_nula': F.col(coluna).isNull()}, nome
+        )
+    _validar_regras(inspecoes, {'resultado_nulo': F.col('resultado').isNull()}, 'inspecoes')
+    _validar_regras(
+        leituras,
+        {
+            'consumo_nulo': F.col('consumo_kwh').isNull(),
+            'consumo_precisao': (
+                F.col('consumo_kwh').try_cast('decimal(18,2)').isNull()
+                | (F.col('consumo_kwh').try_cast('decimal(18,2)') != F.col('consumo_kwh'))
+            ),
+            'tipo_invalido': F.col('tipo_leitura').isNull()
+            | ~F.col('tipo_leitura').isin('REAL', 'ESTIMADA'),
+            **{f'{f}_nula': F.col(f).isNull() for f in FLAGS_LEITURAS},
+        },
+        'leituras contratuais',
+    )
+    leituras = aplicar_trocas_medidor(leituras, medidores)
     primeira = (
         inspecoes.filter(F.col('resultado') == 'IRREGULARIDADE CONFIRMADA')
         .groupBy('id_uc')
@@ -236,12 +229,7 @@ def derivar_complemento(consumo, detalhe, cadastro):
     adicionais = F.create_map(
         *[
             v
-            for nome, valor in [
-                ('Verde', '0'),
-                ('Amarela', '0.01885'),
-                ('Vermelha P1', '0.04463'),
-                ('Vermelha P2', '0.07877'),
-            ]
+            for nome, (_, valor) in BANDEIRAS.items()
             for v in (F.lit(nome), F.lit(Decimal(valor)).cast('decimal(18,6)'))
         ]
     )
@@ -281,7 +269,6 @@ def derivar_complemento(consumo, detalhe, cadastro):
     )
     return base.select(
         'id_fatura',
-        F.col('consumo_kwh_analitico').alias('volume_faturado_kwh'),
         'tarifa_base',
         'adicional_bandeira',
         'subgrupo_tarifario',
@@ -330,10 +317,13 @@ def construir_saidas_contratuais(
     chaves = ['id_uc', 'competencia']
     if detalhe.join(consumo, chaves, 'left_anti').limit(1).count():
         raise ValueError('Fatura sem leitura deve ser segregada antes da saída comercial')
+    complemento = complemento.select('id_fatura', *CAMPOS_COMPLEMENTO, 'proveniencia')
     faturado = detalhe.select(
         *chaves, 'id_fatura', 'valor_total', 'data_vencimento', 'bandeira_tarifaria', 'status'
     ).join(complemento, 'id_fatura', 'left')
-    base = consumo.join(faturado, chaves, 'left')
+    base = consumo.join(faturado, chaves, 'left').withColumn(
+        'volume_faturado_kwh', F.col('consumo_kwh_analitico')
+    )
     tem_fatura = F.col('id_fatura').isNotNull()
     base = (
         base.withColumn(
@@ -341,14 +331,11 @@ def construir_saidas_contratuais(
             F.when(
                 tem_fatura,
                 F.create_map(
-                    F.lit('Verde'),
-                    F.lit('VERDE'),
-                    F.lit('Amarela'),
-                    F.lit('AMARELA'),
-                    F.lit('Vermelha P1'),
-                    F.lit('VERMELHA_P1'),
-                    F.lit('Vermelha P2'),
-                    F.lit('VERMELHA_P2'),
+                    *[
+                        v
+                        for nome, (enum, _) in BANDEIRAS.items()
+                        for v in (F.lit(nome), F.lit(enum))
+                    ]
                 )[F.col('bandeira_tarifaria')],
             ),
         )
@@ -452,14 +439,9 @@ def validar_reconciliacao_contratual(tabelas, cadastro, raiz=CONTRATOS):
 def exportar_comerciais(tabelas, diretorio, metadados, raiz=CONTRATOS):
     """Dois CSVs canônicos; recibo de domínio, sem fingir manifesto de 12 tabelas."""
     import csv
-    import hashlib
     import json
     import shutil
-    from gold_faturas import conferir_arquivos_csv
-
-    def hash_csv(arquivo):
-        with arquivo.open('rb') as stream:
-            return hashlib.file_digest(stream, 'sha256').hexdigest()
+    from gold_faturas import conferir_arquivos_csv, hash_arquivo
 
     specs = especificacoes(raiz)
     pasta = Path(diretorio)
@@ -471,6 +453,7 @@ def exportar_comerciais(tabelas, diretorio, metadados, raiz=CONTRATOS):
         (
             df.write.mode('errorifexists')
             .option('header', 'true')
+            .option('escape', '"')
             .option('nullValue', '')
             .option('dateFormat', 'yyyy-MM-dd')
             .csv(str(temporaria))
@@ -497,7 +480,7 @@ def exportar_comerciais(tabelas, diretorio, metadados, raiz=CONTRATOS):
                 linhas += 1
                 for c in totais:
                     totais[c] += Decimal(r[c])
-        if hash_csv(arquivo) != hashes[str(arquivo)]:
+        if hash_arquivo(arquivo) != hashes[str(arquivo)]:
             raise ValueError('CSV comercial mudou após a conferência')
         recibo['tables'][nome] = {
             'file': arquivo.name,
@@ -507,7 +490,7 @@ def exportar_comerciais(tabelas, diretorio, metadados, raiz=CONTRATOS):
         }
         shutil.rmtree(temporaria)
     for tabela in recibo['tables'].values():
-        if hash_csv(pasta / tabela['file']) != tabela['sha256']:
+        if hash_arquivo(pasta / tabela['file']) != tabela['sha256']:
             raise ValueError('CSV comercial mudou antes da confirmação do recibo')
     temporario = pasta / 'comercial.json.tmp'
     temporario.write_text(json.dumps(recibo, ensure_ascii=False, indent=2) + '\n')

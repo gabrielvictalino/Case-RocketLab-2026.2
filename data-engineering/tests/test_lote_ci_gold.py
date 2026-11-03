@@ -79,6 +79,16 @@ class LoteGoldTest(unittest.TestCase):
                     montar_lote(plano, destino)
                 self.assertFalse(destino.exists())
 
+    def test_plano_nao_pode_reclassificar_amostras_como_reais(self):
+        plano = self.plano()
+        plano['synthetic'] = False
+        for entrada in plano['tables'].values():
+            entrada['synthetic'] = False
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(ContractError, 'recibo.*synthetic'):
+                montar_lote(plano, Path(tmp) / 'misto')
+            self.assertFalse((Path(tmp) / 'misto').exists())
+
 
 class CIGoldTest(unittest.TestCase):
     def workflow(self):

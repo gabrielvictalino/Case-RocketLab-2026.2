@@ -32,7 +32,7 @@ auxiliares reconciliáveis. Regras, fontes e operação estão no
 5. A publicação só é possível com todas as fontes/gates satisfeitos, escritor
    único por ACL e `diretorio_exportacao` em `/Volumes/...`. O código prepara
    revisões exclusivas, reconcilia integralmente, confirma por marcador e exporta
-   arquivos com conferência de conteúdo final. O agendamento permanece `PAUSED`.
+   arquivos com conferência de conteúdo final. O bundle não tem cron: cada extração é iniciada com data_referencia explícita.
 6. Consuma Delta pelo marcador `gold.tb_gold_faturas_publicacao`, com uma única
    leitura e `versionAsOf`; os nomes fixos legados não representam esta publicação.
    Após interrupção, consulte o marcador para recuperar o conjunto confirmado.

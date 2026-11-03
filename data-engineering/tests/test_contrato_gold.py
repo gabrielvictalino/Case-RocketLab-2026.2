@@ -18,6 +18,7 @@ from gold_contrato_faturas import (  # noqa: E402
     derivar_complemento,
     segregar_faturas_sem_leitura,
     cobertura_volume,
+    aplicar_trocas_medidor,
     agregar_receita_contratual,
     construir_consumo_contratual,
     construir_saidas_contratuais,
@@ -104,6 +105,7 @@ class ContratoGoldTest(unittest.TestCase):
 
     def test_sem_fatura_multiplas_status_e_bloqueio_de_campos_sem_fonte(self):
         faturas, cadastro, leituras = test_gold_faturas.GoldFaturasTest.fontes(self)
+        cadastro = cadastro.withColumn('bairro', F.lit('Bairro "Centro", rua\\nova\nRecife'))
         segunda = faturas.filter("id_fatura = 'FT2'").withColumn('id_fatura', F.lit('FT3'))
         faturas = faturas.unionByName(segunda)
         leituras = leituras.withColumn('tipo_leitura', F.lit('ESTIMADA'))
@@ -153,6 +155,10 @@ class ContratoGoldTest(unittest.TestCase):
                         {'reference_date': '2025-02-15', 'synthetic': True},
                     )
                     self.assertFalse((lote / 'manifest.json').exists())
+                    with (lote / 'receita_volume_mensal.csv').open(newline='') as arquivo:
+                        self.assertEqual(
+                            next(csv.DictReader(arquivo))['bairro'], cadastro.first().bairro
+                        )
                     recibo = json.loads((lote / 'comercial.json').read_text())
                     self.assertEqual(recibo['contract_version'], '0.3.0-provisional')
                     for nome, spec in especificacoes().items():
@@ -171,7 +177,7 @@ class ContratoGoldTest(unittest.TestCase):
                     cadastro,
                     complemento,
                 )
-            for c in ['volume_faturado_kwh', 'tarifa_base', 'adicional_bandeira']:
+            for c in ['tarifa_base', 'adicional_bandeira']:
                 with self.subTest(c=c), self.assertRaisesRegex(ValueError, 'ausente'):
                     construir_saidas_contratuais(
                         consumo,
@@ -198,7 +204,9 @@ class ContratoGoldTest(unittest.TestCase):
             'adicional_bandeira decimal(18,6), proveniencia string',
         )
         with persistir_quadros([consumo, *aux.values()]):
-            ts = construir_saidas_contratuais(consumo, aux, cadastro, comp)
+            ts = construir_saidas_contratuais(
+                consumo, aux, cadastro, comp.drop('volume_faturado_kwh')
+            )
             rows = {r.competencia: r for r in ts[COMERCIAIS[0]].collect()}
             self.assertEqual(rows[date(2025, 1, 1)].status_pagamento, 'ABERTA')
             self.assertEqual(rows[date(2025, 1, 1)].valor_arrecadado, Decimal(0))
@@ -242,6 +250,43 @@ class ContratoGoldTest(unittest.TestCase):
         spec = especificacoes()[COMERCIAIS[1]]
         with self.assertRaisesRegex(ValueError, 'precisao'):
             validar_tabela_contratual(agregado.withColumn('receita', F.lit(Decimal('1.001'))), spec)
+
+    def test_csv_com_aspas_barras_virgulas_e_quebras(self):
+        texto = 'Bairro "Centro", rua\\nova\nRecife'
+        df = self.spark.createDataFrame([(texto,)], 'bairro string')
+        with tempfile.TemporaryDirectory() as tmp:
+            exportar_csv({'texto': df}, str(Path(tmp) / 'saida'), {})
+
+    def test_validacao_comum_so_reutiliza_o_mesmo_par_de_frames(self):
+        import gold_faturas
+
+        _, cadastro, leituras = test_gold_faturas.GoldFaturasTest.fontes(self)
+        with patch.object(gold_faturas, '_exigir_chave', wraps=gold_faturas._exigir_chave) as chave:
+            validacao = gold_faturas.validar_fontes_comuns(cadastro, leituras)
+            chamadas = chave.call_count
+            gold_faturas.validar_fontes_comuns(cadastro, leituras, validacao)
+            self.assertEqual(chave.call_count, chamadas)
+            with self.assertRaisesRegex(ValueError, 'outros DataFrames'):
+                gold_faturas.validar_fontes_comuns(cadastro, leituras.limit(1), validacao)
+
+    def test_tipos_nao_decimais_rejeitam_conversao_silenciosa(self):
+        for tipo, schema, valor in [
+            ('date', 'v string', 'invalida'),
+            ('date', 'v timestamp', None),
+            ('boolean', 'v string', 'true'),
+            ('text', 'v int', 12),
+        ]:
+            spec = {
+                'table': 'teste',
+                'primary_key': ['v'],
+                'columns': {'v': {'type': tipo, 'nullable': True}},
+            }
+            df = self.spark.createDataFrame([(valor,)], schema)
+            with (
+                self.subTest(tipo=tipo, schema=schema),
+                self.assertRaisesRegex(ValueError, 'precisa ser'),
+            ):
+                validar_tabela_contratual(df, spec)
 
     def test_exportador_rejeita_orfas_e_alteracoes_com_mesmo_total(self):
         df = self.spark.createDataFrame(
@@ -362,17 +407,20 @@ class ContratoGoldTest(unittest.TestCase):
         consumo = construir_consumo_contratual(
             leituras, cadastro, gd, inspecoes, '2025-02-15', medidores
         )
-        aux = construir_faturas(faturas, cadastro, leituras, '2025-02-15')
+        leituras_com_troca = aplicar_trocas_medidor(leituras, medidores)
+        aux = construir_faturas(faturas, cadastro, leituras_com_troca, '2025-02-15')
+        self.assertIsNone(aux['faturas'].filter("id_fatura = 'FT2'").first().volume_analise_kwh)
         with persistir_quadros([consumo, *aux.values()]):
             comp = derivar_complemento(consumo, aux['faturas'], cadastro)
             row = comp.filter("id_fatura = 'FT2'").first()
-            self.assertEqual(row.volume_faturado_kwh, Decimal('100.00'))
+            self.assertNotIn('volume_faturado_kwh', comp.columns)
             self.assertEqual(row.tarifa_base, Decimal('1.181150'))
             self.assertEqual(row.adicional_bandeira, Decimal('0.018850'))
             self.assertEqual(row.doadores_tarifa, 1)
             ts = construir_saidas_contratuais(consumo, aux, cadastro)
             validar_reconciliacao_contratual(ts, cadastro)
             troca = ts[COMERCIAIS[0]].filter("id_fatura = 'FT2'").first()
+            self.assertEqual(troca.volume_faturado_kwh, Decimal('100.00'))
             self.assertTrue(troca.flag_troca_medidor)
             self.assertEqual(troca.metodo_consumo, 'MEDIANA_HISTORICA_UC')
             self.assertEqual(troca.valor_total, Decimal('216.00'))

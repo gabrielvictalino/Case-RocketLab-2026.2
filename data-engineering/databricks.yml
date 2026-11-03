@@ -39,10 +39,7 @@ resources:
     gold_faturas:
       name: V-Energy - Gold de faturas
       max_concurrent_runs: 1
-      schedule:
-        quartz_cron_expression: '0 0 3 5 * ?'
-        timezone_id: America/Fortaleza
-        pause_status: PAUSED
+      # Extração pontual: sem cron; informar data_referencia em cada execução.
       tasks:
         - task_key: gold_faturas
           timeout_seconds: 3600

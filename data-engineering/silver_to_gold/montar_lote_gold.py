@@ -27,6 +27,41 @@ from importador.contracts import (  # noqa: E402
 )
 
 
+def conferir_origem(nome, entrada, plano):
+    """Vincula arquivo e metadados ao recibo do produtor, não à declaração do plano.
+
+    Recibos devem vir de um produtor confiável. Isto não é assinatura digital.
+    """
+    origem = Path(entrada['file']).resolve()
+    candidatos = [origem.parent / n for n in ('comercial.json', 'manifest.json')]
+    recibo_path = (
+        Path(entrada['receipt']).resolve()
+        if 'receipt' in entrada
+        else next((p for p in candidatos if p.is_file()), None)
+    )
+    if recibo_path is None or not recibo_path.is_file():
+        raise ContractError(f'{nome}: recibo de origem obrigatório')
+    try:
+        recibo = json.loads(recibo_path.read_text())
+        if recibo['contract_version'] != '0.3.0-provisional':
+            raise ContractError(f'{nome}: versão do recibo divergente')
+        if type(recibo['synthetic']) is not bool:
+            raise ContractError(f'{nome}: synthetic do recibo precisa ser booleano')
+        for chave in ('period', 'reference_date', 'synthetic'):
+            if recibo[chave] != plano[chave]:
+                raise ContractError(f'{nome}: proveniência do recibo divergente ({chave})')
+        tabela = recibo['tables'][nome]
+        if (recibo_path.parent / tabela['file']).resolve() != origem:
+            raise ContractError(f'{nome}: arquivo não corresponde ao recibo')
+        if tabela['sha256'] != entrada['sha256'] or file_hash(origem) != tabela['sha256']:
+            raise ContractError(f'{nome}: hash não corresponde ao recibo')
+        return recibo_path, file_hash(recibo_path)
+    except ContractError:
+        raise
+    except (KeyError, TypeError, ValueError, OSError) as exc:
+        raise ContractError(f'{nome}: recibo de origem inválido') from exc
+
+
 def montar_lote(plano, destino):
     specs = specifications()
     if set(plano['tables']) != set(specs):
@@ -42,6 +77,7 @@ def montar_lote(plano, destino):
             for chave in ('period', 'reference_date', 'synthetic'):
                 if entrada[chave] != plano[chave]:
                     raise ContractError(f'{nome}: proveniência divergente ({chave})')
+            recibo, hash_recibo = conferir_origem(nome, entrada, plano)
             origem = Path(entrada['file'])
             if file_hash(origem) != entrada['sha256']:
                 raise ContractError(f'{nome}: hash da fonte divergente')
@@ -49,6 +85,8 @@ def montar_lote(plano, destino):
             shutil.copyfile(origem, arquivo)
             if file_hash(arquivo) != entrada['sha256']:
                 raise ContractError(f'{nome}: cópia divergente')
+            if file_hash(recibo) != hash_recibo:
+                raise ContractError(f'{nome}: recibo mudou durante a cópia')
             # Validação escalar e PK em streaming; FKs e gates relacionais em --verificar.
             indices = [list(spec['columns']).index(c) for c in spec['primary_key']]
             chaves = set()

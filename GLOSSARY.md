@@ -23,11 +23,11 @@ _Evitar_: rede, linha, circuito
 ### Medição
 
 **Consumo analítico**:
-Consumo (kWh) de uma competência usado em todas as análises e telas; igual ao consumo original, exceto nos meses de troca de medidor, em que é estimado pelo histórico da UC.
+Consumo (kWh) de uma competência usado nas análises e telas; igual ao original quando a leitura é utilizável. Leituras bloqueadas, incluindo trocas, são estimadas pela mediana da UC na mesma fase da GD, com fallback ao histórico utilizável da UC. Sem doador, a exportação é bloqueada.
 _Evitar_: consumo corrigido, consumo tratado
 
 **Consumo original**:
-Consumo (kWh) como veio do sistema de medição, preservado para auditoria.
+Consumo (kWh) da Silver após normalizações e correções de sinal comprovadas, preservado antes da imputação da Gold.
 _Evitar_: consumo bruto
 
 **Leitura estimada**:
@@ -76,19 +76,22 @@ Parte da receita cujas faturas foram pagas.
 _Evitar_: receita recebida, caixa
 
 **Volume faturado**:
-Energia (kWh) das leituras que têm fatura correspondente nas competências do período.
+Volume analítico (kWh) associado às faturas elegíveis nas competências do período, incluindo estimativas identificadas por metodo_consumo. Não comprova volume do sistema comercial; sem fatura é zero e faturas sem leitura são segregadas.
 _Evitar_: consumo total, energia vendida
 
 **Efeito-volume**:
 Parte da variação de receita entre dois períodos explicada pela mudança na energia faturada, a preços do período de comparação.
 
 **Efeito-preço**:
-Parte da variação de receita explicada pela mudança de preço, dividida em reajuste (tarifa base da classe) e bandeira. O que sobra é o efeito-mix.
+Parte da variação de receita explicada pela mudança de preço, dividida em reajuste (tarifa base derivada por subgrupo tarifário e competência) e bandeira. O que sobra é o efeito-mix.
 _Evitar_: efeito-tarifa
 
 **Grupo de UC**:
 Recorte temporal que classifica cada UC na competência: UCs com GD (a partir do mês de conexão), UCs com irregularidade confirmada (a partir do mês da primeira inspeção técnica com irregularidade confirmada) e demais UCs. A ordem de precedência estrita é GD > irregularidade confirmada > demais.
 _Evitar_: tipo de UC, cluster de cliente
+
+**Tarifa base**:
+Mediana de valor_energia dividido pelo consumo utilizável positivo, descontado o adicional da bandeira, por subgrupo tarifário × competência. Derivada das faturas do case, sem homologação regulatória. Os adicionais fixos do case não representam o histórico da ANEEL.
 
 **Tarifa média**:
 Receita dividida pelo volume faturado, em R$/kWh. É derivada; a base não tem tabela de tarifas.

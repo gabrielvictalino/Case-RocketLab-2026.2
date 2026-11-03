@@ -43,7 +43,7 @@ alinhadas ao significado aprovado para o case. Isso não aprova os demais domín
   leitura, no grão comercial: permite somar observado/estimado e calcular a cobertura.
   `LEITURA_UTILIZAVEL` com tipo `ESTIMADA` continua distinguível de leitura `REAL`.
 - O complemento é derivado quando o widget está vazio. Um complemento explícito
-  continua sujeito aos gates, inclusive volume igual ao analítico. O importador
+  fornece somente tarifas e proveniência; o volume é sempre derivado do analítico. O importador
   também verifica essa igualdade para toda linha com fatura.
 - Os componentes da R5 somam produtos decimais antes de arredondar por grão.
   Não se fixa `k₀ = 4/3`: resíduos e composição podem mudar o fator e o mix.
