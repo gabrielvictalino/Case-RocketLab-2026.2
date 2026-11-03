@@ -104,18 +104,36 @@ beforeEach(() => {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (req: Request) => {
-      if (req.url.includes('/api/v1/assistente/perguntas')) {
+      const pathname = new URL(req.url).pathname
+      if (pathname === '/api/v1/assistente/perguntas') {
         const corpo = (await req.clone().json()) as Record<string, unknown>
         perguntasEnviadas.push(corpo)
         return roteiro(corpo)
       }
-      if (req.url.includes('/api/v1/meta/filtros')) {
+      if (pathname === '/api/v1/meta/carga') {
+        return json(CARGA)
+      }
+      if (pathname === '/api/v1/meta/filtros') {
         return json(FILTROS)
       }
-      if (req.url.includes('/api/v1/ordens-inspecao')) {
+      if (pathname === '/api/v1/ordens-inspecao') {
         return json({ items: [], total: 0, page: 1, size: 25 })
       }
-      return json(CARGA)
+      if (pathname === '/api/v1/perdas/fila') {
+        const totais = {
+          itens: 0,
+          energia_recuperar_kwh: '0.00',
+          energia_recuperar_reais: '0.00',
+        }
+        return json({
+          items: [],
+          total: 0,
+          page: 1,
+          size: 25,
+          totais: { pagina: totais, filtro: totais },
+        })
+      }
+      return json({ detail: 'Recurso não simulado no teste', code: 'NAO_ENCONTRADO' }, 404)
     }),
   )
 })
