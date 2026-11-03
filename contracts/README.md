@@ -146,6 +146,16 @@ $\Delta R = R_1 - R_0$ em quatro efeitos:
 
 $$\Delta R = \text{volume} + \text{reajuste} + \text{bandeira} + \text{mix}$$
 
+A unidade de cálculo é o subgrão `(municipio, bairro, classe, grupo_uc)` da tabela
+`receita_volume_mensal`. Para cada período, somam-se as competências de cada
+subgrão e aplica-se a fórmula uma vez. Totais e agrupamentos somam os efeitos
+dos subgrãos, sem decompor novamente o agregado. A migração de volume entre
+classes, bairros ou grupos aparece no efeito-volume ao preço de cada subgrão;
+o mix é o resíduo dentro do subgrão, inclusive composição entre competências
+e arredondamento. Uma UC que muda de grupo sai de um subgrão e entra em outro:
+na saída, se $Q_1=0$, $Q_0\ne 0$ e $T_0+B_0\ne 0$, o volume é $-R_0$ e o mix
+é $R_1$; na entrada, se $Q_0=0$, o volume é $\Delta R$.
+
 ### Fórmulas Canônicas
 - **Volume:** $\text{volume} = (Q_1 - Q_0) \cdot \bar{p}_0$
 - **Reajuste:** $\text{reajuste} = Q_1 \cdot (t_1 - t_0) \cdot k_0$
@@ -153,28 +163,30 @@ $$\Delta R = \text{volume} + \text{reajuste} + \text{bandeira} + \text{mix}$$
 - **Mix:** $\text{mix} = \Delta R - \text{volume} - \text{reajuste} - \text{bandeira}$
 
 Onde:
-- $Q_0, Q_1 = \sum \text{volume\_faturado\_kwh}$ sobre as linhas filtradas.
-- $R_0, R_1 = \sum \text{receita}$ sobre as linhas filtradas.
-- $T_0, T_1 = \sum \text{componente\_tarifa\_reais}$ sobre as linhas filtradas.
-- $B_0, B_1 = \sum \text{componente\_bandeira\_reais}$ sobre as linhas filtradas.
-- $\bar{p}_0 = R_0 / Q_0$: preço médio base do agregado (R$/kWh).
-- $t_0 = T_0 / Q_0, \quad t_1 = T_1 / Q_1$: tarifa base média do agregado (R$/kWh).
-- $b_0 = B_0 / Q_0, \quad b_1 = B_1 / Q_1$: adicional de bandeira tarifária médio do agregado (R$/kWh).
-- $k_0 = R_0 / (T_0 + B_0)$: fator de faturamento tributário.
+- $Q_0, Q_1 = \sum \text{volume\_faturado\_kwh}$ sobre as linhas do subgrão em cada período.
+- $R_0, R_1 = \sum \text{receita}$ sobre as linhas do subgrão em cada período.
+- $T_0, T_1 = \sum \text{componente\_tarifa\_reais}$ sobre as linhas do subgrão em cada período.
+- $B_0, B_1 = \sum \text{componente\_bandeira\_reais}$ sobre as linhas do subgrão em cada período.
+- $\bar{p}_0 = R_0 / Q_0$: preço médio base do subgrão (R$/kWh).
+- $t_0 = T_0 / Q_0, \quad t_1 = T_1 / Q_1$: tarifa base média do subgrão (R$/kWh).
+- $b_0 = B_0 / Q_0, \quad b_1 = B_1 / Q_1$: adicional de bandeira tarifária médio do subgrão (R$/kWh).
+- $k_0 = R_0 / (T_0 + B_0)$: fator de faturamento tributário do subgrão.
 
 ### Casos de Borda e Regras de Arredondamento
 - Se $Q_0 = 0$ ou $T_0 + B_0 = 0$: $\text{volume} = \Delta R$, e $\text{reajuste} = \text{bandeira} = \text{mix} = 0$.
-- Se $Q_1 = 0$: $\text{volume} = -R_0$, e $\text{reajuste} = \text{bandeira} = \text{mix} = 0$.
+- Se $Q_1 = 0$, desde que a condição anterior não se aplique: $\text{volume} = -R_0$, $\text{reajuste} = \text{bandeira} = 0$ e $\text{mix} = R_1$
+  (cobrança sem volume no período atual, como uma taxa mínima), o que mantém o fechamento em $\Delta R$.
 - Os cálculos são realizados em Decimal de precisão total. Os efeitos de volume, reajuste e bandeira
-  são arredondados uma única vez para duas casas decimais com `ROUND_HALF_UP`.
+  são arredondados uma única vez por subgrão para duas casas decimais com `ROUND_HALF_UP`.
 - O efeito **mix** absorve o resíduo algébrico e de arredondamento, garantindo que
   $\text{volume} + \text{reajuste} + \text{bandeira} + \text{mix} = \Delta R$ exatamente.
-- A agregação é realizada pela tela somando os efeitos de cada subgrão; não existe média de preços
+- A agregação é realizada somando os efeitos de cada subgrão; não existe média de preços
   entre diferentes segmentos ou classes.
 
 ### Exemplo Numérico Conferido com a Amostra (`receita_volume_mensal.csv`)
 
-Recorte real da amostra determinística para **Recife, Residencial** comparando a competência `2025-06-01` (bandeira verde)
+Neste exemplo os preços são iguais entre subgrãos, e ambas as leituras produzem
+os mesmos efeitos. Recorte real da amostra determinística para **Recife, Residencial** comparando a competência `2025-06-01` (bandeira verde)
 com `2025-07-01` (quando entra a bandeira amarela de R$ 0,10/kWh):
 
 - **Período Base 0 (`2025-06-01`):**

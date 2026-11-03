@@ -12,6 +12,10 @@ diagnóstico da receita.
 O ponto que recebe energia e tem um medidor; entidade central da plataforma. Um mesmo titular pode ter várias UCs.
 _Evitar_: cliente, consumidor, instalação
 
+**UC ativa**:
+Unidade consumidora com ao menos um registro mensal nas competências do período,
+inclusive quando não há fatura. Cada UC é contada uma vez no período.
+
 **Classe**:
 Categoria tarifária da UC: Residencial, Comercial, Industrial, Rural ou Poder Público.
 _Evitar_: tipo de cliente, segmento
@@ -150,6 +154,35 @@ Ida a campo em que a vistoria não pôde ser feita (ex.: imóvel fechado). A ord
 **Taxa de acerto**:
 Percentual das inspeções do período que confirmaram irregularidade.
 _Evitar_: precisão, assertividade
+
+### Atendimento
+
+**Atendimento**:
+Contato do titular de uma UC com a distribuidora, identificado por um protocolo.
+_Evitar_: chamado
+
+**Protocolo**:
+Identificador único de um atendimento, que reúne as etapas da sua linha do tempo.
+
+**Etapa do atendimento**:
+Cada registro da linha do tempo de um atendimento, em ordem cronológica pela
+sequência, independentemente da ação registrada.
+_Evitar_: tratativa, interação
+
+**Assunto**:
+Classificação temática do atendimento: `FALTA DE ENERGIA`, `FATURA`,
+`DANO ELETRICO`, `LIGACAO NOVA`, `GERACAO DISTRIBUIDA` ou `RELIGACAO`.
+Subassunto é um detalhamento do assunto presente na origem, mas não faz parte
+do contrato de atendimento.
+
+**Status do atendimento**:
+Situação do atendimento: `ENCERRADO` quando há data de fechamento, ou `EM ABERTO`
+quando não há.
+
+**Nota de satisfação**:
+Avaliação do atendimento atribuída pelo titular da UC, de 1 a 5, com uma casa
+decimal. Nota nula significa que o titular não avaliou; não é zero e não entra
+na média de satisfação.
 
 ### Portal
 

@@ -34,3 +34,8 @@ tarifa homologada. A decomposição da receita segue a R5 do contrato no consumi
 A referência do status de pagamento é um parâmetro explícito da carga.
 A [matriz de aderência](docs/gold/aderencia-faturas-0.3.md) identifica os bloqueios.
 Os testes locais e o job Gold no agregador `CI` usam Spark com dados sintéticos.
+
+## Suposições
+
+- Na Visão Geral, a variação de tarifa média e de UCs é neutra, pois seu sentido favorável depende do contexto.
+- As séries de comparação são alinhadas pela posição das competências nos períodos; valores excedentes são descartados e competências sem correspondente permanecem vazias.

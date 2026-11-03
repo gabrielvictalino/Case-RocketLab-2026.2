@@ -15,10 +15,10 @@ Documento vivo e compartilhado pela equipe de Engenharia de Dados para consolida
 | Domínio Gold | Notebook / Módulo | Tabelas Silver Cruzadas (`JOIN`) | Tabelas Gold Publicadas | Lideranças / Módulos Consumidores | Dicionário Detalhado |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **1. Geração Distribuída (GD)** | `silver-to-gold-geracao-distribuida.ipynb` | • `tb_geracao_distribuida`<br>• `tb_unidades_consumidoras`<br>• `tb_leituras` | • `gd_uc`<br>• `tb_gd_uc`<br>• `tb_gd_consumo_mensal`<br>• `tb_gd_resumo_mensal` | • **Henrique Duarte** (Comercial)<br>• **Camila Barreto** (Atendimento)<br>• **Rafael Coutinho** (Perdas)<br>• **Patrícia Lins** (TI / Agente IA) | [`docs/gold/geracao_distribuida.md`](geracao_distribuida.md) |
-| **2. Faturamento e Receita** | `silver-to-gold-faturas.ipynb`<br>`gold_faturas.py` *(PR #67)* | • `tb_faturas`<br>• `tb_faturas_pendentes_cadastro`<br>• `tb_unidades_consumidoras`<br>• `tb_leituras` | • `tb_faturas`<br>• `tb_faturas_excluidas`<br>• `tb_faturamento_mensal` | • **Henrique Duarte** (Comercial)<br>• **Camila Barreto** (Atendimento)<br>• **Diretoria** (Visão Geral) | `docs/gold/faturas.md` *(em revisão no PR #67)* |
-| **3. Continuidade da Rede (DEC/FEC)** | *(a integrar pela equipe)* | • `tb_ocorrencias_rede`<br>• `tb_unidades_consumidoras` | • `continuidade_alimentador_mensal`<br>• `ocorrencias_uc`<br>• `dim_alimentador` | • **Beatriz Farias** (Operação)<br>• **Camila Barreto** (Atendimento) | *(a adicionar)* |
+| **2. Faturamento e Receita** | `silver-to-gold-faturas.ipynb`<br>`gold_faturas.py` *(PR #67)* | • `tb_faturas`<br>• `tb_faturas_pendentes_cadastro`<br>• `tb_unidades_consumidoras`<br>• `tb_leituras` | • `tb_faturas`<br>• `tb_faturas_excluidas`<br>• `tb_faturamento_mensal`<br>• `uc_consumo_faturamento_mensal`<br>• `receita_volume_mensal` | • **Henrique Duarte** (Comercial)<br>• **Camila Barreto** (Atendimento)<br>• **Diretoria** (Visão Geral) | `docs/gold/faturas.md` *(em revisão no PR #67)* |
+| **3. Continuidade da Rede (DEC/FEC)** | `silver-to-gold-continuidade.ipynb` | • `tb_ocorrencias_rede`<br>• `tb_unidades_consumidoras` | • `continuidade_alimentador_mensal`<br>• `ocorrencias_uc`<br>• `dim_alimentador` | • **Beatriz Farias** (Operação)<br>• **Camila Barreto** (Atendimento) | [`docs/gold/continuidade.md`](continuidade.md) |
 | **4. Perdas e Fila de Inspeção** | *(a integrar pela equipe)* | • `tb_inspecoes`<br>• `tb_leituras`<br>• `tb_unidades_consumidoras`<br>• `tb_medidores`<br>• `tb_geracao_distribuida` | • `inspecoes_historicas`<br>• `fila_inspecao` | • **Rafael Coutinho** (Perdas)<br>• **Henrique Duarte** (Comercial) | *(a adicionar)* |
-| **5. Cadastro 360, Medidores e Atendimentos** | *(a integrar pela equipe)* | • `tb_unidades_consumidoras`<br>• `tb_medidores`<br>• `tb_atendimentos`<br>• `tb_geracao_distribuida`<br>• `tb_inspecoes` | • `dim_uc`<br>• `medidores_historico`<br>• `atendimentos`<br>• `atendimentos_historico` | • **Camila Barreto** (Atendimento)<br>• **Patrícia Lins** (TI / Agente IA) | *(a adicionar)* |
+| **5. Cadastro 360, Medidores e Atendimentos** | `silver-to-gold-atendimentos.ipynb` (atendimentos)<br>*(`dim_uc` e medidores a integrar pela equipe)* | • `tb_unidades_consumidoras`<br>• `tb_medidores`<br>• `tb_atendimentos`<br>• `tb_geracao_distribuida`<br>• `tb_inspecoes` | • `dim_uc`<br>• `medidores_historico`<br>• `atendimentos`<br>• `atendimentos_historico` | • **Camila Barreto** (Atendimento)<br>• **Patrícia Lins** (TI / Agente IA) | [`docs/gold/atendimentos.md`](atendimentos.md) (atendimentos)<br>*(demais a adicionar)* |
 
 **Nomes das tabelas Gold:** cada tabela do contrato do portal leva o nome do contrato, sem prefixo (`gd_uc`, `continuidade_alimentador_mensal`), o mesmo do `<tabela>.csv` que o importador espera (`contracts/tabelas/<tabela>.yaml`). As tabelas analíticas fora do contrato levam o prefixo `tb_` (`tb_gd_uc`, `tb_gd_consumo_mensal`).
 
@@ -98,11 +98,16 @@ Documento vivo e compartilhado pela equipe de Engenharia de Dados para consolida
 
 ---
 
-## 4. Domínio 3 — Continuidade da Rede: DEC, FEC e CHI *(Espaço para a equipe)*
+## 4. Domínio 3 — Continuidade da Rede: DEC, FEC e CHI
 
-- **Notebook / Módulo:** *(preencher ao integrar)*
+- **Arquivo:** `data-engineering/silver_to_gold/silver-to-gold-continuidade.ipynb`
+- **Dicionário completo:** [`docs/gold/continuidade.md`](continuidade.md), com as regras (seção 3), o dicionário das colunas (seção 4) e os números da base (seção 6)
 - **Fontes Silver:** `` `v-energy`.silver.tb_ocorrencias_rede `` $\bowtie$ `` `v-energy`.silver.tb_unidades_consumidoras ``
-- **Tabelas Gold e perguntas respondidas:** *(preencher com `continuidade_alimentador_mensal`, `ocorrencias_uc` e `dim_alimentador`, detalhando o cálculo com `duracao_efetiva_min`, `flag_sobreposicao` e `flag_evento_atipico`)*.
+- **Tabelas publicadas:** `continuidade_alimentador_mensal` (alimentador × competência), `ocorrencias_uc` (ocorrência por UC) e `dim_alimentador` (alimentador).
+- **Perguntas de negócio respondidas:**
+  - *DEC, FEC e CHI de cada alimentador ao longo do tempo e os piores alimentadores, para direcionar a manutenção preventiva (Beatriz Farias, seção 4.2 do case).*
+  - *Interrupções de uma UC na visão 360 (Camila Barreto).*
+- **Decisões que afetam os números:** o CHI soma `duracao_efetiva_min`, as interrupções contam só `flag_sobreposicao = false`, o denominador é o número de UCs do alimentador no cadastro e `flag_evento_atipico` só marca as competências do evento, sem removê-las.
 
 ---
 
@@ -114,8 +119,21 @@ Documento vivo e compartilhado pela equipe de Engenharia de Dados para consolida
 
 ---
 
-## 6. Domínio 5 — Cadastro 360, Medidores e Atendimentos *(Espaço para a equipe)*
+## 6. Domínio 5 — Cadastro 360, Medidores e Atendimentos
+
+### 6.1. Atendimentos
+
+- **Arquivo:** `data-engineering/silver_to_gold/silver-to-gold-atendimentos.ipynb`
+- **Dicionário completo:** [`docs/gold/atendimentos.md`](atendimentos.md), com as regras (seção 2), o dicionário das colunas (seção 3) e os números da base (seção 5)
+- **Fontes Silver:** `` `v-energy`.silver.tb_atendimentos `` $\bowtie$ `` `v-energy`.silver.tb_unidades_consumidoras `` (integridade do `id_uc`)
+- **Tabelas publicadas:** `atendimentos` (protocolo) e `atendimentos_historico` (protocolo × sequência).
+- **Perguntas de negócio respondidas:**
+  - *Os chamados que a UC já abriu, com assunto, nota e a linha do tempo das tratativas, no bloco de chamados da Visão 360 (Camila Barreto, seção 4.2 do case).*
+  - *Volume e satisfação por assunto e ao longo do tempo, para o agente de IA (Patrícia Lins).*
+- **Decisões que afetam os números:** a nota fica decimal de 1 a 5, como na base, e nula quando o titular não avaliou (#117); o `status` vem da existência de `data_fechamento`; o `assunto` mantém os 6 valores da Silver, sem o subassunto. Em julho de 2025, mês do evento atípico da continuidade, os atendimentos triplicam e a nota média cai de 4,10 para 3,11.
+
+### 6.2. Cadastro (`dim_uc`) e medidores *(Espaço para a equipe)*
 
 - **Notebook / Módulo:** *(preencher ao integrar)*
-- **Fontes Silver:** `tb_unidades_consumidoras`, `tb_medidores`, `tb_atendimentos`
-- **Tabelas Gold e perguntas respondidas:** *(preencher com `dim_uc`, `medidores_historico`, `atendimentos` e `atendimentos_historico`)*.
+- **Fontes Silver:** `tb_unidades_consumidoras`, `tb_medidores`, `tb_geracao_distribuida`, `tb_inspecoes`
+- **Tabelas Gold e perguntas respondidas:** *(preencher com `dim_uc` e `medidores_historico`)*.

@@ -163,7 +163,8 @@ versão da carga.
 4. **Insight** com o mesmo funcionamento da Visão Geral.
 
 A decomposição vale para qualquer par de períodos, então é calculada na hora
-sobre `receita_volume_mensal`. A fórmula é a mesma do diagnóstico e do
+sobre `receita_volume_mensal`. Os efeitos são calculados por município, bairro, classe
+e grupo de UC, e os agregados somam esses efeitos. A fórmula é a mesma do diagnóstico e do
 agente, e vem do contrato.
 
 ### 4.3 Unidade Consumidora (F3)
@@ -178,14 +179,26 @@ agente, e vem do contrato.
   aparece para o atendente.
 - **Explicação da conta** (determinística, sem LLM): compara a última fatura
   com a do mesmo mês do ano anterior e separa a variação em consumo, bandeira
-  e tarifa numa frase pronta.
+  e tarifa numa frase pronta. A troca de medidor e a leitura estimada são
+  citadas como fato, sem dizer que a fatura foi estimada.
 - Faturas em aberto, com dias de atraso.
-- **Interrupções da UC** nos últimos 12 meses (data, duração, causa) e o
-  resumo do alimentador no mesmo período (nº de ocorrências, DEC).
+- **Interrupções da UC** nos últimos 12 meses (data, duração, duração
+  efetiva, causa, sobreposição) e o resumo do alimentador no mesmo período
+  (nº de interrupções, DEC).
 - Chamados com histórico de tratativas e nota de satisfação.
 - Inspeções da UC (históricas e novas) e ordem ativa, se houver.
 
 A tela ignora o período global e usa sempre os últimos 12 meses da UC.
+
+Decisões de backend da Visão 360:
+- (D1) Data de referência obtida de `manifesto->>'reference_date'` da carga mais recente.
+- (D2) Janela de 12 meses pela maior competência da UC (ou fallback da carga), sem período global.
+- (D3) Resumo do alimentador agrega `Σ chi_horas ÷ numero_ucs` e arredonda uma única vez com HALF_UP.
+- (D4) Explicação da conta determinística por R5. O motivo principal é o efeito (consumo, tarifa,
+  bandeira ou outros) de maior módulo com o sinal da variação. Com base zero, a frase omite o
+  percentual e usa a variação absoluta. Os avisos de medição seguem a ordem cronológica.
+- (D5) Normalização devolve 422 `UC_INVALIDA` para formato inválido e 404 `UC_NAO_ENCONTRADA` se ausente.
+- (D6) Sessão do portal acessa `analytics.*`, `portal_read.inspecoes` e `operations.*` sem passar por `ai_read`.
 
 ### 4.4 Perdas (F4, F5, D1)
 
@@ -195,6 +208,17 @@ Duas abas.
 motivo da suspeita, energia a recuperar, inspeção anterior (se houver) e
 filtros por município, bairro e classe. O gerente marca várias linhas e gera
 as ordens **em lote**. Exportação para Excel (D1).
+
+Decisões da fila:
+
+- Ordenação por score decrescente e ID da UC crescente; a inspeção anterior usa
+  a data mais recente, preferindo origem portal e depois o maior ID em empates.
+- Os totais da página e do filtro usam os valores da Gold; ambos e os itens
+  compartilham o snapshot da consulta. Página além do fim retorna itens vazios.
+- Filtros usam igualdade literal, inclusive valores vazios. O frontend omite
+  parâmetros vazios. A página aceita até 1.000.000 e o tamanho até 100.
+- A paginação usa OFFSET: ordens ou cargas alteradas entre requisições podem
+  deslocar itens entre páginas. O cache e sua invalidação ficam para a leva 2.
 
 **Ordens**: lista por status, com as ações de cada estado e
 exportação/importação da planilha de campo.
@@ -382,11 +406,14 @@ separados.
 |---|---|---|---|
 | `analytics` | Tabelas do contrato Gold | importador | role `portal` |
 | `operations` | `usuarios`, `ordens_inspecao`, `ordem_eventos`, `inspecoes`, `importacoes`, `agente_auditoria`, `cargas` | role `portal`; `cargas` pelo importador | role `portal` |
-| `ai_read` | Views sobre `analytics`, sem nome, CPF e endereço | importador, a cada carga | role `ai_read` |
+| `ai_read` | Views sobre `analytics` e `operations.inspecoes`, sem nome, CPF e endereço | importador, a cada carga | role `ai_read` |
 
 Role `ai_read`: só `SELECT` em `ai_read`, `default_transaction_read_only = on`,
-`statement_timeout = 5s` e sem `EXECUTE` em `set_config` e na família
-`pg_sleep`. Como a própria sessão pode mudar o timeout e o modo só leitura com
+`statement_timeout = 5s` e sem `EXECUTE` em `set_config`, na família
+`pg_sleep` e nos advisory locks de sessão (`pg_advisory_lock`,
+`pg_try_advisory_lock` e as variantes `_shared`). O `ROLLBACK` não solta um
+advisory lock de sessão, e o lock das cargas na mão da IA travaria o
+importador. Como a própria sessão pode mudar o timeout e o modo só leitura com
 `SET`, o agente roda cada consulta numa transação encerrada com `ROLLBACK`, e a
 mudança não sobrevive na conexão do pool. A auditoria do agente é gravada pela
 conexão do portal, nunca pela do agente.

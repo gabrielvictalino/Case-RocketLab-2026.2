@@ -88,3 +88,51 @@ class PaginaOrdens(BaseModel):
     total: int
     page: int
     size: int
+
+
+class Inspecao(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id_inspecao: str
+    data: date
+    inspetor: str
+    resultado: str
+    tipo_irregularidade: str | None
+    kwh_recuperado: Decimal
+    origem: str
+
+
+class FiltroFila(BaseModel):
+    municipio: str | None = None
+    bairro: str | None = None
+    classe: str | None = None
+
+
+class TotaisEnergia(BaseModel):
+    itens: int
+    energia_recuperar_kwh: Decimal
+    energia_recuperar_reais: Decimal
+
+
+class TotaisFila(BaseModel):
+    pagina: TotaisEnergia
+    filtro: TotaisEnergia
+
+
+class ItemFila(BaseModel):
+    id_uc: str
+    municipio: str
+    bairro: str
+    classe: str
+    score: Decimal
+    motivos: list[str]
+    energia_recuperar_kwh: Decimal
+    energia_recuperar_reais: Decimal
+    inspecao_anterior: Inspecao | None
+
+
+class PaginaFila(BaseModel):
+    items: list[ItemFila]
+    total: int
+    page: int
+    size: int
+    totais: TotaisFila
