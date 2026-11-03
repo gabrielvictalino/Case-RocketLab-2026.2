@@ -102,8 +102,8 @@ ou zerada) e define se cada módulo precisa rodar:
   `npm run typecheck` (`tsc --noEmit`), `npm test` (Vitest) e `npm run build`
   (`tsc -b && vite build`).
 
-O agregador `CI` (`if: always()`, `needs: [changes, backend, frontend]`) sempre
-executa e avalia os dois módulos antes de terminar: exige `changes == success` e,
+O agregador `CI` (`if: always()`, `needs: [changes, backend, frontend, faturas, gold]`) sempre
+executa e avalia os módulos antes de terminar: exige `changes == success` e,
 para cada módulo, exige `success` quando houve mudança relevante (`changed == true`)
 ou `skipped` quando não houve (`changed != true`). Qualquer `failure`, `cancelled`
 ou `skipped` indevido emite `::error::` indicando o módulo, o valor esperado e o
@@ -125,3 +125,14 @@ Execute `python3 -m unittest discover -s tests -v` e
 `bash -n scripts/configurar-github.sh`. Os testes usam um repositório temporário
 e verificam eventos de PR/push, rejeição de commits e branches inválidos,
 promoção somente da `dev` local e rejeição de whitespace.
+
+### Dados no agregador CI
+
+O job `faturas` preserva a suíte da publicação Silver em
+`tests/test_publicacao_faturas.py`. O job `gold` executa lint, formatação e testes
+em `data-engineering/tests`, incluindo marcadores, interrupções simuladas,
+R2/R3, exportação, montagem de lote e o próprio detector/agregador. Dispara para
+`data-engineering/`, `contracts/`, `importador/`, `pyproject.toml` e `ci.yml`.
+`gold-faturas.yml` foi removido para evitar repetir a suíte Gold. O agregador
+exige `success` quando o detector aciona o job e `skipped` quando o dispensa;
+falha, cancelamento e skip indevido reprovam o check obrigatório.

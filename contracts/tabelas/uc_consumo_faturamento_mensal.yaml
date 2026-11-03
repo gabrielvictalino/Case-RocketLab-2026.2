@@ -25,13 +25,13 @@ columns:
     type: numeric(18,2)
     nullable: false
     unit: kWh
-    description: Consumo como veio do sistema de medição, antes de qualquer ajuste.
+    description: Consumo da Silver após suas normalizações de sinal; preservado antes da imputação analítica da Gold.
   consumo_kwh_analitico:
     type: numeric(18,2)
     nullable: false
     unit: kWh
     minimum: 0
-    description: Consumo analítico ajustado para análise de perdas e comportamento da carga.
+    description: Consumo utilizável da Silver ou mediana da própria UC na fase da GD, com fallback histórico. Obrigatório; sem doadores, a exportação é bloqueada com contagem.
   metodo_consumo:
     type: text
     nullable: false
@@ -64,7 +64,7 @@ columns:
     nullable: false
     unit: kWh
     minimum: 0
-    description: Volume de energia elétrica faturado à UC na fatura da competência (zero quando não há fatura).
+    description: Volume analítico associado à fatura elegível no case, igual a consumo_kwh_analitico, observado ou estimado conforme metodo_consumo. Não comprova volume do sistema comercial. Zero sem fatura; faturas sem leitura são segregadas.
   valor_total:
     type: numeric(18,2)
     nullable: false
@@ -82,13 +82,13 @@ columns:
     nullable: true
     unit: R$/kWh
     minimum: 0
-    description: Tarifa base de consumo homologada em R$/kWh. Nulo quando não há fatura emitida.
+    description: Tarifa base derivada das faturas por subgrupo e competência, mediana de valor_energia dividido pelo consumo utilizável positivo menos o adicional de bandeira. Não homologada. Nulo sem fatura.
   adicional_bandeira:
     type: numeric(18,6)
     nullable: true
     unit: R$/kWh
     minimum: 0
-    description: Valor do adicional tarifário decorrente da bandeira tarifária em R$/kWh. Nulo quando não há fatura emitida.
+    description: Adicional fixo dos dados do case (Verde 0, Amarela 0.01885, Vermelha P1 0.04463, P2 0.07877 R$/kWh); não representa o histórico regulatório da ANEEL. Nulo sem fatura.
   bandeira:
     type: text
     nullable: true
