@@ -50,7 +50,7 @@ columns:
     nullable: false
     unit: kWh
     minimum: 0
-    description: Volume físico total de energia elétrica faturado no agrupamento.
+    description: Soma do volume analítico associado às faturas elegíveis, observado ou estimado conforme metodo_consumo no detalhe.
   receita:
     type: numeric(18,2)
     nullable: false
