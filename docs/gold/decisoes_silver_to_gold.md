@@ -18,7 +18,7 @@ Documento vivo e compartilhado pela equipe de Engenharia de Dados para consolida
 | **2. Faturamento e Receita** | `silver-to-gold-faturas.ipynb`<br>`gold_faturas.py` *(PR #67)* | • `tb_faturas`<br>• `tb_faturas_pendentes_cadastro`<br>• `tb_unidades_consumidoras`<br>• `tb_leituras` | • `tb_faturas`<br>• `tb_faturas_excluidas`<br>• `tb_faturamento_mensal`<br>• `tb_variacao_receita` | • **Henrique Duarte** (Comercial)<br>• **Camila Barreto** (Atendimento)<br>• **Diretoria** (Visão Geral) | `docs/gold/faturas.md` *(em revisão no PR #67)* |
 | **3. Continuidade da Rede (DEC/FEC)** | `silver-to-gold-continuidade.ipynb` | • `tb_ocorrencias_rede`<br>• `tb_unidades_consumidoras` | • `continuidade_alimentador_mensal`<br>• `ocorrencias_uc`<br>• `dim_alimentador` | • **Beatriz Farias** (Operação)<br>• **Camila Barreto** (Atendimento) | [`docs/gold/continuidade.md`](continuidade.md) |
 | **4. Perdas e Fila de Inspeção** | *(a integrar pela equipe)* | • `tb_inspecoes`<br>• `tb_leituras`<br>• `tb_unidades_consumidoras`<br>• `tb_medidores`<br>• `tb_geracao_distribuida` | • `inspecoes_historicas`<br>• `fila_inspecao` | • **Rafael Coutinho** (Perdas)<br>• **Henrique Duarte** (Comercial) | *(a adicionar)* |
-| **5. Cadastro 360, Medidores e Atendimentos** | Medidores: `silver-to-gold-medidores.ipynb`<br>Cadastro e atendimentos: *(a integrar pela equipe)* | • `tb_unidades_consumidoras`<br>• `tb_medidores`<br>• `tb_atendimentos`<br>• `tb_geracao_distribuida`<br>• `tb_inspecoes` | • `dim_uc`<br>• `medidores_historico`<br>• `tb_medidores_historico`<br>• `atendimentos`<br>• `atendimentos_historico` | • **Camila Barreto** (Atendimento)<br>• **Rafael Coutinho** (Perdas)<br>• **Patrícia Lins** (TI / Agente IA) | Medidores: [`docs/gold/medidores.md`](medidores.md) |
+| **5. Cadastro 360, Medidores e Atendimentos** | Medidores: `silver-to-gold-medidores.ipynb`<br>Atendimentos: `silver-to-gold-atendimentos.ipynb`<br>Cadastro: *(a integrar pela equipe)* | • `tb_unidades_consumidoras`<br>• `tb_medidores`<br>• `tb_atendimentos`<br>• `tb_geracao_distribuida`<br>• `tb_inspecoes` | • `dim_uc`<br>• `medidores_historico`<br>• `tb_medidores_historico`<br>• `atendimentos`<br>• `atendimentos_historico` | • **Camila Barreto** (Atendimento)<br>• **Rafael Coutinho** (Perdas)<br>• **Patrícia Lins** (TI / Agente IA) | Medidores: [`docs/gold/medidores.md`](medidores.md)<br>Atendimentos: [`docs/gold/atendimentos.md`](atendimentos.md) |
 
 **Nomes das tabelas Gold:** cada tabela do contrato do portal leva o nome do contrato, sem prefixo (`gd_uc`, `continuidade_alimentador_mensal`), o mesmo do `<tabela>.csv` que o importador espera (`contracts/tabelas/<tabela>.yaml`). As tabelas analíticas fora do contrato levam o prefixo `tb_` (`tb_gd_uc`, `tb_gd_consumo_mensal`).
 
@@ -121,9 +121,9 @@ Documento vivo e compartilhado pela equipe de Engenharia de Dados para consolida
 
 ## 6. Domínio 5 — Cadastro 360, Medidores e Atendimentos
 
-- **Notebook / Módulo:** medidores em `data-engineering/silver_to_gold/silver-to-gold-medidores.ipynb` (`GOLD_MEDIDORES_V1`); cadastro (`dim_uc`) e atendimentos *(preencher ao integrar)*.
+- **Notebook / Módulo:** medidores em `data-engineering/silver_to_gold/silver-to-gold-medidores.ipynb` (`GOLD_MEDIDORES_V1`) e atendimentos em `data-engineering/silver_to_gold/silver-to-gold-atendimentos.ipynb`; cadastro (`dim_uc`) *(preencher ao integrar)*.
 - **Fontes Silver:** `tb_unidades_consumidoras`, `tb_medidores`, `tb_atendimentos`
-- **Dicionário de medidores:** [`docs/gold/medidores.md`](medidores.md)
+- **Dicionários:** [`docs/gold/medidores.md`](medidores.md) e [`docs/gold/atendimentos.md`](atendimentos.md)
 
 ### 6.1. Medidores: tabelas e perguntas respondidas
 
@@ -147,3 +147,20 @@ Documento vivo e compartilhado pela equipe de Engenharia de Dados para consolida
 | **Sentinela `9999-12-31` → nulo** | `data_retirada`, medidor atual | 13.649 registros de medidores ativos teriam retirada no ano 9999, e "retirada nula = medidor atual" deixaria de valer |
 | **`tipo` padronizado (10 grafias → 3)** | `tipo_medidor`, parque por tecnologia | Um `GROUP BY` mostraria 10 tecnologias, e o parque smart sairia sem os 853 medidores gravados como `smart meter` ou `Smart` |
 | **Troca invertida bloqueada (anterior precisa estar `RETIRADO`)** | `id_medidor_anterior`, `flag_instalado_em_troca` | Uma data trocada na origem gravaria a troca ao contrário (o retirado como medidor novo) |
+
+### 6.3. Atendimentos
+
+- **Arquivo:** `data-engineering/silver_to_gold/silver-to-gold-atendimentos.ipynb`
+- **Dicionário completo:** [`docs/gold/atendimentos.md`](atendimentos.md), com as regras (seção 2), o dicionário das colunas (seção 3) e os números da base (seção 5)
+- **Fontes Silver:** `` `v-energy`.silver.tb_atendimentos `` $\bowtie$ `` `v-energy`.silver.tb_unidades_consumidoras `` (integridade do `id_uc`)
+- **Tabelas publicadas:** `atendimentos` (protocolo) e `atendimentos_historico` (protocolo × sequência).
+- **Perguntas de negócio respondidas:**
+  - *Os chamados que a UC já abriu, com assunto, nota e a linha do tempo das tratativas, no bloco de chamados da Visão 360 (Camila Barreto, seção 4.2 do case).*
+  - *Volume e satisfação por assunto e ao longo do tempo, para o agente de IA (Patrícia Lins).*
+- **Decisões que afetam os números:** a nota fica decimal de 1 a 5, como na base, e nula quando o titular não avaliou (#117); o `status` vem da existência de `data_fechamento`; o `assunto` mantém os 6 valores da Silver, sem o subassunto. Em julho de 2025, mês do evento atípico da continuidade, os atendimentos triplicam e a nota média cai de 4,10 para 3,11.
+
+### 6.4. Cadastro (`dim_uc`) *(Espaço para a equipe)*
+
+- **Notebook / Módulo:** *(preencher ao integrar)*
+- **Fontes Silver:** `tb_unidades_consumidoras`, `tb_geracao_distribuida`, `tb_inspecoes`
+- **Tabelas Gold e perguntas respondidas:** *(preencher com `dim_uc`)*.
