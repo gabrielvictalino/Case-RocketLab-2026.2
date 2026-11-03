@@ -4,16 +4,22 @@ O redator recebe as linhas e escreve o texto, mas pode errar uma conta ou invent
 um valor. Aqui cada número do texto é comparado com os valores numéricos do
 resultado, aceitando as formas comuns de escrever o mesmo valor:
 
-- arredondamento ou truncamento para as casas mostradas (16,66 → "16,7" ou "16,6");
+- arredondamento para as casas mostradas (16,66 → "16,7"), e truncamento só quando o
+  texto mostra dois dígitos significativos ou mais (16,66 → "16,6", mas "1 milhão" não
+  vale para 1.999.999);
 - percentual de uma razão, quando o texto usa % ou pp (0,167 → "16,7%");
-- escala por extenso ou em MWh/GWh (1.234.567 → "1,2 milhão"; 351.234 kWh → "351 MWh");
-- sinal implícito ("queda de 351" para −351). Com sinal explícito, o sinal precisa bater,
-  e uma alta ("alta de 5,3%") não vale para um valor negativo.
+- escala por extenso ou em MWh/GWh (1.234.567 → "1,2 milhão"; 351.234 kWh → "351 MWh"),
+  ou o número sem a escala, quando o SQL já devolveu o valor nela (351,2 → "351,2 MWh");
+- sinal implícito ("queda de 351" para −351). Com sinal explícito, o sinal precisa bater.
+  Uma alta ("alta de 5,3%") não vale para um valor negativo, e uma queda não vale para
+  um positivo, a não ser que a coluna seja o tamanho da queda (queda_pct, reducao_kwh).
+  Em "caiu de X para Y", X e Y são níveis e não têm direção.
 
 Todo número é conferido, mesmo colado à unidade ("351kWh", "R$1,2mi", "3,2h"). Não são
 conferidos só os códigos (UC000123, ALM-REC-001), as datas e competências (jun/2026,
-2025-07), os ordinais (1º) e os números que o chamador permite, como os da pergunta,
-os anos do período, o número de linhas e o número de meses.
+2025-07), os ordinais (1º) e os números que o chamador permite, como os anos do período,
+o número de linhas e o número de meses. Os números da pergunta só valem como limiar
+("acima de 30%"): repetidos como resultado, eles não têm lastro.
 """
 
 import re
@@ -60,9 +66,29 @@ ESCALAS = {
     'mwh': Decimal(1000),
     'gwh': Decimal(10) ** 6,
 }
-# Palavras de alta logo antes do número: "alta de 5,3%", "cresceu 12", "aumento de 3 pp".
+# O fim do trecho antes do número: no máximo uma palavra e o "R$" depois da palavra-chave.
+ANTES_DO_NUMERO = r'(?:\s+\w+)?\s+(?:R\$\s*)?$'
+# "alta de 5,3%", "cresceu 12", "aumento de R$ 1.234", "aumento de 3 pp".
 ALTA = re.compile(
-    r'\b(?:alta|aument\w*|cresc\w*|subi\w*|subida|elev\w*|ganho|avan[cç]\w*)(?:\s+\w+)?\s+$',
+    r'\b(?:alta|aument\w*|cresc\w*|subi\w*|subida|elev\w*|ganho|avan[cç]\w*)' + ANTES_DO_NUMERO,
+    re.IGNORECASE,
+)
+# "queda de 5,3%", "caiu 12", "redução de R$ 1.234". Fica de fora o que também é nível:
+# "perdas de 351 kWh", "o mais baixo, 3,2 h", "energia recuperada de 125 kWh".
+BAIXA = re.compile(
+    r'\b(?:quedas?|ca[ií](?:u|ram|ndo|r)|redu[cçz]\w*|recu(?:o|ou|aram)|diminu\w*|retra\w*'
+    r'|encolh\w*)' + ANTES_DO_NUMERO,
+    re.IGNORECASE,
+)
+# A coluna que já é o tamanho da queda vem positiva.
+COLUNA_DE_QUEDA = re.compile(r'qued|redu|dimin|perd|recuo|retra', re.IGNORECASE)
+# "de X para Y": dois níveis, sem direção.
+PARA = re.compile(r'\s*para\s', re.IGNORECASE)
+# Limiares que a pergunta pode trazer e a resposta repetir: "acima de 30%", "pelo menos 3".
+LIMIAR = re.compile(
+    r'\b(?:acima|abaixo|mais|menos|maior(?:es)?|menor(?:es)?|superior(?:es)?|inferior(?:es)?'
+    r'|at[eé]|m[ií]nimo|m[aá]ximo|pelo\s+menos|a\s+partir)(?:\s+(?:de|do|da|que|a))?\s+'
+    r'(?:R\$\s*)?$',
     re.IGNORECASE,
 )
 DATA = re.compile(r'(\d{4})-\d{2}(?:-\d{2})?')
@@ -77,26 +103,58 @@ class Leitura(NamedTuple):
     percentual: bool
     # O texto fala em alta logo antes do número: um valor negativo não serve.
     alta: bool = False
+    # O texto fala em queda: um valor positivo só serve se a coluna for a da queda.
+    baixa: bool = False
+    # Dígitos significativos mostrados: com menos de dois, só vale o arredondamento.
+    significativos: int = 2
+
+
+class Valor(NamedTuple):
+    valor: Decimal
+    # A coluna é o tamanho de uma queda (queda_pct): positiva, ela sustenta "queda de".
+    de_queda: bool = False
 
 
 def numeros_sem_lastro(
-    texto: str, linhas: Iterable[Iterable[object]], permitidos: Iterable[object] = ()
+    texto: str,
+    linhas: Iterable[Iterable[object]],
+    permitidos: Iterable[object] = (),
+    limiares: Iterable[object] = (),
+    colunas: Iterable[str] = (),
 ) -> list[str]:
-    """Devolve os números do texto que não aparecem nas linhas, na ordem em que aparecem."""
-    valores = [v for linha in linhas for item in linha for v in _decimais(item)]
-    valores += [v for item in permitidos for v in _decimais(item)]
+    """Devolve os números do texto que não aparecem nas linhas, na ordem em que aparecem.
+
+    `permitidos` valem em qualquer lugar do texto; `limiares` (os números da pergunta) só
+    logo depois de "acima de", "pelo menos" e afins. `colunas` são os nomes das colunas
+    das linhas, para reconhecer a que já traz o tamanho de uma queda."""
+    nomes = list(colunas)
+    valores = [
+        Valor(v, bool(COLUNA_DE_QUEDA.search(nomes[i])) if i < len(nomes) else False)
+        for linha in linhas
+        for i, item in enumerate(linha)
+        for v in _decimais(item)
+    ]
+    # Um número permitido não é variação: sustenta a queda e a alta.
+    valores += [Valor(v, True) for item in permitidos for v in _decimais(item)]
+    dos_limiares = [Valor(v, True) for item in limiares for v in _decimais(item)]
     limpo = IGNORADOS.sub(' ', texto)
     sem_lastro = []
     for citado in NUMERO.finditer(limpo):
-        alta = ALTA.search(limpo, 0, citado.start()) is not None
-        leituras = _leituras(citado, alta)
-        if leituras and not any(_tem_lastro(leitura, valores) for leitura in leituras):
-            sem_lastro.append(citado.group(0).strip().rstrip('.'))
+        nivel = PARA.match(limpo, citado.end()) is not None
+        alta = not nivel and ALTA.search(limpo, 0, citado.start()) is not None
+        baixa = not nivel and BAIXA.search(limpo, 0, citado.start()) is not None
+        leituras = _leituras(citado, alta, baixa)
+        if not leituras or any(_tem_lastro(leitura, valores) for leitura in leituras):
+            continue
+        limiar = LIMIAR.search(limpo, 0, citado.start()) is not None
+        if limiar and any(_tem_lastro(leitura, dos_limiares) for leitura in leituras):
+            continue
+        sem_lastro.append(citado.group(0).strip().rstrip('.'))
     return sem_lastro
 
 
 def numeros_citados(texto: str) -> list[Decimal]:
-    """Os números de um texto, em todas as leituras. Os da pergunta viram `permitidos`."""
+    """Os números de um texto, em todas as leituras. Os da pergunta viram `limiares`."""
     return [leitura.valor for citado in NUMERO.finditer(texto) for leitura in _leituras(citado)]
 
 
@@ -113,7 +171,7 @@ def _decimais(valor: object) -> list[Decimal]:
     return [decimal] if decimal.is_finite() else []
 
 
-def _leituras(citado: re.Match, alta: bool = False) -> list[Leitura]:
+def _leituras(citado: re.Match, alta: bool = False, baixa: bool = False) -> list[Leitura]:
     numero, escala = citado['numero'], (citado['escala'] or '').lower()
     sinal = {'-': -1, '−': -1, '+': 1}.get(citado['sinal'] or '', 0)
     percentual = escala == '%' or escala.startswith('p')
@@ -123,23 +181,37 @@ def _leituras(citado: re.Match, alta: bool = False) -> list[Leitura]:
     if re.fullmatch(r'\d+\.\d+', numero):
         textos.append(numero)
     multiplicador = next((m for p, m in ESCALAS.items() if escala.startswith(p)), Decimal(1))
+    # Com escala, vale também o número como está: o SQL pode já ter devolvido em MWh.
+    multiplicadores = (multiplicador, Decimal(1)) if multiplicador != 1 else (multiplicador,)
     leituras = []
     for texto in textos:
         valor = Decimal(texto)
-        unidade = Decimal(1).scaleb(valor.as_tuple().exponent) * multiplicador
-        leituras.append(
-            Leitura(valor * multiplicador, unidade.normalize(), sinal, percentual, alta)
-        )
+        significativos = len(valor.normalize().as_tuple().digits) if valor else 0
+        for fator in multiplicadores:
+            unidade = Decimal(1).scaleb(valor.as_tuple().exponent) * fator
+            leituras.append(
+                Leitura(
+                    valor * fator,
+                    unidade.normalize(),
+                    sinal,
+                    percentual,
+                    alta,
+                    baixa,
+                    significativos,
+                )
+            )
     return leituras
 
 
-def _tem_lastro(leitura: Leitura, valores: list[Decimal]) -> bool:
+def _tem_lastro(leitura: Leitura, valores: list[Valor]) -> bool:
     # Com % ou pp, o resultado pode trazer o percentual pronto (16,7) ou a razão (0,167).
     fatores = (Decimal(1), Decimal(100)) if leitura.percentual else (Decimal(1),)
-    for valor in valores:
+    for valor, de_queda in valores:
         if leitura.sinal and valor and (valor > 0) != (leitura.sinal > 0):
             continue
         if leitura.alta and valor < 0:
+            continue
+        if leitura.baixa and valor > 0 and not de_queda:
             continue
         for fator in fatores:
             if _arredonda_para(leitura, abs(valor * fator)):
@@ -152,9 +224,11 @@ def _arredonda_para(leitura: Leitura, alvo: Decimal) -> bool:
     with localcontext() as contexto:
         contexto.prec = 60
         try:
-            return leitura.valor in (
-                alvo.quantize(leitura.unidade, ROUND_HALF_UP),
-                alvo.quantize(leitura.unidade, ROUND_DOWN),
+            if leitura.valor == alvo.quantize(leitura.unidade, ROUND_HALF_UP):
+                return True
+            # Truncar "1.999.999" para "1 milhão" muda o valor pela metade; "16,6" não.
+            return leitura.significativos >= 2 and leitura.valor == alvo.quantize(
+                leitura.unidade, ROUND_DOWN
             )
         except InvalidOperation:
             return False

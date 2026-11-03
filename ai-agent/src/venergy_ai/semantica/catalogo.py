@@ -423,7 +423,10 @@ VISOES = (
             Coluna('origem', 'historica (base da Gold) ou portal (concluída no portal).'),
         ),
         coluna_tempo='data',
-        periodo='As históricas cobrem só parte da base; mais as concluídas no portal.',
+        periodo=(
+            'As históricas cobrem só parte da base; as concluídas no portal podem ser de depois '
+            'da carga.'
+        ),
         regras=(
             'Antes de dizer que não houve inspeção num período, confira MIN(data) e MAX(data) '
             "com origem = 'historica'.",
