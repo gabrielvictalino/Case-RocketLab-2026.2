@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     # Limites por usuário no Redis (fail-open): perguntas por minuto e tokens por dia.
     assistente_perguntas_por_minuto: int = Field(default=20, ge=1)
     assistente_cota_tokens_dia: int = Field(default=500_000, ge=1)
+    # Insights: só os que vão ao modelo contam; um insight do cache não gasta o limite.
+    insights_por_minuto: int = Field(default=30, ge=1)
 
     @model_validator(mode='after')
     def validate_secret(self):

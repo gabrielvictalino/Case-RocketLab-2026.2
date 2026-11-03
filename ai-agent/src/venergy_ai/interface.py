@@ -2,11 +2,13 @@
 
 O backend só conhece estes tipos. Ele monta o `Contexto` a partir da tela e da carga
 publicada, e grava a `RespostaAgente` na auditoria pela conexão do portal, que o
-agente nunca recebe.
+agente nunca recebe. Nos insights, ele monta o `PedidoInsight` com os números da tela
+e recebe o `Insight` com as observações já validadas.
 """
 
 from dataclasses import dataclass, field
 from datetime import date
+from decimal import Decimal
 from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, Field
@@ -104,6 +106,61 @@ class Andamento:
         return self.uso.output_tokens
 
 
+CampoDoFato = Literal['valor', 'comparacao', 'variacao', 'variacao_pct']
+
+
+class Fato(BaseModel):
+    """Um número que a tela mostra, calculado pelo backend com os serviços dela."""
+
+    # Identifica o fato no pedido: "receita", "efeito_bandeira", "local:Recife".
+    chave: str
+    # A etiqueta mostrada ao lado da observação: "Receita faturada", "Efeito bandeira".
+    metrica: str
+    # "R$", "kWh", "%", "R$/kWh", "h por UC". A variação de um fato em % está em pp.
+    unidade: str
+    valor: Decimal | None = None
+    comparacao: Decimal | None = None
+    variacao: Decimal | None = None
+    variacao_pct: Decimal | None = None
+
+
+class PedidoInsight(BaseModel):
+    tela: str
+    periodo: Periodo
+    comparacao: Periodo | None = None
+    recortes: dict[str, str] = Field(default_factory=dict)
+    fatos: list[Fato]
+
+
+class ValorCitado(BaseModel):
+    """Um número da observação e o valor do fato que o sustenta."""
+
+    # Como o número está escrito no texto: "5,3%", "R$ 1,2 milhão" sem o "R$".
+    trecho: str
+    chave: str
+    metrica: str
+    campo: CampoDoFato
+    valor: Decimal
+    unidade: str
+
+
+class Observacao(BaseModel):
+    chave: str
+    metrica: str
+    texto: str
+    valores: list[ValorCitado]
+
+
+class Insight(BaseModel):
+    observacoes: list[Observacao]
+    # Por que cada observação descartada saiu: número sem lastro, chave desconhecida...
+    descartadas: list[str] = Field(default_factory=list)
+    modelo: str
+    tokens_entrada: int = 0
+    tokens_saida: int = 0
+    latencia_ms: int = 0
+
+
 class ProvedorIndisponivel(RuntimeError):
     """O provedor do modelo falhou (rede, autenticação, cota ou erro do servidor)."""
 
@@ -112,7 +169,15 @@ class BancoIndisponivel(RuntimeError):
     """O Postgres da role `ai_read` não respondeu. Não é erro do SQL: não há o que corrigir."""
 
 
+class InsightIndisponivel(RuntimeError):
+    """O modelo não redigiu nenhuma observação que passe na validação."""
+
+
 class Assistente(Protocol):
     async def responder(
         self, pergunta: str, contexto: Contexto, andamento: Andamento | None = None
     ) -> RespostaAgente: ...
+
+
+class Redator(Protocol):
+    async def redigir(self, pedido: PedidoInsight, uso: RunUsage | None = None) -> Insight: ...

@@ -277,10 +277,128 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/assistente/perguntas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Perguntar */
+        post: operations["perguntar_api_v1_assistente_perguntas_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/assistente/conversas/{conversa_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Conversa */
+        get: operations["conversa_api_v1_assistente_conversas__conversa_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/assistente/respostas/{id_resposta}/auditoria": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Auditoria */
+        get: operations["auditoria_api_v1_assistente_respostas__id_resposta__auditoria_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/insights/{tela}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Insight */
+        get: operations["insight_api_v1_insights__tela__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** Auditoria */
+        Auditoria: {
+            /**
+             * Id Resposta
+             * Format: uuid
+             */
+            id_resposta: string;
+            /**
+             * Conversa Id
+             * Format: uuid
+             */
+            conversa_id: string;
+            /** Usuario */
+            usuario: string;
+            /** Pergunta */
+            pergunta: string;
+            /** Contexto */
+            contexto: {
+                [key: string]: unknown;
+            };
+            /** Consultas */
+            consultas: components["schemas"]["Consulta"][];
+            /** Sql Gerado */
+            sql_gerado: string | null;
+            /** Sql Executado */
+            sql_executado: string | null;
+            /** Numero Linhas */
+            numero_linhas: number | null;
+            /** Resposta */
+            resposta: string | null;
+            /** Nao Sei */
+            nao_sei: boolean;
+            /** Motivo */
+            motivo: string | null;
+            /** Modelo */
+            modelo: string | null;
+            /** Tokens Entrada */
+            tokens_entrada: number | null;
+            /** Tokens Saida */
+            tokens_saida: number | null;
+            /** Latencia Ms */
+            latencia_ms: number;
+            /** Erro */
+            erro: string | null;
+            /**
+             * Criado Em
+             * Format: date-time
+             */
+            criado_em: string;
+        };
         /** Cabecalho */
         Cabecalho: {
             /** Titular */
@@ -364,6 +482,32 @@ export interface components {
             /** Descricao */
             descricao: string;
         };
+        /**
+         * Consulta
+         * @description Uma tentativa: o SQL que o modelo escreveu e o que de fato rodou.
+         */
+        Consulta: {
+            /** Sql Gerado */
+            sql_gerado: string;
+            /** Sql Executado */
+            sql_executado?: string | null;
+            /** Colunas */
+            colunas?: string[];
+            /**
+             * Linhas
+             * @description Até 50 linhas, para exibição.
+             */
+            linhas?: unknown[][];
+            /**
+             * Total Linhas
+             * @default 0
+             */
+            total_linhas: number;
+            /** Duracao Ms */
+            duracao_ms?: number | null;
+            /** Erro */
+            erro?: string | null;
+        };
         /** Consumo */
         Consumo: {
             /**
@@ -379,10 +523,36 @@ export interface components {
             /** Meses */
             meses: components["schemas"]["MesConsumo"][];
         };
+        /**
+         * ContextoPergunta
+         * @description O que a tela envia junto com a pergunta. Períodos em `AAAA-MM..AAAA-MM`.
+         */
+        ContextoPergunta: {
+            /** Tela */
+            tela?: ("visao-geral" | "receita" | "unidade-consumidora" | "perdas" | "operacao") | null;
+            /** Periodo */
+            periodo?: string | null;
+            /** Comparacao */
+            comparacao?: string | null;
+            /** Recortes */
+            recortes?: {
+                [key: string]: string;
+            };
+        };
         /** Continuidade */
         Continuidade: {
             dec: components["schemas"]["Indicador"];
             fec: components["schemas"]["Indicador"];
+        };
+        /** Conversa */
+        Conversa: {
+            /**
+             * Conversa Id
+             * Format: uuid
+             */
+            conversa_id: string;
+            /** Mensagens */
+            mensagens: components["schemas"]["Mensagem"][];
         };
         /** CriarOrdens */
         CriarOrdens: {
@@ -578,6 +748,28 @@ export interface components {
             /** Variacao Pct */
             variacao_pct: string | null;
         };
+        /** Insight */
+        Insight: {
+            /** Periodo */
+            periodo: string;
+            /** Comparacao */
+            comparacao: string | null;
+            carga: components["schemas"]["Carga"];
+            /**
+             * Tela
+             * @enum {string}
+             */
+            tela: "visao-geral" | "receita";
+            /** Observacoes */
+            observacoes: components["schemas"]["Observacao"][];
+            /** Modelo */
+            modelo: string;
+            /**
+             * Gerado Em
+             * Format: date-time
+             */
+            gerado_em: string;
+        };
         /** Inspecao */
         Inspecao: {
             /** Id Inspecao */
@@ -704,6 +896,29 @@ export interface components {
              */
             data_instalacao: string;
         };
+        /** Mensagem */
+        Mensagem: {
+            /**
+             * Id Resposta
+             * Format: uuid
+             */
+            id_resposta: string;
+            /** Pergunta */
+            pergunta: string;
+            /** Resposta */
+            resposta: string | null;
+            /** Nao Sei */
+            nao_sei: boolean;
+            /** Motivo */
+            motivo: string | null;
+            /** Erro */
+            erro: string | null;
+            /**
+             * Criado Em
+             * Format: date-time
+             */
+            criado_em: string;
+        };
         /** MesConsumo */
         MesConsumo: {
             /**
@@ -713,6 +928,17 @@ export interface components {
             competencia: string;
             atual: components["schemas"]["PontoConsumo"] | null;
             anterior: components["schemas"]["PontoConsumo"] | null;
+        };
+        /** Observacao */
+        Observacao: {
+            /** Chave */
+            chave: string;
+            /** Metrica */
+            metrica: string;
+            /** Texto */
+            texto: string;
+            /** Valores */
+            valores: components["schemas"]["ValorCitado"][];
         };
         /** OcorrenciaUC */
         OcorrenciaUC: {
@@ -806,6 +1032,29 @@ export interface components {
             /** Size */
             size: number;
         };
+        /** Pergunta */
+        Pergunta: {
+            /** Pergunta */
+            pergunta: string;
+            /** Conversa Id */
+            conversa_id?: string | null;
+            contexto?: components["schemas"]["ContextoPergunta"];
+        };
+        /** PeriodoUsado */
+        PeriodoUsado: {
+            /**
+             * Inicio
+             * Format: date
+             */
+            inicio: string;
+            /**
+             * Fim
+             * Format: date
+             */
+            fim: string;
+            /** Descricao */
+            descricao: string;
+        };
         /** PontoConsumo */
         PontoConsumo: {
             /**
@@ -840,6 +1089,54 @@ export interface components {
             id_uc: string;
             /** Motivo */
             motivo: string;
+        };
+        /** RespostaPergunta */
+        RespostaPergunta: {
+            /**
+             * Tipo
+             * @enum {string}
+             */
+            tipo: "resposta" | "nao_sei";
+            /** Texto */
+            texto: string;
+            /** Metrica */
+            metrica?: string | null;
+            /** Filtros */
+            filtros?: string[];
+            periodo?: components["schemas"]["PeriodoUsado"] | null;
+            /** Motivo */
+            motivo?: string | null;
+            /** Alternativa */
+            alternativa?: string | null;
+            /** Consultas */
+            consultas?: components["schemas"]["Consulta"][];
+            /** Modelo */
+            modelo: string;
+            /**
+             * Tokens Entrada
+             * @default 0
+             */
+            tokens_entrada: number;
+            /**
+             * Tokens Saida
+             * @default 0
+             */
+            tokens_saida: number;
+            /**
+             * Latencia Ms
+             * @default 0
+             */
+            latencia_ms: number;
+            /**
+             * Id Resposta
+             * Format: uuid
+             */
+            id_resposta: string;
+            /**
+             * Conversa Id
+             * Format: uuid
+             */
+            conversa_id: string;
         };
         /** Resultado */
         Resultado: {
@@ -930,6 +1227,27 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /**
+         * ValorCitado
+         * @description Um número da observação e o valor do fato que o sustenta.
+         */
+        ValorCitado: {
+            /** Trecho */
+            trecho: string;
+            /** Chave */
+            chave: string;
+            /** Metrica */
+            metrica: string;
+            /**
+             * Campo
+             * @enum {string}
+             */
+            campo: "valor" | "comparacao" | "variacao" | "variacao_pct";
+            /** Valor */
+            valor: string;
+            /** Unidade */
+            unidade: string;
         };
         /** VisaoUC */
         VisaoUC: {
@@ -1503,6 +1821,139 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Grupos"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    perguntar_api_v1_assistente_perguntas_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Pergunta"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RespostaPergunta"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    conversa_api_v1_assistente_conversas__conversa_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversa_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Conversa"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    auditoria_api_v1_assistente_respostas__id_resposta__auditoria_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id_resposta: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Auditoria"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    insight_api_v1_insights__tela__get: {
+        parameters: {
+            query: {
+                periodo: string;
+                municipio?: string | null;
+                bairro?: string | null;
+                classe?: string | null;
+                alimentador?: string | null;
+                comparacao?: string | null;
+            };
+            header?: never;
+            path: {
+                tela: "visao-geral" | "receita";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Insight"];
                 };
             };
             /** @description Validation Error */
