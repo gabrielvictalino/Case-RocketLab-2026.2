@@ -39,6 +39,27 @@ async def test_executor_converte_os_valores_e_traz_as_colunas(executor):
     assert competencia == '2026-06-01'
 
 
+async def test_executor_converte_interval_em_horas(executor):
+    resultado = await executor.executar(
+        "SELECT INTERVAL '3 hours 30 minutes' AS duracao, 'NaN'::numeric AS indefinido"
+    )
+    assert resultado.linhas == [[3.5, 'NaN']]
+
+
+async def test_timeout_do_cliente_vira_erro_da_consulta(infrastructure):
+    # O command_timeout do asyncpg dispara antes do statement_timeout de 5 s da role.
+    engine = create_async_engine(
+        infrastructure['settings'].database_url_ai, connect_args={'command_timeout': 0.5}
+    )
+    try:
+        executor = ExecutorAiRead(engine)
+        with pytest.raises(ConsultaFalhou, match='tempo limite'):
+            await executor.executar('SELECT count(*) FROM generate_series(1, 10000000000)')
+        assert (await executor.executar('SELECT 1')).linhas == [[1]]
+    finally:
+        await engine.dispose()
+
+
 async def test_executor_devolve_o_erro_do_banco(executor):
     with pytest.raises(ConsultaFalhou, match='permission denied'):
         await executor.executar('SELECT * FROM operations.usuarios')
