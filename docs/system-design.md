@@ -163,7 +163,8 @@ versão da carga.
 4. **Insight** com o mesmo funcionamento da Visão Geral.
 
 A decomposição vale para qualquer par de períodos, então é calculada na hora
-sobre `receita_volume_mensal`. A fórmula é a mesma do diagnóstico e do
+sobre `receita_volume_mensal`. Os efeitos são calculados por município, bairro, classe
+e grupo de UC, e os agregados somam esses efeitos. A fórmula é a mesma do diagnóstico e do
 agente, e vem do contrato.
 
 ### 4.3 Unidade Consumidora (F3)
