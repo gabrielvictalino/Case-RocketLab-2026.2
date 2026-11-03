@@ -116,6 +116,7 @@ export interface GraficoBarrasComparativasProps {
   indisponivel?: boolean
   formatarValor?: (valor: number) => string
   observacoes?: Record<string, string>
+  marcadores?: Record<string, string>
 }
 
 export function GraficoBarrasComparativas({
@@ -127,19 +128,27 @@ export function GraficoBarrasComparativas({
   indisponivel = false,
   formatarValor,
   observacoes,
+  marcadores,
 }: GraficoBarrasComparativasProps) {
   if (indisponivel) {
     return <EstadoIndisponivel compacto />
   }
 
   const fillAtual = corAtual === 'data-1' ? 'var(--data-1)' : 'var(--data-2)'
-
   return (
     <div className="ve-chart" style={{ height: `${altura}px` }}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={dados}>
           <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
-          <XAxis dataKey="rotulo" stroke="var(--ink-muted)" fontSize={11} />
+          <XAxis
+            dataKey="rotulo"
+            stroke="var(--ink-muted)"
+            fontSize={11}
+            tickFormatter={(rotulo: string) => {
+              const marcador = marcadores?.[rotulo]
+              return marcador ? `${rotulo} ${marcador}` : rotulo
+            }}
+          />
           <YAxis stroke="var(--ink-muted)" fontSize={11} tickFormatter={formatarValor} />
           <Tooltip
             formatter={formatarValor ? (valor) => formatarValor(Number(valor)) : undefined}
@@ -153,7 +162,19 @@ export function GraficoBarrasComparativas({
               />
             ) : undefined}
           />
-          <Bar dataKey="atual" name={rotuloAtual} fill={fillAtual} />
+          <Bar dataKey="atual" name={rotuloAtual} fill={fillAtual}>
+            {marcadores && (
+              <>
+
+                {dados.map((ponto, indice) => (
+                  <Cell
+                    key={`${ponto.rotulo}-${indice}`}
+                    fill={marcadores[ponto.rotulo] ? 'var(--data-1)' : fillAtual}
+                  />
+                ))}
+              </>
+            )}
+          </Bar>
           {rotuloComparacao && (
             <Bar
               dataKey="comparacao"

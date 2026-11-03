@@ -30,7 +30,7 @@ describe('adaptarConsumoUC', () => {
 
     expect(adaptarConsumoUC(consumo)).toEqual([
       {
-        competencia: '2026-01',
+        competencia: 'jan/2026',
         consumoKwh: 250,
         consumoAnoAnteriorKwh: 200,
         estimado: true,
@@ -54,7 +54,7 @@ describe('adaptarConsumoUC', () => {
 
     expect(adaptarConsumoUC(consumo)).toEqual([
       {
-        competencia: '2026-02',
+        competencia: 'fev/2026',
         consumoKwh: null,
         consumoAnoAnteriorKwh: null,
         estimado: false,

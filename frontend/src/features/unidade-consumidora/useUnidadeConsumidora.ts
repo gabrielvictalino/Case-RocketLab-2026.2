@@ -14,6 +14,6 @@ export function useUnidadeConsumidora(idUc: string | null) {
         }),
       ),
     enabled: idUc !== null,
-    retry: false,
+
   })
 }

@@ -1,10 +1,12 @@
-import { formatarDataPtBr, formatarNumero } from '../../lib/formatacao'
+import { formatarCompetencia, formatarDataHoraPtBr, formatarDataPtBr, formatarNumero } from '../../lib/formatacao'
 import { useState, type FormEvent } from 'react'
 import { Search } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import { EstadoErro, EstadoVazio, Esqueleto } from '@/components/Estados'
 import { Etiqueta } from '@/components/Etiqueta'
 import { Painel } from '@/components/Painel'
+import { rotulosOrdem } from '@/features/perdas/rotulosOrdem'
+import type { components } from '@/lib/api/schema'
 import { adaptarConsumoUC } from '@/features/unidade-consumidora/adaptarConsumoUC'
 import { Atendimentos, ExplicacaoConta, Faturas, GraficoConsumo, Inspecoes, Interrupcoes } from '@/features/unidade-consumidora/SecoesUnidadeConsumidora'
 import { normalizarUc } from '@/features/unidade-consumidora/normalizarUc'
@@ -61,21 +63,21 @@ export function PaginaUnidadeConsumidora() {
   return <ConteudoUnidadeConsumidora key={ucParametro} ucParametro={ucParametro} />
 }
 
-function rotuloStatusOrdem(status: string): string {
-  const rotulos: Record<string, string> = {
-    ABERTA: 'Aberta',
-    EM_CAMPO: 'Em campo',
-    CONCLUIDA: 'Concluída',
-    CANCELADA: 'Cancelada',
-  }
-  return rotulos[status] ?? status
-}
 
 function ConteudoUnidadeConsumidora({ ucParametro }: { ucParametro: string }) {
 
   const [searchParams, setSearchParams] = useSearchParams()
   const ucNormalizadaUrl = normalizarUc(ucParametro)
   const consultaUC = useUnidadeConsumidora(ucNormalizadaUrl)
+
+  const estadoSecao = (
+    <EstadoSecaoUC
+      carregando={consultaUC.isLoading}
+      erro={consultaUC.isError && consultaUC.error.status !== 404}
+      naoEncontrada={consultaUC.isError && consultaUC.error.status === 404}
+      tentarNovamente={() => { void consultaUC.refetch() }}
+    />
+  )
 
   const [entrada, setEntrada] = useState<string>(
     ucNormalizadaUrl ?? ucParametro,
@@ -237,7 +239,7 @@ function ConteudoUnidadeConsumidora({ ucParametro }: { ucParametro: string }) {
           {consultaUC.isSuccess ? (
           <GraficoConsumo dados={adaptarConsumoUC(consultaUC.data.consumo)} />
         ) : (
-          <EstadoSecaoUC carregando={consultaUC.isLoading} erro={consultaUC.isError && consultaUC.error.status !== 404} naoEncontrada={consultaUC.isError && consultaUC.error.status === 404} tentarNovamente={() => { void consultaUC.refetch() }} />
+          estadoSecao
         )}
         </Painel>
 
@@ -250,10 +252,9 @@ function ConteudoUnidadeConsumidora({ ucParametro }: { ucParametro: string }) {
             <ExplicacaoConta
               texto={consultaUC.data.explicacao_conta.frase}
               efeitos={consultaUC.data.explicacao_conta.efeitos}
-              semCartao
             />
           ) : (
-            <EstadoSecaoUC carregando={consultaUC.isLoading} erro={consultaUC.isError && consultaUC.error.status !== 404} naoEncontrada={consultaUC.isError && consultaUC.error.status === 404} tentarNovamente={() => { void consultaUC.refetch() }} />
+            estadoSecao
           )}
         </Painel>
       </div>
@@ -266,17 +267,16 @@ function ConteudoUnidadeConsumidora({ ucParametro }: { ucParametro: string }) {
         >
           {consultaUC.isSuccess ? (
             <Faturas
-              semCartao
               dados={consultaUC.data.faturas_abertas.map((fatura) => ({
                 id: fatura.id_fatura,
-                competencia: fatura.competencia.slice(0, 7),
+                competencia: formatarCompetencia(fatura.competencia),
                 vencimento: formatarDataPtBr(fatura.data_vencimento),
                 valor: Number(fatura.valor_total),
-                diasAtraso: fatura.dias_atraso ?? 0,
+                diasAtraso: fatura.dias_atraso,
               }))}
             />
           ) : (
-            <EstadoSecaoUC carregando={consultaUC.isLoading} erro={consultaUC.isError && consultaUC.error.status !== 404} naoEncontrada={consultaUC.isError && consultaUC.error.status === 404} tentarNovamente={() => { void consultaUC.refetch() }} />
+            estadoSecao
           )}
         </Painel>
 
@@ -287,7 +287,6 @@ function ConteudoUnidadeConsumidora({ ucParametro }: { ucParametro: string }) {
         >
           {consultaUC.isSuccess ? (
             <Interrupcoes
-              semCartao
               alimentador={{ nome: consultaUC.data.interrupcoes.alimentador.alimentador, interrupcoes: consultaUC.data.interrupcoes.alimentador.interrupcoes, dec: consultaUC.data.interrupcoes.alimentador.dec }}
               dados={consultaUC.data.interrupcoes.ocorrencias.map((ocorrencia) => ({
                 id: ocorrencia.id_ocorrencia,
@@ -299,7 +298,7 @@ function ConteudoUnidadeConsumidora({ ucParametro }: { ucParametro: string }) {
               }))}
             />
           ) : (
-            <EstadoSecaoUC carregando={consultaUC.isLoading} erro={consultaUC.isError && consultaUC.error.status !== 404} naoEncontrada={consultaUC.isError && consultaUC.error.status === 404} tentarNovamente={() => { void consultaUC.refetch() }} />
+            estadoSecao
           )}
         </Painel>
       </div>
@@ -312,23 +311,22 @@ function ConteudoUnidadeConsumidora({ ucParametro }: { ucParametro: string }) {
         >
           {consultaUC.isSuccess ? (
             <Atendimentos
-              semCartao
               dados={consultaUC.data.chamados.map((atendimento) => ({
                 id: atendimento.protocolo,
                 titulo: atendimento.assunto,
                 protocolo: atendimento.protocolo,
-                abertura: formatarDataPtBr(atendimento.aberto_em),
+                abertura: formatarDataHoraPtBr(atendimento.aberto_em),
                 status: atendimento.status,
                 avaliacao: atendimento.nota,
                 historico: atendimento.historico.map((evento) => ({
                   id: `${atendimento.protocolo}-${evento.sequencia}`,
-                  data: formatarDataPtBr(evento.data),
+                  data: formatarDataHoraPtBr(evento.data),
                   descricao: evento.descricao,
                 })),
               }))}
             />
           ) : (
-            <EstadoSecaoUC carregando={consultaUC.isLoading} erro={consultaUC.isError && consultaUC.error.status !== 404} naoEncontrada={consultaUC.isError && consultaUC.error.status === 404} tentarNovamente={() => { void consultaUC.refetch() }} />
+            estadoSecao
           )}
         </Painel>
 
@@ -339,16 +337,16 @@ function ConteudoUnidadeConsumidora({ ucParametro }: { ucParametro: string }) {
         >
           {consultaUC.isSuccess ? (
             <Inspecoes
-              semCartao
               dados={consultaUC.data.inspecoes.map((inspecao) => ({
                 id: inspecao.id_inspecao,
                 data: formatarDataPtBr(inspecao.data),
                 resultado: inspecao.resultado,
-                observacao: inspecao.tipo_irregularidade ?? inspecao.origem,
+                  origem: inspecao.origem,
+                  tipoIrregularidade: inspecao.tipo_irregularidade,
               }))}
               ordemAtiva={
                 consultaUC.data.ordem_ativa
-                  ? `${consultaUC.data.ordem_ativa.id.slice(0, 8)} (${rotuloStatusOrdem(consultaUC.data.ordem_ativa.status)})`
+                  ? `${consultaUC.data.ordem_ativa.id.slice(0, 8)} (${rotulosOrdem[consultaUC.data.ordem_ativa.status as components['schemas']['Ordem']['status']]})`
                   : null
               }
               idOrdemAtiva={consultaUC.data.ordem_ativa?.id ?? null}
@@ -357,7 +355,7 @@ function ConteudoUnidadeConsumidora({ ucParametro }: { ucParametro: string }) {
               }
             />
           ) : (
-            <EstadoSecaoUC carregando={consultaUC.isLoading} erro={consultaUC.isError && consultaUC.error.status !== 404} naoEncontrada={consultaUC.isError && consultaUC.error.status === 404} tentarNovamente={() => { void consultaUC.refetch() }} />
+            estadoSecao
           )}
         </Painel>
       </div>

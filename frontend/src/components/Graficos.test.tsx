@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   ConteudoTooltipComparativo,
@@ -117,4 +117,70 @@ it('exibe observacoes no tooltip comparativo', () => {
   )
 
   expect(screen.getByText('Leitura estimada')).toBeInTheDocument()
+})
+
+
+it('renderiza marcadores diretamente nas barras do grafico', async () => {
+  const ResizeObserverOriginal = globalThis.ResizeObserver
+
+  class ResizeObserverSimulado implements ResizeObserver {
+    observe() {
+      this.callback(
+        [{
+          contentRect: {
+            width: 800,
+            height: 300,
+            x: 0,
+            y: 0,
+            top: 0,
+            left: 0,
+            right: 800,
+            bottom: 300,
+            toJSON: () => ({}),
+          },
+        } as ResizeObserverEntry],
+        this,
+      )
+    }
+
+    unobserve() {}
+    disconnect() {}
+
+    constructor(
+      private callback: ResizeObserverCallback,
+    ) {}
+  }
+
+  globalThis.ResizeObserver = ResizeObserverSimulado
+
+  try {
+    const { container } = render(
+      <GraficoBarrasComparativas
+        dados={[
+          { rotulo: 'jan/2026', atual: 180, comparacao: 150 },
+          { rotulo: 'fev/2026', atual: 200, comparacao: 170 },
+        ]}
+        rotuloAtual="Consumo atual"
+        rotuloComparacao="Ano anterior"
+        marcadores={{
+          'jan/2026': '\u25cf',
+          'fev/2026': '\u25c6',
+        }}
+      />,
+    )
+
+    await waitFor(() => {
+      const grafico = container.querySelector('svg.recharts-surface')
+      expect(grafico).not.toBeNull()
+
+      const rotulos = Array.from(
+        grafico?.querySelectorAll('.recharts-cartesian-axis-tick-value') ?? [],
+      ).map((elemento) => elemento.textContent)
+
+      expect(rotulos).toContain('jan/2026 \u25cf')
+      expect(rotulos).toContain('fev/2026 \u25c6')
+    })
+  } finally {
+    globalThis.ResizeObserver = ResizeObserverOriginal
+  }
 })

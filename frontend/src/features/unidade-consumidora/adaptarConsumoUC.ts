@@ -1,3 +1,4 @@
+import { formatarCompetencia } from '@/lib/formatacao'
 import type { VisaoUC } from './useUnidadeConsumidora'
 import type { ConsumoMensal } from './SecoesUnidadeConsumidora'
 
@@ -5,7 +6,7 @@ export function adaptarConsumoUC(
   consumo: VisaoUC['consumo'],
 ): ConsumoMensal[] {
   return consumo.meses.map((mes) => ({
-    competencia: mes.competencia.slice(0, 7),
+    competencia: formatarCompetencia(mes.competencia),
     consumoKwh: mes.atual ? Number(mes.atual.consumo_kwh) : null,
     consumoAnoAnteriorKwh: mes.anterior
       ? Number(mes.anterior.consumo_kwh)

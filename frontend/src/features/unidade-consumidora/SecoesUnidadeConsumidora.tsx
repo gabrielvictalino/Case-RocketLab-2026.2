@@ -23,7 +23,7 @@ export type FaturaUC = {
   competencia: string
   vencimento: string
   valor: number
-  diasAtraso: number
+  diasAtraso: number | null
 }
 
 export type InterrupcaoUC = {
@@ -57,33 +57,10 @@ export type InspecaoUC = {
   id: string
   data: string
   resultado: string
-  observacao: string
+  origem: string
+  tipoIrregularidade: string | null
 }
 
-
-function Cartao({
-  titulo,
-  subtitulo,
-  children,
-}: {
-  titulo: string
-  subtitulo?: string
-  children: React.ReactNode
-}) {
-  return (
-    <section className="min-w-0 rounded-lg border bg-card p-5">
-      <div className="mb-5">
-        <h3 className="text-base font-semibold">{titulo}</h3>
-        {subtitulo && (
-          <p className="mt-1 text-sm text-muted-foreground">
-            {subtitulo}
-          </p>
-        )}
-      </div>
-      {children}
-    </section>
-  )
-}
 
 function SemDados({ mensagem }: { mensagem: string }) {
   return (
@@ -129,6 +106,15 @@ export function GraficoConsumo({ dados }: { dados: ConsumoMensal[] }) {
     comparacao: item.consumoAnoAnteriorKwh,
   }))
 
+  const marcadores = Object.fromEntries(
+    dados
+      .filter((item) => item.estimado || item.trocaMedidor)
+      .map((item) => [
+        item.competencia,
+        `${item.estimado ? '\u25cf' : ''}${item.trocaMedidor ? '\u25c6' : ''}`,
+      ]),
+  )
+
   const observacoes = Object.fromEntries(
     dados
       .filter((item) => item.estimado || item.trocaMedidor)
@@ -158,6 +144,7 @@ export function GraficoConsumo({ dados }: { dados: ConsumoMensal[] }) {
           altura={260}
           formatarValor={(valor) => formatarKwh(valor, 1)}
           observacoes={observacoes}
+          marcadores={marcadores}
         />
       </div>
 
@@ -197,7 +184,6 @@ export function GraficoConsumo({ dados }: { dados: ConsumoMensal[] }) {
 export function ExplicacaoConta({
   texto,
   efeitos,
-  semCartao = false,
 }: {
   texto: string | null
   efeitos?: {
@@ -206,7 +192,6 @@ export function ExplicacaoConta({
     bandeira: number | string
     outros: number | string
   } | null
-  semCartao?: boolean
 }) {
   const [copiado, setCopiado] = useState(false)
 
@@ -254,24 +239,13 @@ export function ExplicacaoConta({
     </div>
   )
 
-  if (semCartao) return conteudo
-
-  return (
-    <Cartao
-      titulo="Por que a conta mudou"
-      subtitulo="Explicação da última fatura em comparação ao ano anterior"
-    >
-      {conteudo}
-    </Cartao>
-  )
+  return conteudo
 }
 
 export function Faturas({
   dados,
-  semCartao = false,
 }: {
   dados: FaturaUC[]
-  semCartao?: boolean
 }) {
   const conteudo = (
     <div className="space-y-4">
@@ -285,9 +259,11 @@ export function Faturas({
               <td className="px-3 py-3">{fatura.vencimento}</td>
               <td className="px-3 py-3">{formatarMoeda(fatura.valor)}</td>
               <td className="px-3 py-3">
-                {fatura.diasAtraso == null || fatura.diasAtraso <= 0
-                  ? 'Em dia'
-                  : `${fatura.diasAtraso} dias`}
+                {fatura.diasAtraso === null
+                          ? 'Atraso não informado'
+                          : fatura.diasAtraso <= 0
+                            ? 'Em dia'
+                            : `${fatura.diasAtraso} dias`}
               </td>
             </tr>
           ))}
@@ -296,26 +272,15 @@ export function Faturas({
     </div>
   )
 
-  if (semCartao) return conteudo
-
-  return (
-    <Cartao
-      titulo="Faturas em aberto"
-      subtitulo={`${dados.length} fatura(s) em aberto`}
-    >
-      {conteudo}
-    </Cartao>
-  )
+  return conteudo
 }
 
 export function Interrupcoes({
   dados,
   alimentador,
-  semCartao = false,
 }: {
   dados: InterrupcaoUC[]
   alimentador?: { nome: string; interrupcoes: number; dec: string }
-  semCartao?: boolean
 }) {
   const conteudo = (
     <div className="space-y-4">
@@ -345,19 +310,10 @@ export function Interrupcoes({
     </div>
   )
 
-  if (semCartao) return conteudo
-
-  return (
-    <Cartao
-      titulo="Interrupções"
-      subtitulo="Histórico de interrupções da unidade consumidora"
-    >
-      {conteudo}
-    </Cartao>
-  )
+  return conteudo
 }
 
-export function Atendimentos({ dados, semCartao = false }: { dados: AtendimentoUC[]; semCartao?: boolean }) {
+export function Atendimentos({ dados }: { dados: AtendimentoUC[] }) {
   const [expandidos, setExpandidos] = useState<string[]>([])
 
   function alternar(id: string) {
@@ -372,7 +328,7 @@ export function Atendimentos({ dados, semCartao = false }: { dados: AtendimentoU
     <div className="space-y-4">
 
       {dados.length === 0 ? (
-        <SemDados mensagem="Histórico de atendimentos ainda não disponível." />
+        <SemDados mensagem="Nenhum atendimento registrado." />
       ) : (
         <div className="space-y-3">
           {dados.map((atendimento) => {
@@ -395,7 +351,7 @@ export function Atendimentos({ dados, semCartao = false }: { dados: AtendimentoU
                       {atendimento.status}
                       {atendimento.avaliacao !== null
                         ? ` · Avaliação ${formatarNumero(atendimento.avaliacao, 1)}/5`
-                        : ''}
+                        : ' · Não avaliou'}
                     </span>
                   </span>
                   {aberto ? (
@@ -433,26 +389,15 @@ export function Atendimentos({ dados, semCartao = false }: { dados: AtendimentoU
     </div>
   )
 
-  if (semCartao) return conteudo
-
-  return (
-    <Cartao
-      titulo="Atendimentos"
-      subtitulo={`${dados.length} atendimento(s) · histórico de atendimento`}
-    >
-      {conteudo}
-    </Cartao>
-  )
+  return conteudo
 }
 
 export function Inspecoes({
-  semCartao = false,
   dados,
   ordemAtiva,
   idOrdemAtiva,
   motivoSuspeita,
 }: {
-  semCartao?: boolean
   dados: InspecaoUC[]
   ordemAtiva: string | null
   idOrdemAtiva?: string | null
@@ -473,14 +418,15 @@ export function Inspecoes({
       )}
 
       {dados.length === 0 ? (
-        <SemDados mensagem="Informações de inspeções ainda não disponíveis." />
+        <SemDados mensagem="Nenhuma inspeção registrada." />
       ) : (
-        <Tabela colunas={['Data', 'Resultado', 'Observação']}>
+        <Tabela colunas={['Data', 'Resultado', 'Origem', 'Tipo de irregularidade']}>
           {dados.map((inspecao) => (
             <tr key={inspecao.id}>
               <td className="px-3 py-3">{inspecao.data}</td>
-              <td className="px-3 py-3">{inspecao.resultado}</td>
-              <td className="px-3 py-3">{inspecao.observacao}</td>
+              <td className="px-3 py-3">{inspecao.resultado.replaceAll('_', ' ').toLowerCase().replace(/^./, (letra) => letra.toUpperCase())}</td>
+              <td className="px-3 py-3">{inspecao.origem || "—"}</td>
+              <td className="px-3 py-3">{inspecao.tipoIrregularidade || "—"}</td>
             </tr>
           ))}
         </Tabela>
@@ -488,11 +434,5 @@ export function Inspecoes({
     </div>
   )
 
-  if (semCartao) return conteudo
-
-  return (
-    <Cartao titulo="Inspeções" subtitulo="Histórico de inspeções e ordens">
-      {conteudo}
-    </Cartao>
-  )
+  return conteudo
 }
