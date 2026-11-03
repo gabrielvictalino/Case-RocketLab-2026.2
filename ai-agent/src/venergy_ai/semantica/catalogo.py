@@ -205,7 +205,8 @@ VISOES = (
         regras=(
             'Para receita e volume de um recorte, some as linhas; não tire média de segmentos.',
             'Tarifa média = SUM(receita) ÷ SUM(volume_faturado_kwh).',
-            'Inadimplência = (receita − receita arrecadada) ÷ receita do período.',
+            'Inadimplência = (receita − receita arrecadada) ÷ receita do período × 100, em %, '
+            'como no card do portal.',
         ),
     ),
     Visao(
@@ -339,6 +340,9 @@ VISOES = (
             '(todas, não só as interrompidas) e junte as ocorrências delas por id_uc. DEC = '
             'SUM(duracao_efetiva_min) / 60 ÷ número de UCs do recorte; FEC = ocorrências com NOT '
             'flag_sobreposicao ÷ o mesmo número.',
+            'Sem o evento atípico: esta view não tem a marcação. Exclua as ocorrências cujo '
+            "alimentador e mês (date_trunc('month', data_abertura)) têm flag_evento_atipico em "
+            'continuidade_alimentador_mensal.',
         ),
     ),
     Visao(
@@ -457,9 +461,8 @@ VISOES = (
         coluna_tempo=None,
         periodo='Score da carga mais recente, sem as UCs que têm ordem ativa agora.',
         regras=(
-            'A view já tira as UCs com ordem aberta ou em campo, como a fila do portal.',
-            'Uma UC inspecionada no portal depois da carga volta à fila quando a ordem é '
-            "concluída. Para tirá-la, exclua as id_uc de inspecoes com origem = 'portal'.",
+            'A view já tira as UCs com ordem aberta ou em campo, como a fila do portal. A UC com '
+            'ordem concluída ou cancelada volta à fila: reinspeção é permitida.',
             'Energia a recuperar é estimativa; kwh_recuperado de inspecoes é o apurado.',
         ),
     ),

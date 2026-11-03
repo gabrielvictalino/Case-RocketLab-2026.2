@@ -115,9 +115,7 @@ class AgenteTextoSQL:
 
     async def _responder(self, pergunta: str, contexto: Contexto, andamento: Andamento) -> dict:
         uso = andamento.uso
-        padrao = contexto.periodo or periodo_padrao(
-            contexto.competencia_mais_recente, contexto.competencia_inicial
-        )
+        padrao = _periodo_padrao(contexto)
         instrucoes = instrucoes_do_plano(contexto, padrao)
         execucao = await self.planejador.run(
             pergunta_delimitada(pergunta), instructions=instrucoes, usage=uso
@@ -145,7 +143,9 @@ class AgenteTextoSQL:
                 usage=uso,
             )
         periodo = _periodo(plano, padrao, consulta)
-        usados = dict(metrica=plano.metrica, periodo=periodo and _usado(periodo))
+        usados = dict(
+            metrica=plano.metrica, filtros=plano.filtros, periodo=periodo and _usado(periodo)
+        )
         # Uma agregação sobre zero linhas devolve uma linha só de nulos: também é "sem dado".
         if not any(valor is not None for linha in consulta.linhas for valor in linha):
             onde = f' em {periodo.descricao}' if periodo else ''
@@ -164,17 +164,7 @@ class AgenteTextoSQL:
         texto = redacao.output.strip()
         if not texto:
             return _nao_sei('O modelo não redigiu a resposta.', alternativa, **usados)
-        permitidos = [len(consulta.linhas), *_anos_citados(pergunta)]
-        # No corte da guarda, o total é só o limite: "há 1.000 UCs" não se sustenta.
-        if consulta.total_linhas < LIMITE_MAXIMO:
-            permitidos.append(consulta.total_linhas)
-        if periodo is not None:
-            permitidos += [periodo.meses, *_anos(periodo, padrao, contexto)]
-        # Só as linhas que o redator viu: as que passam das exibidas não sustentam o texto.
-        # Os números da pergunta só valem como limiar ("acima de 30%"), nunca como resultado.
-        if sem_lastro := numeros_sem_lastro(
-            texto, consulta.linhas, permitidos, numeros_citados(pergunta), consulta.colunas
-        ):
+        if sem_lastro := conferir_numeros(texto, pergunta, consulta, periodo, contexto):
             return _nao_sei(
                 'A resposta citava números que não estão no resultado da consulta: '
                 f'{", ".join(sem_lastro)}.',
@@ -221,6 +211,17 @@ def _nao_sei(motivo: str, alternativa: str | None = None, **usados) -> dict:
     return dict(tipo='nao_sei', texto=texto, motivo=motivo, alternativa=alternativa, **usados)
 
 
+def _periodo_padrao(contexto: Contexto) -> Periodo:
+    """Sem período na pergunta, vale o da última troca da conversa, depois o da tela e,
+    por fim, os 12 meses até a competência mais recente."""
+    anterior = next((t.periodo for t in reversed(contexto.historico) if t.periodo), None)
+    if anterior is not None:
+        return Periodo(anterior.inicio, anterior.fim)
+    return contexto.periodo or periodo_padrao(
+        contexto.competencia_mais_recente, contexto.competencia_inicial
+    )
+
+
 def _sem_numero_inventado(texto: str | None, permitidos: list) -> str | None:
     """O texto do modelo, ou None quando ele cita um número que não se sustenta."""
     if texto and numeros_sem_lastro(texto, [], permitidos):
@@ -255,6 +256,36 @@ def _anos_citados(pergunta: str) -> set[int]:
         for n in numeros_citados(pergunta)
         if n == n.to_integral_value() and 1900 <= n <= 2100
     }
+
+
+def conferir_numeros(
+    texto: str, pergunta: str, consulta: Consulta, periodo: Periodo | None, contexto: Contexto
+) -> list[str]:
+    """Os números do texto que não se sustentam. A avaliação confere com esta mesma função.
+
+    Valem as linhas que o redator viu, as contagens de linhas (menos o total no corte da
+    guarda), os anos da pergunta e, com período, o número de meses e os anos dele. Os
+    demais números da pergunta só valem como limiar ("acima de 30%")."""
+    return numeros_sem_lastro(
+        texto,
+        consulta.linhas,
+        numeros_permitidos(pergunta, consulta, periodo, contexto),
+        numeros_citados(pergunta),
+        consulta.colunas,
+    )
+
+
+def numeros_permitidos(
+    pergunta: str, consulta: Consulta, periodo: Periodo | None, contexto: Contexto
+) -> list[int]:
+    """Números que o texto pode citar em qualquer lugar, sem estar nas linhas."""
+    permitidos = [len(consulta.linhas), *_anos_citados(pergunta)]
+    # No corte da guarda, o total é só o limite: "há 1.000 UCs" não se sustenta.
+    if consulta.total_linhas < LIMITE_MAXIMO:
+        permitidos.append(consulta.total_linhas)
+    if periodo is not None:
+        permitidos += [periodo.meses, *_anos(periodo, _periodo_padrao(contexto), contexto)]
+    return permitidos
 
 
 def _anos(periodo: Periodo, padrao: Periodo, contexto: Contexto) -> set[int]:

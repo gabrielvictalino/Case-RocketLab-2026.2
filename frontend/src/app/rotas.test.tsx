@@ -131,7 +131,7 @@ describe('rotas do portal', () => {
 
   it('lista os 5 links na navegação lateral preservando periodo/comparacao e marca a rota ativa', async () => {
     renderizarRota('/receita')
-    const nav = await screen.findByRole('navigation')
+    const nav = (await screen.findAllByRole('navigation')).find((elemento) => !elemento.hasAttribute('aria-label'))!
     const links = nav.querySelectorAll('a')
     expect(links).toHaveLength(5)
 

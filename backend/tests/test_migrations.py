@@ -82,6 +82,15 @@ async def test_upgrade_existing_publication_and_downgrade(infrastructure):
         await migrate('upgrade', 'head')
         await load(ROOT / 'contracts/samples', importer_url)
         assert await db.fetchval('SELECT count(*) FROM portal_read.inspecoes') == 2
+        # Num banco já carregado, a 0004 troca as views da IA sem esperar outra carga.
+        await migrate('downgrade', '0003')
+        definicao = "SELECT pg_get_viewdef('ai_read.fila_inspecao'::regclass)"
+        assert 'ordens_inspecao' not in await db.fetchval(definicao)
+        await migrate('upgrade', 'head')
+        assert 'ordens_inspecao' in await db.fetchval(definicao)
+        assert 'translate' in await db.fetchval(
+            "SELECT pg_get_viewdef('ai_read.inspecoes'::regclass)"
+        )
     finally:
         await db.close()
         await admin.execute(f'DROP DATABASE {name}')
