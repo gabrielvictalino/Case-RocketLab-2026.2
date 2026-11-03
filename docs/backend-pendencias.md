@@ -107,3 +107,5 @@ integração/revisão: esta entrega versiona a configuração sem aplicar prote�
    - `reference_date` obrigatória no manifesto com gate temporal em relação ao fechamento do período.
    - Gerador autônomo `contracts/manifesto.py` para execução independente em jobs Databricks.
    - Modo `importador --origem <dir> --verificar` para validação transacional com rollback automático.
+
+- **Receita — contagem de UCs por grupo:** o endpoint `/receita/grupos` não retorna a contagem de UCs solicitada na coluna do mockup; a tela omite essa coluna até existir um contrato para a métrica.

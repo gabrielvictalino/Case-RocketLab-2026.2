@@ -1244,3 +1244,221 @@
 .ve-agent-form .ve-btn {
   height: 40px;
 }
+.ve-agent-context {
+  font-size: 12px;
+  line-height: 16px;
+  margin-top: 2px;
+}
+.ve-agent-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+.ve-agent-chips .ve-badge {
+  white-space: normal;
+}
+.ve-agent-intro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--ink-muted);
+}
+.ve-agent-intro p {
+  margin: 0;
+}
+.ve-agent-sugestoes,
+.ve-agent-alternativa {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.ve-agent-sugestoes .ve-btn,
+.ve-agent-alternativa .ve-btn {
+  height: auto;
+  min-height: var(--size-control-sm);
+  padding-top: var(--space-1);
+  padding-bottom: var(--space-1);
+  text-align: left;
+  white-space: normal;
+}
+.ve-agent-troca {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.ve-agent-q {
+  align-self: flex-end;
+  max-width: 85%;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--brand-soft);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 20px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ve-agent-answer,
+.ve-agent-nao-sei {
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  font-size: 14px;
+  line-height: 20px;
+}
+.ve-agent-answer p,
+.ve-agent-nao-sei p {
+  margin: 0 0 var(--space-2);
+}
+.ve-agent-nao-sei {
+  border-left: 3px solid var(--attention);
+}
+.ve-agent-nao-sei-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+.ve-agent-nao-sei-title .ve-icon {
+  color: var(--attention);
+}
+.ve-agent-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: 13px;
+  line-height: 18px;
+}
+.ve-agent-steps li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--ink-muted);
+}
+.ve-agent-steps li::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--line-strong);
+  flex: none;
+}
+.ve-agent-steps li[data-estado='feita']::before {
+  background: var(--favorable);
+  border-color: var(--favorable);
+}
+.ve-agent-steps li[data-estado='atual'] {
+  color: var(--ink);
+  font-weight: 600;
+}
+.ve-agent-steps li[data-estado='atual']::before {
+  background: var(--brand);
+  border-color: var(--brand);
+  animation: ve-agent-pulso 1.2s ease-in-out infinite;
+}
+@keyframes ve-agent-pulso {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ve-agent-steps li[data-estado='atual']::before {
+    animation: none;
+  }
+}
+.ve-agent-how {
+  margin-top: var(--space-3);
+  font-size: 13px;
+  line-height: 18px;
+}
+.ve-agent-how summary {
+  cursor: pointer;
+  color: var(--link);
+  font-weight: 500;
+}
+.ve-agent-how summary:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-sm);
+}
+.ve-agent-how[open] summary {
+  margin-bottom: var(--space-2);
+}
+.ve-agent-how-label {
+  margin: var(--space-2) 0 var(--space-1);
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+.ve-agent-sql {
+  margin: 0 0 var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ve-agent-how .ve-table-wrap {
+  max-height: 240px;
+  overflow: auto;
+}
+.ve-agent-tentativa {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  color: var(--ink-muted);
+}
+.ve-agent-tentativa .ve-icon {
+  color: var(--attention);
+  margin-top: 2px;
+  flex: none;
+}
+.ve-agent-meta {
+  margin: var(--space-2) 0 0;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.ve-dialog-overlay { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 1rem; background: rgb(0 0 0 / 55%); }
+.ve-dialog { background: var(--surface, white); color: var(--text, #18212c); padding: 1.5rem; width: min(100%, 34rem); max-height: 90vh; overflow: auto; border-radius: 8px; box-shadow: 0 12px 35px rgb(0 0 0 / 25%); }
+.ve-dialog-form { display: grid; gap: 1rem; margin-top: 1rem; }
+.ve-dialog-form label { display: grid; gap: .4rem; }
+.ve-dialog-form input:not([type=radio]), .ve-dialog-form textarea, .ve-dialog-form select { width: 100%; padding: .6rem; border: 1px solid #8995a3; border-radius: 4px; background: white; color: #18212c; }
+.ve-dialog-form fieldset { display: grid; gap: .5rem; }
+.ve-dialog-form fieldset label { display: block; }
+.ve-motivos { display: inline-block; max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
+.ve-acoes-ordem { display: flex; flex-wrap: wrap; gap: .3rem; }
+.ve-lote-resumo { padding: .5rem 1rem; }
+
+/* Tabelas de receita: colunas compactas para comparação lado a lado. */
+.ve-receita-tabela .ve-table th,
+.ve-receita-tabela .ve-table td {
+  padding-left: 6px;
+  padding-right: 6px;
+}
+.ve-receita-tabela .ve-table th:first-child,
+.ve-receita-tabela .ve-table td:first-child {
+  padding-left: 12px;
+}
+.ve-receita-tabela .ve-table th:last-child,
+.ve-receita-tabela .ve-table td:last-child {
+  padding-right: 12px;
+}
+
+.ve-kpi-link, .ve-kpi-link:hover { color: inherit; text-decoration: none; }
+.ve-kpi-link:hover { border-color: var(--focus); }
+.ve-kpi-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; box-shadow: var(--focus-ring); }
+.ve-kpi-sem-dados { white-space: normal; font-size: 12px; line-height: 16px; color: var(--ink-muted); font-weight: 400; }
+.ve-kpi-pair > div { min-width: 0; }

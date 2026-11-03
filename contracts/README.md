@@ -12,6 +12,47 @@ de pagamento (R2), a regra temporal de grupos de UC (R3), a coerência cadastral
 a fórmula canônica de decomposição da receita (R5), a data de referência no manifesto (R6),
 o gerador autônomo de manifesto (R7) e o modo de teste `--verificar` (R8).
 
+## Decisão de dados — comentário 6587742059 da #67
+
+Implementa a [decisão de 02/11/2026](https://github.com/gabrielvictalino/Case-RocketLab-2026.2/pull/67#issuecomment-6587742059).
+O nome e o layout `0.3.0-provisional` são mantidos; as descrições provisórias são
+alinhadas ao significado aprovado para o case. Isso não aprova os demais domínios.
+
+- `volume_faturado_kwh` é o consumo analítico associado à fatura elegível, incluindo
+  estimativas. Não comprova volume do sistema comercial. Sem fatura, continua zero.
+- Original é o valor da Silver, após correções comprovadas de sinal. Leitura utilizável
+  mantém o valor; leituras bloqueadas usam mediana da própria UC por fase da GD,
+  com fallback histórico. Sem doador, a exportação falha com a contagem no erro.
+- O snapshot de `v-energy.silver.tb_medidores` fornece o mês de retirada, equivalente
+  a `competencia_troca` da #105. Esse mês também marca troca quando a leitura só
+  indica ausência de anterior; não se usa o mês de instalação do medidor seguinte.
+- Faturas sem leitura são segregadas com `FATURA_SEM_LEITURA`, como as pendências
+  cadastrais; detalhe + exclusões continuam reconciliando integralmente a fonte.
+  Problema na medição não exclui uma fatura válida que possui leitura estimável.
+- Tarifa base é derivada por subgrupo tarifário × competência: mediana de
+  `valor_energia / consumo utilizável positivo - adicional_bandeira`, nas faturas
+  elegíveis. Tarifas líquidas negativas não doam e são contadas na proveniência,
+  sem excluir as faturas. Subtrair a bandeira evita contá-la duas vezes na R5.
+  A mediana é arredondada para seis casas; não é tarifa homologada. Sem doador de
+  tarifa no grupo/mês, a carga falha com contagem; não há fallback entre classes.
+- Adicionais fixos: Verde 0; Amarela 0,01885; Vermelha P1 0,04463; Vermelha P2
+  0,07877 R$/kWh. São característica dos dados do case em todo o período e não
+  representam o histórico regulatório da ANEEL.
+- `complemento_proveniencia` guarda a regra, subgrupo e contagem de doadores por
+  fatura. `consumo_proveniencia` guarda original, método, medianas e doadores.
+  `cobertura_volume` discrimina quantidade, volume e receita por método e tipo de
+  leitura, no grão comercial: permite somar observado/estimado e calcular a cobertura.
+  `LEITURA_UTILIZAVEL` com tipo `ESTIMADA` continua distinguível de leitura `REAL`.
+- O complemento é derivado quando o widget está vazio. Um complemento explícito
+  fornece somente tarifas e proveniência; o volume é sempre derivado do analítico. O importador
+  também verifica essa igualdade para toda linha com fatura.
+- Os componentes da R5 somam produtos decimais antes de arredondar por grão.
+  Não se fixa `k₀ = 4/3`: resíduos e composição podem mudar o fator e o mix.
+  Volume implícito pela conta não substitui o volume canônico.
+
+A homologação no Databricks, disponibilidade/coerência das fontes (incluindo
+inspeções), referência oficial e lote completo de 12 tabelas seguem necessárias.
+
 ## Convenções de intercâmbio
 
 - UTF-8, CSV com vírgula, cabeçalho e ordem de colunas exatamente como o contrato.
@@ -180,7 +221,7 @@ A tabela abaixo mapeia cada um dos 9 itens da seção 13 do system design com su
 | # | Pendência Original (§13) | Bloqueia | Status no Contrato 0.3.0-provisional |
 |---|---|---|---|
 | **1** | **Consumo original e analítico** em colunas separadas em `uc_consumo_faturamento_mensal`, com a marcação de leitura estimada e de troca de medidor e o método de estimativa | Visão 360, volume faturado | **Formalizado (R2)**: colunas separadas `consumo_kwh_original`, `consumo_kwh_analitico`, `metodo_consumo` e gate de troca de medidor. |
-| **2** | **Fórmula da decomposição da receita** (volume, reajuste, bandeira, mix), aplicável a qualquer par de períodos sobre `receita_volume_mensal`, incluindo como obter a tarifa base da classe por competência | Receita, insights, agente | **Formalizado (R5)**: fórmula canônica com fator $k_0$, quatro efeitos e fechamento exato em Decimal no README; implementação na P20. |
+| **2** | **Fórmula da decomposição da receita** (volume, reajuste, bandeira, mix), aplicável a qualquer par de períodos sobre `receita_volume_mensal`, incluindo como obter a tarifa base por subgrupo tarifário × competência | Receita, insights, agente | **Formalizado (R5)**: fórmula canônica com fator $k_0$, quatro efeitos e fechamento exato em Decimal no README; implementação na P20. |
 | **3** | **Grupo de UC** em `receita_volume_mensal` (com GD, irregularidade confirmada, demais), respeitando a data de conexão da GD | Receita | **Formalizado (R3)**: regra temporal GD > IRREGULARIDADE_CONFIRMADA > DEMAIS com `date_trunc` e gate SQL. |
 | **4** | **Regra de DEC/FEC**: sobreposição de interrupções (fórmula simples ou `duracao_efetiva_min`), denominador por alimentador e marcação de evento atípico | Operação, Visão Geral | **Proposta no #98** (`docs/gold/continuidade.md`): CHI com `duracao_efetiva_min`, interrupções com `flag_sobreposicao = false`, denominador fixo com as UCs do alimentador no cadastro e evento atípico marcado pela Silver, sem remoção. Falta o aceite do backend (#57) para a causa principal por linha e o valor `SEM OCORRENCIA`. |
 | **5** | **Fila de inspeção** com score, motivos em formato legível (lista de sinais com valor) e energia a recuperar em kWh e R$, sem UCs com GD | Perdas | **Formalizado (R4)**: gate estrito excluindo UCs de `gd_uc` da fila; `dim_uc.flag_gd` auditado contra `gd_uc`. |

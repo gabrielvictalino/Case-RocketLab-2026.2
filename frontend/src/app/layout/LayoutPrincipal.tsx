@@ -3,9 +3,12 @@ import { Outlet } from 'react-router'
 import { NavegacaoLateral } from '@/app/layout/NavegacaoLateral'
 import { BarraPeriodo } from '@/app/periodo/BarraPeriodo'
 import { PainelAgente } from '@/features/assistente/PainelAgente'
+import { useConversaAgente } from '@/features/assistente/useConversaAgente'
 
 export function LayoutPrincipal() {
   const [agenteAberto, setAgenteAberto] = useState(false)
+  // A conversa fica aqui, e não no painel: ela continua ao trocar de tela ou fechar o painel.
+  const conversa = useConversaAgente()
 
   return (
     <div
@@ -54,6 +57,7 @@ export function LayoutPrincipal() {
       <PainelAgente
         aberto={agenteAberto}
         aoFechar={() => setAgenteAberto(false)}
+        conversa={conversa}
       />
     </div>
   )
