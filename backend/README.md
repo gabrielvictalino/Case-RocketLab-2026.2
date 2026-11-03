@@ -72,7 +72,9 @@ também o importador e a suíte completa, use `--all-packages`.
    Sua tabela de versões e todas as migrações ficam em `operations`. A revisão
    `0001` assume `cargas` já existente e cria usuários, ordens, eventos e inspeções.
    `0002` acrescenta a ordem de publicação de cargas e o schema `portal_read`.
-   `0003` cria `agente_auditoria`, gravada e lida só pela role `portal`.
+   `0003` dá ao `importador` `SELECT` em `id_uc` e `status` das ordens, para a fila
+   da IA tirar as UCs com ordem ativa.
+   `0004` cria `agente_auditoria`, gravada e lida só pela role `portal`.
    Alterações futuras de `cargas` devem ser migrações; não reeditar o bootstrap
    esperando que ele rode num volume existente.
 3. O importador depende dessa migração, pois as views unem inspeções novas e
