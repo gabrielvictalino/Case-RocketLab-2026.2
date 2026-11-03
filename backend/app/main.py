@@ -19,6 +19,7 @@ from app.modules.kpis.router import router as kpis_router
 from app.modules.meta.router import router as meta_router
 from app.modules.perdas.router import router as perdas_router
 from app.modules.receita.router import router as receita_router
+from app.modules.perdas.router import fila_router
 from app.modules.ucs.router import router as ucs_router
 
 logger = logging.getLogger('venergy.requests')
@@ -123,6 +124,7 @@ def create_app(settings=None):
         auth_router,
         meta_router,
         perdas_router,
+        fila_router,
         ucs_router,
         kpis_router,
         receita_router,

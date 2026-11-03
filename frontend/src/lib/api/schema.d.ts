@@ -158,6 +158,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/perdas/fila": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Fila */
+        get: operations["fila_api_v1_perdas_fila_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ucs/{id_uc}": {
         parameters: {
             query?: never;
@@ -587,6 +604,26 @@ export interface components {
             ocorrencias: components["schemas"]["OcorrenciaUC"][];
             alimentador: components["schemas"]["ResumoAlimentador"];
         };
+        /** ItemFila */
+        ItemFila: {
+            /** Id Uc */
+            id_uc: string;
+            /** Municipio */
+            municipio: string;
+            /** Bairro */
+            bairro: string;
+            /** Classe */
+            classe: string;
+            /** Score */
+            score: string;
+            /** Motivos */
+            motivos: string[];
+            /** Energia Recuperar Kwh */
+            energia_recuperar_kwh: string;
+            /** Energia Recuperar Reais */
+            energia_recuperar_reais: string;
+            inspecao_anterior: components["schemas"]["Inspecao"] | null;
+        };
         /** KPIs */
         KPIs: {
             /** Periodo */
@@ -746,6 +783,18 @@ export interface components {
              */
             atualizado_em: string;
         };
+        /** PaginaFila */
+        PaginaFila: {
+            /** Items */
+            items: components["schemas"]["ItemFila"][];
+            /** Total */
+            total: number;
+            /** Page */
+            page: number;
+            /** Size */
+            size: number;
+            totais: components["schemas"]["TotaisFila"];
+        };
         /** PaginaOrdens */
         PaginaOrdens: {
             /** Items */
@@ -849,6 +898,20 @@ export interface components {
             token_type: string;
             /** Expires In */
             expires_in: number;
+        };
+        /** TotaisEnergia */
+        TotaisEnergia: {
+            /** Itens */
+            itens: number;
+            /** Energia Recuperar Kwh */
+            energia_recuperar_kwh: string;
+            /** Energia Recuperar Reais */
+            energia_recuperar_reais: string;
+        };
+        /** TotaisFila */
+        TotaisFila: {
+            pagina: components["schemas"]["TotaisEnergia"];
+            filtro: components["schemas"]["TotaisEnergia"];
         };
         /** UCs */
         UCs: {
@@ -1193,6 +1256,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Ordem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    fila_api_v1_perdas_fila_get: {
+        parameters: {
+            query?: {
+                municipio?: string | null;
+                bairro?: string | null;
+                classe?: string | null;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaFila"];
                 };
             };
             /** @description Validation Error */
