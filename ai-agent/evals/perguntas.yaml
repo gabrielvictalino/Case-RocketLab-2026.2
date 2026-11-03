@@ -33,6 +33,7 @@ casos:
     categoria: liderancas
     pergunta: Qual bairro mais perdeu volume residencial no último ano?
     periodo: 2025-07..2026-06
+    ordem: true
     sql: |
       SELECT bairro,
              sum(volume_faturado_kwh) FILTER (WHERE competencia >= DATE '2025-07-01')
@@ -81,6 +82,7 @@ casos:
     categoria: liderancas
     pergunta: Quais os 5 alimentadores com o pior DEC no último ano?
     periodo: 2025-07..2026-06
+    ordem: true
     sql: |
       SELECT alimentador FROM continuidade_alimentador_mensal
       WHERE competencia BETWEEN DATE '2025-07-01' AND DATE '2026-06-01'
