@@ -99,7 +99,7 @@ async def perguntar(state, body: Pergunta, usuario) -> RespostaPergunta:
     async with state.portal_sessions() as db, db.begin():
         await repository.registrar(db, registro | _da_resposta(resposta))
     await conversas.registrar(
-        state.redis, registro['conversa_id'], usuario['id'], historico, body.pergunta, resposta
+        state.redis, registro['conversa_id'], usuario['id'], body.pergunta, resposta
     )
     return RespostaPergunta(
         **resposta.model_dump(), id_resposta=registro['id'], conversa_id=registro['conversa_id']

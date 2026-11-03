@@ -250,8 +250,11 @@ carga e gravar a auditoria. Enquanto o modelo responde, nenhuma conexão do port
 fica presa e as rotas das telas não disputam o pool. O agente recebe só a engine
 `ai_read`.
 
-Follow-up: `conversa:{id}` no Redis guarda a dona e as últimas 5 trocas (pergunta,
-métrica, filtros, período e SQL), com TTL de 2 h renovado a cada pergunta. O agente
+Follow-up: `conversa:{id}` no Redis guarda a dona, e `conversa:{id}:trocas`, a lista
+das últimas 5 trocas (pergunta, métrica, filtros, período e SQL), com TTL de 2 h renovado
+a cada pergunta. A troca nova entra num script Lua que confere a dona, acrescenta e corta
+a lista no próprio Redis: duas perguntas ao mesmo tempo na mesma conversa guardam as duas
+trocas, sem uma gravar por cima da lista que a outra leu. O agente
 recebe esse estado estruturado, e não só a transcrição: "E em Olinda?" mantém a métrica
 e o período da troca anterior e troca o município. Sem período na pergunta, vale o da
 troca anterior, depois o da tela. Uma resposta sem métrica (fora do domínio) não muda o
