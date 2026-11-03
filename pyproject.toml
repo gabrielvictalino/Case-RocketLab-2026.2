@@ -17,6 +17,7 @@ dev = [
     "testcontainers[postgres,redis]>=4.10,<5",
     "psycopg[binary]>=3.2,<4",
     "ruff>=0.11,<1",
+    "pyyaml>=6,<7",
 ]
 
 [tool.ruff]
@@ -41,4 +42,7 @@ testpaths = ["backend/tests", "ai-agent/tests", "importador/tests", "tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
-markers = ["integration: PostgreSQL 17 e Redis 7 reais via Testcontainers"]
+markers = [
+    "integration: PostgreSQL 17 e Redis 7 reais via Testcontainers",
+    "avaliacao: avaliação do agente com o modelo real (ai-agent/evals), fora do pytest padrão",
+]

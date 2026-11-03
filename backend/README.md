@@ -2,7 +2,9 @@
 
 FastAPI modular, Python 3.12, SQLAlchemy assíncrono e PostgreSQL 17. O workspace
 uv compartilha o lockfile entre `backend`, `importador` e `ai-agent`. O agente
-tem apenas sua interface preparada e não faz chamadas a provedores.
+(`venergy_ai`) roda dentro do backend e chama o provedor configurado em
+`AI_PROVEDOR` e `AI_MODELO`; sem a chave do provedor, o assistente e os insights
+respondem 503.
 
 Esta entrega inclui **amostras sintéticas** e contrato
 `0.2.0-provisional`, não aprovado pelo time de dados. O importador também aceita
@@ -71,8 +73,9 @@ também o importador e a suíte completa, use `--all-packages`.
    Sua tabela de versões e todas as migrações ficam em `operations`. A revisão
    `0001` assume `cargas` já existente e cria usuários, ordens, eventos e inspeções.
    `0002` acrescenta a ordem de publicação de cargas e o schema `portal_read`.
-   `0003` dá ao `importador` `SELECT` em `id_uc` e `status` das ordens, para a fila
-   da IA tirar as UCs com ordem ativa.
+   `0003` cria `agente_auditoria`, gravada e lida só pela role `portal`.
+   `0004` dá ao `importador` `SELECT` em `id_uc` e `status` das ordens e recria a
+   fila da IA sem as UCs com ordem ativa.
    Alterações futuras de `cargas` devem ser migrações; não reeditar o bootstrap
    esperando que ele rode num volume existente.
 3. O importador depende dessa migração, pois as views unem inspeções novas e
@@ -161,6 +164,10 @@ Rotas implementadas:
 | `POST /ordens-inspecao/{id}/tentativas` | `{observacao: "Imóvel fechado"}` |
 | `POST /ordens-inspecao/{id}/resultado` | `{resultado, tipo_irregularidade, kwh_recuperado, data}` |
 | `POST /ordens-inspecao/{id}/cancelar` | `{motivo: "..."}` |
+| `POST /assistente/perguntas` | `{pergunta, conversa_id?, contexto: {tela, periodo, comparacao, recortes}}`; resposta do agente com `id_resposta` e `conversa_id` |
+| `GET /assistente/conversas/{id}` | Perguntas e respostas da conversa, lidas da auditoria; só a dona da conversa |
+| `GET /assistente/respostas/{id}/auditoria` | Pergunta, contexto, SQL gerado e executado, linhas, modelo, tokens e latência; só o autor ou `diretoria` |
+| `GET /insights/{tela}?periodo=AAAA-MM..AAAA-MM` | `visao-geral` ou `receita`, com os parâmetros de período e recorte da tela; 3 a 5 observações com a etiqueta da métrica e os valores que citam |
 
 `core/periodos.py` valida `AAAA-MM..AAAA-MM`, limites e comparação padrão no ano
 anterior. `/meta/filtros` aceita `periodo` e `comparacao` para exercitar a mesma
@@ -232,6 +239,51 @@ Concluir gera uma inspeção nova. `portal_read.inspecoes` une históricas e nov
 com a coluna `origem`. A IA usa `ai_read.inspecoes`, uma projeção independente e
 explícita: alterações na view do portal não ampliam a allowlist. Ordens não referenciam `analytics`
 por FK: o snapshot precisa sobreviver a uma recarga ou à retirada da UC da Gold.
+
+O assistente roda com um teto de 30 s (`ASSISTENTE_TIMEOUT_S`). Tempo esgotado,
+falha do provedor e banco da IA fora do ar respondem 503 (`ASSISTENTE_TEMPO_ESGOTADO`,
+`PROVEDOR_INDISPONIVEL`, `BANCO_INDISPONIVEL`). Toda pergunta fica na auditoria, também
+as que falham: o erro, o SQL que já rodou e os tokens já gastos. Uma consulta lenta da
+`ai_read` é erro da consulta, com nova tentativa e "não sei", e não o 503. A `tela`
+aceita só as telas do portal, e os recortes, nomes e códigos sem aspas, quebras de
+linha, `<` nem `>`: os dois chegam às instruções do modelo. A pergunta só
+usa conexões do portal antes e depois do agente, para conferir o token, ler a
+carga e gravar a auditoria. Enquanto o modelo responde, nenhuma conexão do portal
+fica presa e as rotas das telas não disputam o pool. O agente recebe só a engine
+`ai_read`.
+
+Limites por usuário, no Redis e fail-open (se o Redis cair, vale só o limite por IP
+do Nginx):
+
+- `rl:{usuario}:assistente`: janela deslizante de 1 minuto com
+  `ASSISTENTE_PERGUNTAS_POR_MINUTO` perguntas (padrão 20). A pergunta barrada não entra
+  na janela.
+- `cota:{usuario}:{AAAA-MM-DD}`: tokens do LLM gastos no dia, também os de perguntas
+  que falharam, até `ASSISTENTE_COTA_TOKENS_DIA` (padrão 500.000). O dia vira à
+  meia-noite de Recife.
+
+Os dois respondem `429` com `Retry-After` (`LIMITE_DE_PERGUNTAS`,
+`COTA_DE_TOKENS_ESGOTADA`).
+
+Insights (`GET /insights/{tela}`): os fatos saem dos mesmos serviços da tela
+(`kpis` na Visão Geral; `receita.decomposicao`, `grupos` e `locais` na Receita), numa
+sessão curta do portal, e o modelo só redige. Todo número de uma observação precisa
+estar nos fatos; a que cita um número de fora é descartada e, sem nenhuma válida, a
+rota responde `503 INSIGHT_INDISPONIVEL`. Provedor fora do ar e tempo esgotado também
+são 503 (`PROVEDOR_INDISPONIVEL`, `INSIGHT_TEMPO_ESGOTADO`). O insight fica 24 h em
+`insight:{batch_id}:{tela}:{sha1(pedido)}`, e o pedido inclui os fatos: enquanto os
+números da tela não mudam, ele sai do cache; uma inspeção concluída que muda a taxa de
+acerto gera outro, sem invalidação manual. Só quem vai ao modelo gasta
+`rl:{usuario}:insights` (`INSIGHTS_POR_MINUTO`, padrão 30) e a cota diária de tokens.
+Sem Redis, o insight é gerado a cada pedido.
+
+Follow-up: `conversa:{id}` no Redis guarda a dona e as últimas 5 trocas (pergunta,
+métrica, filtros, período e SQL), com TTL de 2 h renovado a cada pergunta. O agente
+recebe esse estado estruturado, e não só a transcrição: "E em Olinda?" mantém a métrica
+e o período da troca anterior e troca o município. Sem período na pergunta, vale o da
+troca anterior, depois o da tela. Uma resposta sem métrica (fora do domínio) não muda o
+estado. Sem Redis, a pergunta segue sem histórico; o histórico permanente fica na
+auditoria e sai em `GET /assistente/conversas/{id}`.
 
 ## Testes e validações
 

@@ -81,7 +81,7 @@ CREATE VIEW ai_read.atendimentos_historico AS
  SELECT protocolo,sequencia,data FROM analytics.atendimentos_historico;
 GRANT SELECT ON ai_read.atendimentos_historico TO ai_read;
 -- A fila do glossário: as UCs sem ordem ativa, como a do portal. A ordem muda depois da
--- carga, então a view consulta operations a cada leitura (grant da migração 0003).
+-- carga, então a view consulta operations a cada leitura (grant da migração 0004).
 CREATE VIEW ai_read.fila_inspecao AS
  SELECT f.id_uc,f.score,f.motivos,f.energia_recuperar_kwh,f.energia_recuperar_reais
  FROM analytics.fila_inspecao f
