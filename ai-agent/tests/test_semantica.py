@@ -1,3 +1,4 @@
+import re
 from datetime import date
 from pathlib import Path
 
@@ -10,13 +11,15 @@ from venergy_ai.semantica import (
     VISOES_POR_NOME,
     VOCABULARIO,
     Periodo,
+    descrever_periodo_padrao,
     descrever_semantica,
     periodo_comparacao,
     periodo_padrao,
 )
-from venergy_ai.semantica.contexto import linha_da_coluna
+from venergy_ai.semantica.contexto import filtro_do_periodo, linha_da_coluna
 
-CONTRATOS = Path(__file__).resolve().parents[2] / 'contracts/tabelas'
+RAIZ = Path(__file__).resolve().parents[2]
+CONTRATOS = RAIZ / 'contracts/tabelas'
 # Views que não têm o nome da tabela do contrato que copiam.
 TABELA_DA_VISAO = {'ucs': 'dim_uc', 'inspecoes': 'inspecoes_historicas'}
 COLUNAS_PESSOAIS = {
@@ -30,6 +33,16 @@ COLUNAS_PESSOAIS = {
     'endereco',
     'descricao',
 }
+# Colunas sem enum no contrato: os valores vêm da limpeza documentada. Os que não estão
+# na doc vêm da própria view (o OUTRO das inspeções do portal).
+DOMINIOS_DA_LIMPEZA = {
+    ('ocorrencias_uc', 'causa'): ('docs/gold/continuidade.md', ()),
+    ('continuidade_alimentador_mensal', 'causa'): ('docs/gold/continuidade.md', ()),
+    ('atendimentos', 'assunto'): ('docs/overview_dados/atendimentos.md', ()),
+    ('medidores_historico', 'tipo_medidor'): ('docs/silver/silver_medidores.md', ()),
+    ('inspecoes', 'tipo_irregularidade'): ('docs/silver/silver_inspecoes.md', ('OUTRO',)),
+}
+MES = re.compile(r'\b(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)/\d{4}\b')
 
 
 def test_views_e_colunas_sem_repeticao():
@@ -58,9 +71,20 @@ def test_referencias_existem_no_catalogo(referencia):
         visao.coluna(coluna)
 
 
-def colunas_do_contrato(visao):
+def contrato(visao):
     tabela = TABELA_DA_VISAO.get(visao.nome, visao.nome)
-    return yaml.safe_load((CONTRATOS / f'{tabela}.yaml').read_text(encoding='utf-8'))['columns']
+    return yaml.safe_load((CONTRATOS / f'{tabela}.yaml').read_text(encoding='utf-8'))
+
+
+def colunas_do_contrato(visao):
+    return contrato(visao)['columns']
+
+
+@pytest.mark.parametrize('visao', VISOES, ids=lambda visao: visao.nome)
+def test_grao_e_chave_batem_com_o_contrato(visao):
+    # Uma chave errada no prompt leva a contagem dupla nos joins.
+    assert visao.grao == contrato(visao)['grain']
+    assert visao.chave == tuple(contrato(visao)['primary_key'])
 
 
 def test_unidades_batem_com_o_contrato():
@@ -81,10 +105,32 @@ def test_unidades_batem_com_o_contrato():
 )
 def test_valores_e_faixas_batem_com_o_contrato(visao, coluna):
     # Nos dois sentidos: um valor novo no contrato, ou um que saiu dele, quebra o teste.
-    contrato = colunas_do_contrato(visao).get(coluna.nome, {})
-    assert coluna.valores == tuple(contrato.get('enum', ())), f'{visao.nome}.{coluna.nome}'
-    faixa = (contrato['minimum'], contrato['maximum']) if 'maximum' in contrato else None
-    assert coluna.faixa == faixa, f'{visao.nome}.{coluna.nome}'
+    do_contrato = colunas_do_contrato(visao).get(coluna.nome, {})
+    nome = f'{visao.nome}.{coluna.nome}'
+    if 'enum' in do_contrato or (visao.nome, coluna.nome) not in DOMINIOS_DA_LIMPEZA:
+        assert coluna.valores == tuple(do_contrato.get('enum', ())), nome
+    faixa = (do_contrato['minimum'], do_contrato['maximum']) if 'maximum' in do_contrato else None
+    assert coluna.faixa == faixa, nome
+
+
+@pytest.mark.parametrize(('visao', 'coluna'), DOMINIOS_DA_LIMPEZA, ids='.'.join)
+def test_dominios_fora_do_contrato_estao_na_limpeza(visao, coluna):
+    # Um valor que a limpeza não produz faria o agente filtrar por algo que não existe.
+    doc, da_view = DOMINIOS_DA_LIMPEZA[visao, coluna]
+    texto = (RAIZ / doc).read_text(encoding='utf-8')
+    valores = VISOES_POR_NOME[visao].coluna(coluna).valores
+    assert valores
+    assert [v for v in valores if f'`{v}`' not in texto] == list(da_view)
+
+
+def test_tipos_de_irregularidade_batem_com_a_view():
+    sql = (RAIZ / 'importador/views.sql').read_text(encoding='utf-8')
+    view = sql.split('CREATE VIEW ai_read.inspecoes', 1)[1].split(';', 1)[0]
+    tipos = re.findall(r"'([^']+)'", re.search(r'tipo_irregularidade IN \(([^)]*)\)', view)[1])
+    assert VISOES_POR_NOME['inspecoes'].coluna('tipo_irregularidade').valores == (
+        *tipos,
+        'OUTRO',
+    )
 
 
 def test_nota_de_1_a_5_no_prompt():
@@ -107,6 +153,16 @@ def test_periodo_padrao_sao_os_12_meses_ate_a_mais_recente(mais_recente, inicio,
     assert periodo_padrao(mais_recente) == Periodo(inicio, fim)
 
 
+def test_periodo_padrao_nao_comeca_antes_da_base():
+    # Carga de jan a jun/2026: jul/2025 a jun/2026 cairia em PERIODO_FORA_DA_BASE.
+    assert periodo_padrao(date(2026, 6, 1), date(2026, 1, 1)) == Periodo(
+        date(2026, 1, 1), date(2026, 6, 1)
+    )
+    assert periodo_padrao(date(2026, 6, 1), date(2022, 7, 1)) == Periodo(
+        date(2025, 7, 1), date(2026, 6, 1)
+    )
+
+
 def test_periodo_de_comparacao_e_descricao():
     periodo = periodo_padrao(date(2026, 6, 1))
     assert periodo.descricao == 'jul/2025 a jun/2026'
@@ -127,7 +183,7 @@ def secoes_das_views(texto):
 
 
 def test_descricao_para_o_prompt_cita_views_vocabulario_e_limites():
-    texto = descrever_semantica(periodo_padrao(date(2026, 6, 1)))
+    texto = descrever_semantica()
     secoes = secoes_das_views(texto)
     assert set(secoes) == {visao.nome for visao in VISOES}
     for visao in VISOES:
@@ -138,24 +194,47 @@ def test_descricao_para_o_prompt_cita_views_vocabulario_e_limites():
         assert f'"{termo.expressoes[0]}"' in texto
     for limite in LIMITES:
         assert limite.descricao in texto
-    assert 'jul/2025 a jun/2026 (2025-07-01 a 2026-06-01)' in texto
-    assert 'os 12 meses até a competência mais recente' in descrever_semantica()
+
+
+def test_texto_fixo_nao_cita_mes_nem_ano():
+    # A cobertura vem da carga: um mês escrito à mão faria o agente dizer "não sei" sobre
+    # dados que uma exportação nova traz.
+    sem_carga = descrever_semantica()
+    assert MES.findall(sem_carga) == []
+    assert re.findall(r'\b20\d\d\b', sem_carga) == []
 
 
 def test_cobertura_e_data_de_referencia_vem_da_carga():
-    # Uma carga que chega até jul/2026: nada no texto fixo diz que a base acaba em jun/2026.
     base = Periodo(date(2022, 7, 1), date(2026, 7, 1))
-    texto = descrever_semantica(periodo_padrao(base.fim), base, date(2026, 8, 1))
+    texto = descrever_semantica(base, date(2026, 8, 1))
     assert 'A base cobre as competências de jul/2022 a jul/2026' in texto
-    assert 'jun/2026' not in texto.replace('ago/2025 a jul/2026', '')
+    # Os únicos meses do texto são os da carga.
+    assert set(MES.findall(texto)) == {'jul'}
     assert "data_vencimento < DATE '2026-08-01'" in texto
-    assert 'Comparação padrão: ago/2024 a jul/2025' in texto
-    sem_carga = descrever_semantica()
-    assert 'não responda sobre conta atrasada' in sem_carga
-    assert 'jul/2022' not in sem_carga and 'jun/2026' not in sem_carga
+    assert 'não responda sobre conta atrasada' in descrever_semantica(base)
+
+
+@pytest.mark.parametrize('visao', [v for v in VISOES if v.coluna_tempo], ids=lambda v: v.nome)
+def test_filtro_de_periodo_inclui_o_ultimo_mes(visao):
+    secao = secoes_das_views(descrever_semantica())[visao.nome]
+    filtro = filtro_do_periodo(visao)
+    assert f'Filtro de período: {filtro}' in secao
+    if visao.coluna_tempo != 'competencia':
+        # Em data e hora, um BETWEEN até o dia 1 do último mês perderia quase todo ele.
+        assert "INTERVAL '1 month'" in filtro and 'BETWEEN' not in filtro
+
+
+def test_periodo_padrao_traz_os_filtros_com_as_datas():
+    texto = descrever_periodo_padrao(Periodo(date(2025, 7, 1), date(2026, 6, 1)), date(2022, 7, 1))
+    assert (
+        'Sem período na pergunta: jul/2025 a jun/2026. Em competencia: BETWEEN DATE '
+        "'2025-07-01' AND DATE '2026-06-01'. Em data ou data e hora: >= DATE '2025-07-01' "
+        "AND < DATE '2026-07-01'." in texto
+    )
+    assert 'Comparação padrão: jul/2024 a jun/2025.' in texto
 
 
 def test_sem_comparacao_padrao_no_primeiro_ano_da_base():
     base = Periodo(date(2025, 7, 1), date(2026, 6, 1))
-    texto = descrever_semantica(periodo_padrao(base.fim), base)
+    texto = descrever_periodo_padrao(periodo_padrao(base.fim, base.inicio), base.inicio)
     assert 'Sem comparação padrão' in texto
