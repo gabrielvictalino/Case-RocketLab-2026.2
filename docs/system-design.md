@@ -163,7 +163,8 @@ versão da carga.
 4. **Insight** com o mesmo funcionamento da Visão Geral.
 
 A decomposição vale para qualquer par de períodos, então é calculada na hora
-sobre `receita_volume_mensal`. A fórmula é a mesma do diagnóstico e do
+sobre `receita_volume_mensal`. Os efeitos são calculados por município, bairro, classe
+e grupo de UC, e os agregados somam esses efeitos. A fórmula é a mesma do diagnóstico e do
 agente, e vem do contrato.
 
 ### 4.3 Unidade Consumidora (F3)
@@ -405,11 +406,14 @@ separados.
 |---|---|---|---|
 | `analytics` | Tabelas do contrato Gold | importador | role `portal` |
 | `operations` | `usuarios`, `ordens_inspecao`, `ordem_eventos`, `inspecoes`, `importacoes`, `agente_auditoria`, `cargas` | role `portal`; `cargas` pelo importador | role `portal` |
-| `ai_read` | Views sobre `analytics`, sem nome, CPF e endereço | importador, a cada carga | role `ai_read` |
+| `ai_read` | Views sobre `analytics` e `operations.inspecoes`, sem nome, CPF e endereço | importador, a cada carga | role `ai_read` |
 
 Role `ai_read`: só `SELECT` em `ai_read`, `default_transaction_read_only = on`,
-`statement_timeout = 5s` e sem `EXECUTE` em `set_config` e na família
-`pg_sleep`. Como a própria sessão pode mudar o timeout e o modo só leitura com
+`statement_timeout = 5s` e sem `EXECUTE` em `set_config`, na família
+`pg_sleep` e nos advisory locks de sessão (`pg_advisory_lock`,
+`pg_try_advisory_lock` e as variantes `_shared`). O `ROLLBACK` não solta um
+advisory lock de sessão, e o lock das cargas na mão da IA travaria o
+importador. Como a própria sessão pode mudar o timeout e o modo só leitura com
 `SET`, o agente roda cada consulta numa transação encerrada com `ROLLBACK`, e a
 mudança não sobrevive na conexão do pool. A auditoria do agente é gravada pela
 conexão do portal, nunca pela do agente.
