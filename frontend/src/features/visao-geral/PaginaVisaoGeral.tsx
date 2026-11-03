@@ -12,6 +12,7 @@ import {
   montarCartoes,
   ROTULOS_INDICADORES,
   SEM_DADOS_PERIODO,
+  temPontosExibiveis,
 } from '@/features/visao-geral/indicadores'
 import { useKpis, useSerieKpis } from '@/features/visao-geral/useKpis'
 import { formatarIntervaloPeriodo, formatarMoedaCompacta, formatarNumero } from '@/lib/formatacao'
@@ -31,9 +32,11 @@ export function PaginaVisaoGeral() {
     ? `Gerado para ${resumoPeriodo} · carga ${carga.batch_id}`
     : `Gerado para ${resumoPeriodo}`
   const dados = serie.data?.serie ?? []
-  const temDados = dados.some(p => p.receita !== null || p.volume_faturado_kwh !== null)
   const mostrarComparacao = !!parametros?.comparacao && anterior.isSuccess
   const alinhadas = alinharSeries(dados, mostrarComparacao ? anterior.data?.serie : undefined)
+  const temReceita = temPontosExibiveis(alinhadas.receita)
+  const temVolume = temPontosExibiveis(alinhadas.volume)
+  const temDados = temReceita || temVolume
   let subtitulo = 'Mesmas competências nos dois gráficos'
   if (rotuloComparacao && mostrarComparacao) subtitulo += ` · cinza = ${rotuloComparacao}`
   if (parametros?.comparacao && anterior.isError) {
@@ -81,24 +84,38 @@ export function PaginaVisaoGeral() {
         }}
       />
     )
+  } else if (!temDados && parametros.comparacao && anterior.isPending) {
+    conteudoSeries = <Esqueleto />
   } else if (!temDados) {
     conteudoSeries = <EstadoVazio titulo={SEM_DADOS_PERIODO} mensagem="" />
   } else {
     const rotuloSerieComparacao = mostrarComparacao ? rotuloComparacao ?? undefined : undefined
     conteudoSeries = (
       <>
-        <GraficoSerieComparativa
-          dados={alinhadas.receita}
-          rotuloAtual="Receita"
-          rotuloComparacao={rotuloSerieComparacao}
-          formatarValor={formatarMoedaCompacta}
-        />
-        <GraficoBarrasComparativas
-          dados={alinhadas.volume}
-          rotuloAtual={`Volume (${alinhadas.unidadeVolume})`}
-          rotuloComparacao={rotuloSerieComparacao}
-          formatarValor={v => `${formatarNumero(v, 2)} ${alinhadas.unidadeVolume}`}
-        />
+        {temReceita ? (
+          <GraficoSerieComparativa
+            dados={alinhadas.receita}
+            rotuloAtual="Receita"
+            rotuloComparacao={rotuloSerieComparacao}
+            formatarValor={formatarMoedaCompacta}
+          />
+        ) : (
+          <div style={{ minHeight: 220 }}>
+            <EstadoVazio compacto titulo={SEM_DADOS_PERIODO} mensagem="Receita faturada" />
+          </div>
+        )}
+        {temVolume ? (
+          <GraficoBarrasComparativas
+            dados={alinhadas.volume}
+            rotuloAtual={`Volume (${alinhadas.unidadeVolume})`}
+            rotuloComparacao={rotuloSerieComparacao}
+            formatarValor={v => `${formatarNumero(v, 2)} ${alinhadas.unidadeVolume}`}
+          />
+        ) : (
+          <div style={{ minHeight: 200 }}>
+            <EstadoVazio compacto titulo={SEM_DADOS_PERIODO} mensagem="Volume faturado" />
+          </div>
+        )}
       </>
     )
   }

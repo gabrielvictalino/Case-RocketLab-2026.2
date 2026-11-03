@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { components } from '@/lib/api/schema'
-import { alinharSeries, montarCartoes } from './indicadores'
+import { alinharSeries, montarCartoes, temPontosExibiveis } from './indicadores'
 
 const ind = { valor: '1840000000', comparacao: '1000000000', variacao: '0.8', variacao_pct: '7.6' }
 const kpis: components['schemas']['KPIs'] = {
@@ -59,5 +59,35 @@ describe('indicadores', () => {
     expect(maisCurta[1]?.atual).toBeNull()
     expect(alinharSeries(atual, undefined).receita.map(x => x.comparacao)).toEqual([null, null])
     expect(alinharSeries(atual, [ponto('2025-01-01', null), ponto('2025-02-01', '2'), ponto('2025-03-01', '3')]).receita.map(x => x.comparacao)).toEqual([null, 2])
+  })
+})
+
+
+describe('temPontosExibiveis', () => {
+  it('reconhece apenas valores presentes, inclusive zero', () => {
+    expect(temPontosExibiveis([])).toBe(false)
+    expect(temPontosExibiveis([{ rotulo: 'a', atual: null, comparacao: null }])).toBe(false)
+    expect(temPontosExibiveis([{ rotulo: 'a', atual: null }])).toBe(false)
+    expect(temPontosExibiveis([{ rotulo: 'a', atual: 0 }])).toBe(true)
+    expect(temPontosExibiveis([{ rotulo: 'a', atual: null, comparacao: 0 }])).toBe(true)
+  })
+
+  it('ignora comparação excedente e documenta série atual vazia', () => {
+    const semDados = ponto('2026-01-01', null)
+    const comparacao = [ponto('2025-01-01', null), ponto('2025-02-01', '42')]
+    const alinhadas = alinharSeries([semDados], comparacao)
+    expect(temPontosExibiveis(alinhadas.receita)).toBe(false)
+    expect(temPontosExibiveis(alinhadas.volume)).toBe(false)
+    const atualVazia = alinharSeries([], [ponto('2025-01-01', '42')])
+    expect(temPontosExibiveis(atualVazia.receita)).toBe(false)
+    expect(temPontosExibiveis(atualVazia.volume)).toBe(false)
+  })
+
+  it('mantém lacunas da atual quando só a comparação tem dados', () => {
+    const alinhadas = alinharSeries([ponto('2026-01-01', null)], [ponto('2025-01-01', '42')])
+    expect(alinhadas.receita[0]?.atual).toBeNull()
+    expect(alinhadas.volume[0]?.atual).toBeNull()
+    expect(temPontosExibiveis(alinhadas.receita)).toBe(true)
+    expect(temPontosExibiveis(alinhadas.volume)).toBe(true)
   })
 })

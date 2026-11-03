@@ -7,6 +7,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -85,9 +86,29 @@ const ORDENS_FIXTURE = {
 
 const INDICADOR_FIXTURE = { valor: '1840000000', comparacao: '1000000000', variacao: '10', variacao_pct: '10' }
 const KPIS_FIXTURE = { periodo: '2025-07..2026-06', comparacao: '2024-07..2025-06', carga: CARGA_FIXTURE, receita: INDICADOR_FIXTURE, receita_arrecadada: INDICADOR_FIXTURE, volume_faturado_kwh: INDICADOR_FIXTURE, tarifa_media: INDICADOR_FIXTURE, inadimplencia: INDICADOR_FIXTURE, ucs: { ativas: INDICADOR_FIXTURE, com_gd: INDICADOR_FIXTURE }, continuidade: { dec: INDICADOR_FIXTURE, fec: INDICADOR_FIXTURE }, taxa_acerto: { ...INDICADOR_FIXTURE, valor: null } }
+type PontoSerieFixture = { competencia: string; receita: string | null; volume_faturado_kwh: string | null }
+const PERIODO_ATUAL = '2025-07..2026-06'
+const PERIODO_COMPARACAO = '2024-07..2025-06'
+const pontoAtual = (receita: string | null, volume: string | null): PontoSerieFixture => ({
+  competencia: '2025-07-01', receita, volume_faturado_kwh: volume,
+})
+const pontoComparacao = (receita: string | null, volume: string | null): PontoSerieFixture => ({
+  competencia: '2024-07-01', receita, volume_faturado_kwh: volume,
+})
+let series: Record<string, PontoSerieFixture[]> = {}
+let erroSerie: string | null = null
+let comparacaoPendente: Promise<void> | null = null
+let serieAtualRespondida = false
 let endpointComErro = ''
 beforeEach(() => {
   endpointComErro = ''
+  erroSerie = null
+  comparacaoPendente = null
+  serieAtualRespondida = false
+  series = {
+    [PERIODO_ATUAL]: [pontoAtual('1000', '2000')],
+    [PERIODO_COMPARACAO]: [pontoComparacao('900', '1800')],
+  }
   localStorage.clear()
   encerrarSessao()
   salvarSessao(
@@ -106,7 +127,15 @@ beforeEach(() => {
       const pathname = new URL(url, 'http://localhost').pathname
       if (pathname === endpointComErro) return new Response(JSON.stringify({ detail: 'erro' }), { status: 500 })
       if (pathname === '/api/v1/kpis') return new Response(JSON.stringify(KPIS_FIXTURE), { status: 200, headers: { 'Content-Type': 'application/json' } })
-      if (pathname === '/api/v1/kpis/serie') return new Response(JSON.stringify({ serie: [{ competencia: '2026-06-01', receita: '1000', volume_faturado_kwh: '2000' }] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (pathname === '/api/v1/kpis/serie') {
+        const periodo = new URL(url, 'http://localhost').searchParams.get('periodo') ?? ''
+        if (periodo === PERIODO_COMPARACAO && comparacaoPendente) await comparacaoPendente
+        if (periodo === erroSerie) return new Response('{}', { status: 500 })
+        if (periodo === PERIODO_ATUAL) serieAtualRespondida = true
+        return new Response(JSON.stringify({ serie: series[periodo] ?? [] }), {
+          status: 200, headers: { 'Content-Type': 'application/json' },
+        })
+      }
       if (url.includes('/api/v1/meta/filtros')) {
         return new Response(JSON.stringify(FILTROS_FIXTURE), {
           status: 200,
@@ -173,6 +202,74 @@ describe('Telas do portal e PainelAgente', () => {
     fireEvent.click(link)
     await waitFor(() => expect(router.state.location.pathname).toBe('/receita'))
     expect(router.state.location.search).toContain('periodo=2025-07..2026-06')
+  })
+
+  function painelSeries() {
+    const painel = screen.getByRole('heading', { name: 'Receita e volume por competência' })
+      .closest('section')
+    if (!painel) throw new Error('Painel de séries não encontrado')
+    return painel
+  }
+
+  it('exibe ambos os gráficos quando apenas a comparação tem dados', async () => {
+    series[PERIODO_ATUAL] = [pontoAtual(null, null)]
+    renderizar('/visao-geral')
+    await waitFor(() => expect(painelSeries().querySelectorAll('.ve-chart')).toHaveLength(2))
+    expect(within(painelSeries()).queryByText('Sem dados no período')).not.toBeInTheDocument()
+  })
+
+  it('mostra vazio no painel quando ambas as séries são nulas', async () => {
+    series[PERIODO_ATUAL] = [pontoAtual(null, null)]
+    series[PERIODO_COMPARACAO] = [pontoComparacao(null, null)]
+    renderizar('/visao-geral')
+    const painel = await screen.findByRole('heading', { name: 'Receita e volume por competência' })
+    const secao = painel.closest('section')!
+    expect(await within(secao).findByText('Sem dados no período')).toBeInTheDocument()
+    expect(secao.querySelectorAll('.ve-chart')).toHaveLength(0)
+  })
+
+  it('aguarda comparação pendente antes de decidir estado vazio', async () => {
+    series[PERIODO_ATUAL] = [pontoAtual(null, null)]
+    let liberar!: () => void
+    comparacaoPendente = new Promise<void>(resolve => { liberar = resolve })
+    try {
+      renderizar('/visao-geral')
+      await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([req]) => {
+        const url = new URL((req as Request).url)
+        return url.pathname === '/api/v1/kpis/serie' &&
+          url.searchParams.get('periodo') === PERIODO_COMPARACAO
+      })).toBe(true))
+      await screen.findByRole('link', { name: 'Receita faturada · ver detalhe' })
+      await waitFor(() => expect(serieAtualRespondida).toBe(true))
+      const painel = painelSeries()
+      expect(within(painel).getByLabelText('Carregando dados')).toBeInTheDocument()
+      expect(within(painel).queryByText('Sem dados no período')).not.toBeInTheDocument()
+      await act(async () => { liberar() })
+      await waitFor(() => expect(painel.querySelectorAll('.ve-chart')).toHaveLength(2))
+    } finally {
+      liberar()
+    }
+  })
+
+  it('mostra vazio e nota quando só a comparação falha', async () => {
+    series[PERIODO_ATUAL] = [pontoAtual(null, null)]
+    erroSerie = PERIODO_COMPARACAO
+    renderizar('/visao-geral')
+    const painel = await screen.findByRole('heading', { name: 'Receita e volume por competência' })
+    const secao = painel.closest('section')!
+    expect(await within(secao).findByText('Sem dados no período')).toBeInTheDocument()
+    expect(within(secao).getByText(/série de comparação indisponível/)).toBeInTheDocument()
+  })
+
+  it('mostra o gráfico de receita e vazio compacto identificado para volume', async () => {
+    series[PERIODO_ATUAL] = [pontoAtual('1000', null)]
+    series[PERIODO_COMPARACAO] = [pontoComparacao('900', null)]
+    renderizar('/visao-geral')
+    const painel = await screen.findByRole('heading', { name: 'Receita e volume por competência' })
+    const secao = painel.closest('section')!
+    expect(await within(secao).findByText('Volume faturado')).toBeInTheDocument()
+    expect(within(secao).getByText('Sem dados no período')).toBeInTheDocument()
+    expect(secao.querySelectorAll('.ve-chart')).toHaveLength(1)
   })
 
   it('mostra erro dos indicadores e mantém insight', async () => {

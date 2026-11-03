@@ -151,3 +151,7 @@ export function alinharSeries(atual: PontoSerie[], comparacao?: PontoSerie[]): {
     unidadeVolume,
   }
 }
+
+export function temPontosExibiveis(pontos: ReadonlyArray<PontoSerieComparativa>): boolean {
+  return pontos.some(ponto => ponto.atual !== null || ponto.comparacao != null)
+}

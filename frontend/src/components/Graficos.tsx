@@ -59,7 +59,7 @@ export function GraficoSerieComparativa({
               name={rotuloComparacao}
               stroke="var(--data-compare)"
               strokeWidth={1.75}
-              dot={false}
+              dot={{ r: 2 }}
             />
           )}
           <Line
