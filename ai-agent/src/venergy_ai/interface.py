@@ -5,10 +5,12 @@ publicada, e grava a `RespostaAgente` na auditoria pela conexão do portal, que 
 agente nunca recebe.
 """
 
+from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, Field
+from pydantic_ai import RunUsage
 
 from venergy_ai.semantica.periodo import Periodo
 
@@ -62,9 +64,36 @@ class RespostaAgente(BaseModel):
     latencia_ms: int = 0
 
 
+@dataclass
+class Andamento:
+    """O que o agente já fez numa pergunta, preenchido enquanto ele trabalha.
+
+    Quem chama lê o andamento também quando a pergunta falha ou é cancelada por tempo:
+    assim a auditoria guarda o SQL que já rodou e os tokens já gastos.
+    """
+
+    modelo: str | None = None
+    consultas: list[Consulta] = field(default_factory=list)
+    uso: RunUsage = field(default_factory=RunUsage)
+
+    @property
+    def tokens_entrada(self) -> int:
+        return self.uso.input_tokens
+
+    @property
+    def tokens_saida(self) -> int:
+        return self.uso.output_tokens
+
+
 class ProvedorIndisponivel(RuntimeError):
     """O provedor do modelo falhou (rede, autenticação, cota ou erro do servidor)."""
 
 
+class BancoIndisponivel(RuntimeError):
+    """O Postgres da role `ai_read` não respondeu. Não é erro do SQL: não há o que corrigir."""
+
+
 class Assistente(Protocol):
-    async def responder(self, pergunta: str, contexto: Contexto) -> RespostaAgente: ...
+    async def responder(
+        self, pergunta: str, contexto: Contexto, andamento: Andamento | None = None
+    ) -> RespostaAgente: ...
