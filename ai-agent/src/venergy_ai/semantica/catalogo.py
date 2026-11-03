@@ -2,6 +2,8 @@
 
 As views ficam em `importador/views.sql`. O teste de integração compara este catálogo
 com as colunas reais das views, nos dois sentidos, e falha quando uma muda sem a outra.
+Os valores possíveis e as faixas vêm do contrato (`contracts/tabelas/*.yaml`), e um teste
+compara os dois. As datas que cobrem a base vêm da carga, não deste arquivo.
 """
 
 from dataclasses import dataclass
@@ -12,6 +14,10 @@ class Coluna:
     nome: str
     descricao: str
     unidade: str | None = None
+    # O `enum` do contrato, na mesma ordem.
+    valores: tuple[str, ...] = ()
+    # `minimum` e `maximum` do contrato, quando a coluna é uma escala.
+    faixa: tuple[int, int] | None = None
 
 
 @dataclass(frozen=True)
@@ -37,14 +43,19 @@ COMPETENCIA = Coluna('competencia', 'Competência: primeiro dia do mês de refer
 ID_UC = Coluna('id_uc', 'Identificador da unidade consumidora (UC), no formato UC + 6 dígitos.')
 ALIMENTADOR = Coluna('alimentador', 'Alimentador, no formato ALM-AAA-999.')
 CLASSE = Coluna(
-    'classe', 'Classe da UC: Residencial, Comercial, Industrial, Rural ou Poder Público.'
+    'classe',
+    'Classe da UC.',
+    valores=('Residencial', 'Comercial', 'Industrial', 'Rural', 'Poder Público'),
 )
 GRUPO_UC = Coluna(
     'grupo_uc',
-    'Grupo de UC na competência: GD (desde o mês da conexão), IRREGULARIDADE_CONFIRMADA '
-    '(desde o mês da primeira inspeção com irregularidade confirmada) ou DEMAIS. '
+    'Grupo de UC na competência: GD desde o mês da conexão, IRREGULARIDADE_CONFIRMADA desde '
+    'o mês da primeira inspeção com irregularidade confirmada, DEMAIS nos outros casos. '
     'A precedência é GD > IRREGULARIDADE_CONFIRMADA > DEMAIS.',
+    valores=('GD', 'IRREGULARIDADE_CONFIRMADA', 'DEMAIS'),
 )
+# A cobertura da base vem da carga, e o agente a recebe no prompt.
+BASE = 'Todas as competências da base.'
 
 VISOES = (
     Visao(
@@ -89,10 +100,14 @@ VISOES = (
             ),
             Coluna(
                 'metodo_consumo',
-                'Origem do consumo analítico: LEITURA_UTILIZAVEL, MEDIANA_FASE_UC ou '
-                'MEDIANA_HISTORICA_UC.',
+                'Origem do consumo analítico.',
+                valores=('LEITURA_UTILIZAVEL', 'MEDIANA_FASE_UC', 'MEDIANA_HISTORICA_UC'),
             ),
-            Coluna('tipo_leitura', 'REAL ou ESTIMADA (leitura feita sem acesso ao medidor).'),
+            Coluna(
+                'tipo_leitura',
+                'Tipo da leitura; ESTIMADA é a feita sem acesso ao medidor.',
+                valores=('REAL', 'ESTIMADA'),
+            ),
             Coluna('flag_troca_medidor', 'Houve troca de medidor na competência.'),
             Coluna('id_fatura', 'Fatura da competência. Nulo quando não houve fatura emitida.'),
             Coluna(
@@ -118,17 +133,23 @@ VISOES = (
             ),
             Coluna(
                 'bandeira',
-                'Bandeira tarifária: VERDE, AMARELA, VERMELHA_P1 ou VERMELHA_P2. Nula sem fatura.',
+                'Bandeira tarifária. Nula sem fatura.',
+                valores=('VERDE', 'AMARELA', 'VERMELHA_P1', 'VERMELHA_P2'),
             ),
             Coluna(
                 'status_pagamento',
-                'PAGA ou ABERTA (conta em aberto). Nulo sem fatura.',
+                'Situação da fatura; ABERTA é a conta em aberto, vencida ou não. Nulo sem fatura.',
+                valores=('PAGA', 'ABERTA'),
             ),
-            Coluna('data_vencimento', 'Vencimento da fatura. Nulo sem fatura.'),
+            Coluna(
+                'data_vencimento',
+                'Vencimento da fatura. Nulo sem fatura. Conta atrasada é a ABERTA com '
+                'vencimento antes da data de referência da carga.',
+            ),
             GRUPO_UC,
         ),
         coluna_tempo='competencia',
-        periodo='Competências de jul/2022 a jun/2026.',
+        periodo=BASE,
         regras=(
             'Para consumo, use consumo_kwh_analitico. consumo_kwh_original só serve para '
             'auditoria.',
@@ -162,7 +183,7 @@ VISOES = (
             ),
         ),
         coluna_tempo='competencia',
-        periodo='Competências de jul/2022 a jun/2026.',
+        periodo=BASE,
         regras=(
             'Para receita e volume de um recorte, some as linhas; não tire média de segmentos.',
             'Tarifa média = SUM(receita) ÷ SUM(volume_faturado_kwh).',
@@ -180,7 +201,7 @@ VISOES = (
             Coluna('data_conexao', 'Data de conexão da GD.'),
         ),
         coluna_tempo='data_conexao',
-        periodo='Conexões de jan/2024 a jun/2026.',
+        periodo='Conexões desde jan/2024.',
         regras=(
             'Antes × depois da GD de uma UC: compare as competências anteriores e posteriores '
             'ao mês de data_conexao.',
@@ -240,11 +261,12 @@ VISOES = (
             ),
         ),
         coluna_tempo='competencia',
-        periodo='Competências de jul/2022 a jun/2026, todo alimentador em todo mês.',
+        periodo='Todas as competências da base, todo alimentador em todo mês.',
         regras=(
             'Nunca some nem tire média de dec ou fec. DEC de um período: SUM(chi_horas) ÷ '
-            'numero_ucs. Para vários alimentadores, divida pela soma do numero_ucs de cada '
-            'alimentador, contado uma vez.',
+            'numero_ucs. FEC de um período: SUM(interrupcoes) ÷ numero_ucs. O numero_ucs entra '
+            'uma vez por alimentador, nunca somado sobre as competências. Para vários '
+            'alimentadores, divida pela soma do numero_ucs de cada um, contado uma vez.',
             'Critério padrão para os piores alimentadores: CHI.',
             'Sem o evento atípico: filtre NOT flag_evento_atipico antes de somar.',
             'Por causa, use ocorrencias_uc: causa aqui é só a principal do mês.',
@@ -278,7 +300,7 @@ VISOES = (
             ),
         ),
         coluna_tempo='data_abertura',
-        periodo='Aberturas de jul/2022 a jun/2026.',
+        periodo='Aberturas nas competências da base.',
         regras=(
             'Tempo sem energia: SUM(duracao_efetiva_min). Número de interrupções: linhas com '
             'NOT flag_sobreposicao.',
@@ -299,10 +321,14 @@ VISOES = (
                 'GERACAO DISTRIBUIDA ou RELIGACAO.',
             ),
             Coluna('status', 'Situação do protocolo (ex.: ENCERRADO, EM ABERTO).'),
-            Coluna('nota', 'Nota de satisfação de 0 a 10. Nula quando o titular não avaliou.'),
+            Coluna(
+                'nota',
+                'Nota de satisfação, com uma casa decimal. Nula quando o titular não avaliou.',
+                faixa=(1, 5),
+            ),
         ),
         coluna_tempo='aberto_em',
-        periodo='Aberturas de jul/2022 a jun/2026.',
+        periodo='Aberturas nas competências da base.',
         regras=(
             'Nota nula é "não avaliou": fica fora da média, nunca conta como zero.',
             'O assunto GERACAO DISTRIBUIDA não indica que a UC tem GD; para isso, use gd_uc.',
@@ -332,7 +358,11 @@ VISOES = (
             ID_UC,
             Coluna('data', 'Data da inspeção.'),
             Coluna('inspetor', 'Código do inspetor (ex.: INSP-001).'),
-            Coluna('resultado', 'IRREGULARIDADE CONFIRMADA ou SEM IRREGULARIDADE.'),
+            Coluna(
+                'resultado',
+                'Resultado da inspeção.',
+                valores=('IRREGULARIDADE CONFIRMADA', 'SEM IRREGULARIDADE'),
+            ),
             Coluna(
                 'tipo_irregularidade',
                 'Tipo da irregularidade confirmada (texto livre). Nulo sem irregularidade.',
@@ -344,11 +374,16 @@ VISOES = (
         periodo='Históricas de ago a dez/2025, mais as concluídas no portal.',
         regras=(
             'Taxa de acerto = inspeções com IRREGULARIDADE CONFIRMADA ÷ inspeções do período.',
+            'É a fonte padrão de irregularidade (gato, fraude): inclui as confirmadas no portal '
+            'depois da carga, que ucs.flag_irregularidade_confirmada ainda não tem.',
         ),
     ),
     Visao(
         nome='fila_inspecao',
-        descricao='UCs suspeitas sem ordem ativa, com score, motivo e energia a recuperar.',
+        descricao=(
+            'Fila de inspeção da carga mais recente: UCs suspeitas, com score, motivos e '
+            'energia a recuperar.'
+        ),
         grao='UC candidata',
         chave=('id_uc',),
         colunas=(
@@ -364,7 +399,14 @@ VISOES = (
         ),
         coluna_tempo=None,
         periodo='Retrato da fila na carga mais recente.',
-        regras=('Energia a recuperar é estimativa; kwh_recuperado de inspecoes é o apurado.',),
+        regras=(
+            'A fila é a da carga e não desconta as UCs que ganharam ordem aberta ou em campo '
+            'no portal depois dela: a view não vê as ordens. Ao responder sobre a fila, diga '
+            'que é a da última carga.',
+            'Para tirar as UCs já inspecionadas no portal, exclua as id_uc de inspecoes com '
+            "origem = 'portal'.",
+            'Energia a recuperar é estimativa; kwh_recuperado de inspecoes é o apurado.',
+        ),
     ),
 )
 

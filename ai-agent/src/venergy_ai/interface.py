@@ -41,6 +41,10 @@ class Contexto(BaseModel):
     """O que a tela e a conversa sabem quando a pergunta é feita."""
 
     competencia_mais_recente: date
+    # Primeira competência da carga: a cobertura da base vai para o prompt.
+    competencia_inicial: date | None = None
+    # Data do instantâneo financeiro do manifesto: separa a conta atrasada da em aberto.
+    data_referencia: date | None = None
     tela: str | None = None
     # Período e comparação da tela: o padrão quando a pergunta não define período.
     periodo: Periodo | None = None
