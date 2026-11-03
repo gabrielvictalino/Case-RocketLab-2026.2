@@ -293,18 +293,13 @@ describe('Telas do portal e PainelAgente', () => {
       await screen.findByRole('heading', { level: 1, name: 'Receita' }),
     ).toBeInTheDocument()
 
-    const selectMunicipio = await screen.findByLabelText('Município')
+    const selectClasse = await screen.findByLabelText('Classe')
     await waitFor(() => {
-      expect(selectMunicipio.querySelectorAll('option').length).toBeGreaterThan(
-        1,
-      )
+      expect(selectClasse.querySelectorAll('option').length).toBeGreaterThan(1)
     })
-
-    fireEvent.change(selectMunicipio, { target: { value: 'Recife' } })
+    fireEvent.change(selectClasse, { target: { value: 'Residencial' } })
     await waitFor(() => {
-      expect(
-        new URLSearchParams(router.state.location.search).get('municipio'),
-      ).toBe('Recife')
+      expect(new URLSearchParams(router.state.location.search).get('classe')).toBe('Residencial')
     })
 
     fireEvent.click(screen.getByRole('button', { name: 'Limpar filtros' }))

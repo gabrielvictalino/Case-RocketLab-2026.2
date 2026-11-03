@@ -1245,6 +1245,21 @@
   height: 40px;
 }
 
+/* Tabelas de receita: colunas compactas para comparação lado a lado. */
+.ve-receita-tabela .ve-table th,
+.ve-receita-tabela .ve-table td {
+  padding-left: 6px;
+  padding-right: 6px;
+}
+.ve-receita-tabela .ve-table th:first-child,
+.ve-receita-tabela .ve-table td:first-child {
+  padding-left: 12px;
+}
+.ve-receita-tabela .ve-table th:last-child,
+.ve-receita-tabela .ve-table td:last-child {
+  padding-right: 12px;
+}
+
 .ve-kpi-link, .ve-kpi-link:hover { color: inherit; text-decoration: none; }
 .ve-kpi-link:hover { border-color: var(--focus); }
 .ve-kpi-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; box-shadow: var(--focus-ring); }
