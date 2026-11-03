@@ -103,7 +103,10 @@ def _com_unidade_dos_intervalos(colunas: list[str], linhas: list) -> list[str]:
 
 
 def _mensagem(erro: Exception) -> str:
-    texto = str(getattr(erro, 'orig', None) or erro).strip()
+    # O SQLAlchemy embrulha o erro do asyncpg ("<class '...'>: mensagem"); a causa traz só
+    # a mensagem do Postgres, que é o que o modelo precisa para corrigir o SQL.
+    original = getattr(erro, 'orig', None) or erro
+    texto = str(original.__cause__ or original).strip()
     return texto.splitlines()[0] if texto else type(erro).__name__
 
 

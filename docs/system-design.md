@@ -202,6 +202,8 @@ Decisões de backend da Visão 360:
 
 ### 4.4 Perdas (F4, F5, D1)
 
+Na fila de inspeção, a seleção é restrita à página; após gerar ordens em lote, a pessoa permanece na fila e pode abrir as ordens abertas. A exportação Excel e a planilha de campo permanecem para a leva 2 (D1).
+
 Duas abas.
 
 **Fila**: UCs da `fila_inspecao` sem ordem ativa, ordenadas por score, com
@@ -368,6 +370,13 @@ lado. O resultado fica em cache por tela, filtros e versão da carga. Se o
 LLM falhar, o endpoint responde `503` e o frontend mostra "insight
 indisponível".
 
+Cada observação aponta o fato principal (a etiqueta mostrada) e passa pela mesma
+validação de números das respostas do agente (`venergy_ai.numeros`): a que cita um
+número fora dos fatos é descartada, e cada número mantido volta com o valor e o campo
+do fato que o sustenta (valor, comparação, variação ou variação %). A chave do cache
+inclui os fatos, então um número que muda sem nova carga (a taxa de acerto, depois de
+uma inspeção) gera outro insight sem invalidação.
+
 ## 7. Frontend
 
 | Item | Escolha |
@@ -422,7 +431,7 @@ Role `importador`: cria e substitui `analytics` e `analytics_staging`, faz
 `INSERT` em `operations.cargas` (criada pelo `init.sql` e depois gerida pelo
 Alembic) e `SELECT` em `operations.inspecoes` (concedido pela migração que
 cria a tabela) e em `id_uc` e `status` de `operations.ordens_inspecao` (migração
-0003), para a fila da IA tirar as UCs com ordem ativa, como a do portal. Não
+0004), para a fila da IA tirar as UCs com ordem ativa, como a do portal. Não
 escreve em nenhuma outra tabela de `operations`.
 
 As views que leem `analytics` (a `inspecoes` e as de `ai_read`) ficam em

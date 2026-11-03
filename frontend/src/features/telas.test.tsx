@@ -52,6 +52,11 @@ const FILTROS_FIXTURE = {
   alimentadores: ['AL-RCF-07', 'AL-OLD-03'],
 }
 
+const FILA_FIXTURE = {
+  items: [], total: 0, page: 1, size: 25,
+  totais: { pagina: { itens: 0, energia_recuperar_kwh: '0.00', energia_recuperar_reais: '0.00' }, filtro: { itens: 0, energia_recuperar_kwh: '0.00', energia_recuperar_reais: '0.00' } },
+}
+
 const ORDENS_FIXTURE = {
   items: [
     {
@@ -142,6 +147,9 @@ beforeEach(() => {
           headers: { 'Content-Type': 'application/json' },
         })
       }
+      if (url.includes('/api/v1/perdas/fila')) {
+        return new Response(JSON.stringify(FILA_FIXTURE), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
       if (url.includes('/api/v1/ordens-inspecao')) {
         const parsed = new URL(url, 'http://localhost')
         const st = parsed.searchParams.get('status')
@@ -198,7 +206,8 @@ describe('Telas do portal e PainelAgente', () => {
     expect(link.getAttribute('href')).toContain('comparacao=2024-07..2025-06')
     fireEvent.click(screen.getByRole('button', { name: 'Perguntar ao agente' }))
     expect(screen.getByRole('dialog', { name: 'Pergunte aos dados' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Pergunte sobre os dados')).toBeDisabled()
+    expect(screen.getByLabelText('Pergunte sobre os dados')).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Enviar pergunta' })).toBeDisabled()
     fireEvent.click(link)
     await waitFor(() => expect(router.state.location.pathname).toBe('/receita'))
     expect(router.state.location.search).toContain('periodo=2025-07..2026-06')
@@ -293,18 +302,13 @@ describe('Telas do portal e PainelAgente', () => {
       await screen.findByRole('heading', { level: 1, name: 'Receita' }),
     ).toBeInTheDocument()
 
-    const selectMunicipio = await screen.findByLabelText('Município')
+    const selectClasse = await screen.findByLabelText('Classe')
     await waitFor(() => {
-      expect(selectMunicipio.querySelectorAll('option').length).toBeGreaterThan(
-        1,
-      )
+      expect(selectClasse.querySelectorAll('option').length).toBeGreaterThan(1)
     })
-
-    fireEvent.change(selectMunicipio, { target: { value: 'Recife' } })
+    fireEvent.change(selectClasse, { target: { value: 'Residencial' } })
     await waitFor(() => {
-      expect(
-        new URLSearchParams(router.state.location.search).get('municipio'),
-      ).toBe('Recife')
+      expect(new URLSearchParams(router.state.location.search).get('classe')).toBe('Residencial')
     })
 
     fireEvent.click(screen.getByRole('button', { name: 'Limpar filtros' }))
@@ -388,7 +392,7 @@ describe('Telas do portal e PainelAgente', () => {
           JSON.stringify(
             url.pathname.endsWith('/meta/filtros')
               ? FILTROS_FIXTURE
-              : CARGA_FIXTURE,
+              : url.pathname.endsWith('/perdas/fila') ? FILA_FIXTURE : CARGA_FIXTURE,
           ),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
         )
@@ -424,7 +428,9 @@ describe('Telas do portal e PainelAgente', () => {
     expect(
       new URLSearchParams(router.state.location.search).get('status'),
     ).toBe('ABERTA')
-    expect(await screen.findByText('UC100123')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('UC100123')).toBeInTheDocument()
+    })
     const ultimaUrl = new URL(
       fetchOrdens.mock.calls
         .map(([req]) => req.url)
