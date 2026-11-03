@@ -10,6 +10,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { NavLink, useSearchParams } from 'react-router'
+import { caminhoComPeriodo } from '@/lib/navegacao'
 import {
   cargoDaSessao,
   encerrarSessao,
@@ -49,17 +50,6 @@ export function NavegacaoLateral({
   const sessao = useSessao()
   const queryClient = useQueryClient()
 
-  const queryPeriodo = new URLSearchParams()
-  const periodo = searchParams.get('periodo')
-  const comparacao = searchParams.get('comparacao')
-  if (periodo) {
-    queryPeriodo.set('periodo', periodo)
-  }
-  if (comparacao) {
-    queryPeriodo.set('comparacao', comparacao)
-  }
-  const sufixoBusca = queryPeriodo.toString()
-
   const cargo = cargoDaSessao(sessao?.token)
   const rotuloCargo = cargo ? ROTULO_CARGO[cargo] : null
 
@@ -97,7 +87,10 @@ export function NavegacaoLateral({
 
       <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
         {ITENS_NAVEGACAO.map(({ caminho, rotulo, icone: Icone }) => {
-          const destino = sufixoBusca ? `${caminho}?${sufixoBusca}` : caminho
+          const destino = caminhoComPeriodo(caminho, {
+            periodo: searchParams.get('periodo'),
+            comparacao: searchParams.get('comparacao'),
+          })
           return (
             <NavLink key={caminho} to={destino} className="ve-nav-item">
               <Icone size={18} className="ve-icon" aria-hidden="true" />
