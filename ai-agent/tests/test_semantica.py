@@ -153,6 +153,11 @@ def test_periodo_padrao_sao_os_12_meses_ate_a_mais_recente(mais_recente, inicio,
     assert periodo_padrao(mais_recente) == Periodo(inicio, fim)
 
 
+def test_meses_do_periodo():
+    assert Periodo(date(2025, 7, 1), date(2026, 6, 1)).meses == 12
+    assert Periodo(date(2026, 6, 1), date(2026, 6, 1)).meses == 1
+
+
 def test_periodo_padrao_nao_comeca_antes_da_base():
     # Carga de jan a jun/2026: jul/2025 a jun/2026 cairia em PERIODO_FORA_DA_BASE.
     assert periodo_padrao(date(2026, 6, 1), date(2026, 1, 1)) == Periodo(
