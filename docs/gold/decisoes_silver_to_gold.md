@@ -15,7 +15,7 @@ Documento vivo e compartilhado pela equipe de Engenharia de Dados para consolida
 | Domínio Gold | Notebook / Módulo | Tabelas Silver Cruzadas (`JOIN`) | Tabelas Gold Publicadas | Lideranças / Módulos Consumidores | Dicionário Detalhado |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **1. Geração Distribuída (GD)** | `silver-to-gold-geracao-distribuida.ipynb` | • `tb_geracao_distribuida`<br>• `tb_unidades_consumidoras`<br>• `tb_leituras` | • `gd_uc`<br>• `tb_gd_uc`<br>• `tb_gd_consumo_mensal`<br>• `tb_gd_resumo_mensal` | • **Henrique Duarte** (Comercial)<br>• **Camila Barreto** (Atendimento)<br>• **Rafael Coutinho** (Perdas)<br>• **Patrícia Lins** (TI / Agente IA) | [`docs/gold/geracao_distribuida.md`](geracao_distribuida.md) |
-| **2. Faturamento e Receita** | `silver-to-gold-faturas.ipynb`<br>`gold_faturas.py` *(PR #67)* | • `tb_faturas`<br>• `tb_faturas_pendentes_cadastro`<br>• `tb_unidades_consumidoras`<br>• `tb_leituras` | • `tb_faturas`<br>• `tb_faturas_excluidas`<br>• `tb_faturamento_mensal`<br>• `tb_variacao_receita` | • **Henrique Duarte** (Comercial)<br>• **Camila Barreto** (Atendimento)<br>• **Diretoria** (Visão Geral) | `docs/gold/faturas.md` *(em revisão no PR #67)* |
+| **2. Faturamento e Receita** | `silver-to-gold-faturas.ipynb`<br>`gold_faturas.py` *(PR #67)* | • `tb_faturas`<br>• `tb_faturas_pendentes_cadastro`<br>• `tb_unidades_consumidoras`<br>• `tb_leituras` | • `tb_faturas`<br>• `tb_faturas_excluidas`<br>• `tb_faturamento_mensal`<br>• `uc_consumo_faturamento_mensal`<br>• `receita_volume_mensal` | • **Henrique Duarte** (Comercial)<br>• **Camila Barreto** (Atendimento)<br>• **Diretoria** (Visão Geral) | `docs/gold/faturas.md` *(em revisão no PR #67)* |
 | **3. Continuidade da Rede (DEC/FEC)** | `silver-to-gold-continuidade.ipynb` | • `tb_ocorrencias_rede`<br>• `tb_unidades_consumidoras` | • `continuidade_alimentador_mensal`<br>• `ocorrencias_uc`<br>• `dim_alimentador` | • **Beatriz Farias** (Operação)<br>• **Camila Barreto** (Atendimento) | [`docs/gold/continuidade.md`](continuidade.md) |
 | **4. Perdas e Fila de Inspeção** | *(a integrar pela equipe)* | • `tb_inspecoes`<br>• `tb_leituras`<br>• `tb_unidades_consumidoras`<br>• `tb_medidores`<br>• `tb_geracao_distribuida` | • `inspecoes_historicas`<br>• `fila_inspecao` | • **Rafael Coutinho** (Perdas)<br>• **Henrique Duarte** (Comercial) | *(a adicionar)* |
 | **5. Cadastro 360, Medidores e Atendimentos** | `silver-to-gold-atendimentos.ipynb` (atendimentos)<br>*(`dim_uc` e medidores a integrar pela equipe)* | • `tb_unidades_consumidoras`<br>• `tb_medidores`<br>• `tb_atendimentos`<br>• `tb_geracao_distribuida`<br>• `tb_inspecoes` | • `dim_uc`<br>• `medidores_historico`<br>• `atendimentos`<br>• `atendimentos_historico` | • **Camila Barreto** (Atendimento)<br>• **Patrícia Lins** (TI / Agente IA) | [`docs/gold/atendimentos.md`](atendimentos.md) (atendimentos)<br>*(demais a adicionar)* |
@@ -86,14 +86,14 @@ Documento vivo e compartilhado pela equipe de Engenharia de Dados para consolida
 
 ---
 
-## 3. Domínio 2 — Faturamento e Receita (`GOLD_FATURAS_V1` — PR #67)
+## 3. Domínio 2 — Faturamento e Receita (`GOLD_FATURAS_V2` — PR #67)
 
 *(Resumo de referência do PR #67 — dicionário completo em `docs/gold/faturas.md` quando integrado)*
 
-- **Tabelas publicadas:** `tb_faturas`, `tb_faturas_excluidas`, `tb_faturamento_mensal`, `tb_variacao_receita`.
+- **Tabelas publicadas:** `tb_faturas`, `tb_faturas_excluidas`, `tb_faturamento_mensal` como auxiliares, além de `uc_consumo_faturamento_mensal` e `receita_volume_mensal` do contrato.
 - **Perguntas de negócio respondidas:**
   - *Evolução da receita nominal faturada, contas pagas e inadimplência (`valor_em_aberto`, `valor_vencido`, `dias_atraso`) por competência, município, bairro e classe.*
-  - *Decomposição da variação de receita entre dois períodos (`efeito_volume`, `efeito_preco_efetivo` e `efeito_receita_sem_volume`).*
+  - *Dados comerciais para a decomposição canônica R5 no consumidor (volume, reajuste, bandeira e mix), sobre o consumo analítico.*
   - *Segregação auditável das 32.285 faturas órfãs (`PENDENTE_CADASTRO_SILVER`) e das faturas duplicadas no mesmo mês (`MULTIPLAS_FATURAS_UC_MES`) para não inflar a receita em +1,5%.*
 
 ---
