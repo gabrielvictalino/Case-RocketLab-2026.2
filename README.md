@@ -18,3 +18,8 @@ em [backend/README.md](backend/README.md). As pendências para a Gold real estã
 
 Comandos de desenvolvimento, testes, proxy e geração do cliente OpenAPI do portal
 web estão em [frontend/README.md](frontend/README.md).
+
+## Suposições
+
+- Na Visão Geral, a variação de tarifa média e de UCs é neutra, pois seu sentido favorável depende do contexto.
+- As séries de comparação são alinhadas pela posição das competências nos períodos; valores excedentes são descartados e competências sem correspondente permanecem vazias.
