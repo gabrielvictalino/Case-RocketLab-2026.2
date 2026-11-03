@@ -209,6 +209,17 @@ motivo da suspeita, energia a recuperar, inspeção anterior (se houver) e
 filtros por município, bairro e classe. O gerente marca várias linhas e gera
 as ordens **em lote**. Exportação para Excel (D1).
 
+Decisões da fila:
+
+- Ordenação por score decrescente e ID da UC crescente; a inspeção anterior usa
+  a data mais recente, preferindo origem portal e depois o maior ID em empates.
+- Os totais da página e do filtro usam os valores da Gold; ambos e os itens
+  compartilham o snapshot da consulta. Página além do fim retorna itens vazios.
+- Filtros usam igualdade literal, inclusive valores vazios. O frontend omite
+  parâmetros vazios. A página aceita até 1.000.000 e o tamanho até 100.
+- A paginação usa OFFSET: ordens ou cargas alteradas entre requisições podem
+  deslocar itens entre páginas. O cache e sua invalidação ficam para a leva 2.
+
 **Ordens**: lista por status, com as ações de cada estado e
 exportação/importação da planilha de campo.
 

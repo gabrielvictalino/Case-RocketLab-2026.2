@@ -1,3 +1,4 @@
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -9,8 +10,10 @@ from app.modules.perdas.schemas import (
     Cancelamento,
     CriarOrdens,
     Despacho,
+    FiltroFila,
     Lote,
     Ordem,
+    PaginaFila,
     PaginaOrdens,
     Resultado,
     Status,
@@ -62,3 +65,16 @@ async def cancelar(
     id_: UUID, body: Cancelamento, user=Depends(escrita), db=Depends(session, scope='function')
 ):
     return await service.transicao(db, id_, 'cancelar', body, user)
+
+
+fila_router = APIRouter(prefix='/perdas', tags=['perdas'], dependencies=[Depends(usuario_atual)])
+
+
+@fila_router.get('/fila', response_model=PaginaFila)
+async def fila(
+    filtro: Annotated[FiltroFila, Query()],
+    page: int = Query(1, ge=1, le=1_000_000),
+    size: int = Query(25, ge=1, le=100),
+    db=Depends(session, scope='function'),
+):
+    return await service.fila(db, filtro, page, size)

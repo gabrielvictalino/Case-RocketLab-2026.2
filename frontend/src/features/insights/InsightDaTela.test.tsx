@@ -113,6 +113,10 @@ beforeEach(() => {
       if (url.pathname === '/api/v1/meta/filtros') {
         return json(FILTROS)
       }
+      // Os KPIs e a série da Visão Geral não importam aqui: ficam carregando.
+      if (url.pathname.startsWith('/api/v1/kpis')) {
+        return new Promise<Response>(() => {})
+      }
       return json(CARGA)
     }),
   )
