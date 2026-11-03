@@ -205,7 +205,7 @@ def gerar(out=OUT):
                 aberto_em='2026-06-01T10:00:00',
                 assunto='Dúvida sintética',
                 status='ENCERRADO',
-                nota=None if i else 10,
+                nota=None if i else Decimal('4.3'),
             )
         )
         data['atendimentos_historico'].append(

@@ -103,7 +103,7 @@ class Chamado(BaseModel):
     aberto_em: datetime
     assunto: str
     status: str
-    nota: int | None
+    nota: Decimal | None
     historico: list[ChamadoHistorico]
 
 

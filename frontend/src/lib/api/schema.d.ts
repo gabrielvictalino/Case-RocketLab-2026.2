@@ -246,7 +246,7 @@ export interface components {
             /** Status */
             status: string;
             /** Nota */
-            nota: number | null;
+            nota: string | null;
             /** Historico */
             historico: components["schemas"]["ChamadoHistorico"][];
         };

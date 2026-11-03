@@ -127,6 +127,21 @@ def test_sequencia_de_atendimento_comeca_em_um(value):
         parse(value, spec)
 
 
+def test_nota_de_atendimento_e_decimal_de_1_a_5():
+    spec = specifications()['atendimentos']['columns']['nota']
+    assert parse('', spec) is None
+    for nota in ('1.0', '1.3', '4.3', '5', '5.0'):
+        assert 1 <= parse(nota, spec) <= 5
+    for nota, erro in (
+        ('0.9', 'mínimo'),
+        ('5.1', 'máximo'),
+        ('4.35', 'escala'),
+        ('10', 'precisão'),
+    ):
+        with pytest.raises(ValueError, match=erro):
+            parse(nota, spec)
+
+
 def test_metodo_consumo_aceita_so_o_enum_do_contrato():
     spec = specifications()['uc_consumo_faturamento_mensal']['columns']['metodo_consumo']
     for metodo in ('LEITURA_UTILIZAVEL', 'MEDIANA_FASE_UC', 'MEDIANA_HISTORICA_UC'):
