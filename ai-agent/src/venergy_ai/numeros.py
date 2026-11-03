@@ -17,7 +17,7 @@ os anos do período, o número de linhas e o número de meses.
 """
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator, Sequence
 from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal, InvalidOperation, localcontext
 from typing import NamedTuple
 
@@ -79,20 +79,55 @@ class Leitura(NamedTuple):
     alta: bool = False
 
 
+class Citacao(NamedTuple):
+    # Como o número está escrito no texto.
+    trecho: str
+    # Posições, em `valores`, dos valores que sustentam o número. Vazia: sem lastro.
+    lastros: list[int]
+
+
 def numeros_sem_lastro(
     texto: str, linhas: Iterable[Iterable[object]], permitidos: Iterable[object] = ()
 ) -> list[str]:
     """Devolve os números do texto que não aparecem nas linhas, na ordem em que aparecem."""
     valores = [v for linha in linhas for item in linha for v in _decimais(item)]
     valores += [v for item in permitidos for v in _decimais(item)]
+    return [
+        trecho
+        for trecho, leituras in _citados(texto)
+        if not any(_tem_lastro(leitura, valores) for leitura in leituras)
+    ]
+
+
+def citacoes(
+    texto: str, valores: Sequence[object], permitidos: Iterable[object] = ()
+) -> list[Citacao]:
+    """Cada número do texto com os valores que o sustentam, para mostrar ao lado do texto.
+
+    Um número que os `permitidos` sustentam (um ano, o número de meses) fica de fora:
+    "12 meses" fala do período, mesmo que um valor arredonde para 12. Um número que
+    nenhum valor sustenta vem com `lastros` vazia.
+    """
+    por_valor = [_decimais(valor) for valor in valores]
+    livres = [v for item in permitidos for v in _decimais(item)]
+    resultado = []
+    for trecho, leituras in _citados(texto):
+        if any(_tem_lastro(leitura, livres) for leitura in leituras):
+            continue
+        lastros = [
+            i
+            for i, decimais in enumerate(por_valor)
+            if any(_tem_lastro(leitura, decimais) for leitura in leituras)
+        ]
+        resultado.append(Citacao(trecho, lastros))
+    return resultado
+
+
+def _citados(texto: str) -> Iterator[tuple[str, list[Leitura]]]:
     limpo = IGNORADOS.sub(' ', texto)
-    sem_lastro = []
     for citado in NUMERO.finditer(limpo):
         alta = ALTA.search(limpo, 0, citado.start()) is not None
-        leituras = _leituras(citado, alta)
-        if leituras and not any(_tem_lastro(leitura, valores) for leitura in leituras):
-            sem_lastro.append(citado.group(0).strip().rstrip('.'))
-    return sem_lastro
+        yield citado.group(0).strip().rstrip('.'), _leituras(citado, alta)
 
 
 def numeros_citados(texto: str) -> list[Decimal]:
