@@ -1,3 +1,4 @@
+import asyncio
 import json
 from uuid import uuid4
 
@@ -7,8 +8,10 @@ from pydantic_ai.models.function import FunctionModel
 from redis.asyncio import Redis
 from venergy_ai.agente import AgenteTextoSQL
 from venergy_ai.executor import ExecutorAiRead
+from venergy_ai.interface import RespostaAgente
 
-from app.modules.assistente.conversas import chave
+from app.modules.assistente import conversas
+from app.modules.assistente.conversas import chave, chave_das_trocas
 from test_assistente import PLANO, TEXTO, URL, entrar, usar_modelo
 
 pytestmark = pytest.mark.integration
@@ -100,10 +103,11 @@ async def test_conversa_no_redis_guarda_as_ultimas_5_trocas_por_2_horas(portal):
         assert resposta.status_code == 200, resposta.text
         conversa_id = resposta.json()['conversa_id']
     redis = app.state.redis
-    estado = json.loads(await redis.get(chave(conversa_id)))
-    assert [t['pergunta'] for t in estado['trocas']] == [f'Pergunta {n}' for n in range(1, 6)]
-    assert estado['trocas'][-1]['metrica'] == PLANO['metrica']
-    assert 7000 < await redis.ttl(chave(conversa_id)) <= 7200
+    trocas = await trocas_no_redis(app, conversa_id)
+    assert [t['pergunta'] for t in trocas] == [f'Pergunta {n}' for n in range(1, 6)]
+    assert trocas[-1]['metrica'] == PLANO['metrica']
+    for chave_redis in (chave(conversa_id), chave_das_trocas(conversa_id)):
+        assert 7000 < await redis.ttl(chave_redis) <= 7200
 
 
 async def test_resposta_fora_do_dominio_nao_muda_o_estado(portal):
@@ -113,8 +117,59 @@ async def test_resposta_fora_do_dominio_nao_muda_o_estado(portal):
     primeira = (await http.post(URL, json={'pergunta': 'UCs?'}, headers=headers)).json()
     corpo = {'pergunta': 'Qual a capital da França?', 'conversa_id': primeira['conversa_id']}
     assert (await http.post(URL, json=corpo, headers=headers)).json()['tipo'] == 'nao_sei'
-    estado = json.loads(await app.state.redis.get(chave(primeira['conversa_id'])))
-    assert [t['pergunta'] for t in estado['trocas']] == ['UCs?']
+    trocas = await trocas_no_redis(app, primeira['conversa_id'])
+    assert [t['pergunta'] for t in trocas] == ['UCs?']
+
+
+async def test_perguntas_ao_mesmo_tempo_guardam_as_duas_trocas(portal):
+    # Duas perguntas na mesma conversa leem o histórico antes de qualquer uma gravar: a
+    # troca que termina por último não pode apagar a outra.
+    app, http = portal
+    usar_modelo(app, PLANO, TEXTO)
+    headers = await entrar(http, 'perdas')
+    primeira = (await http.post(URL, json={'pergunta': 'UCs?'}, headers=headers)).json()
+    juntas = asyncio.Barrier(2)
+
+    async def responder(mensagens, info):
+        if info.output_tools:
+            async with asyncio.timeout(10):
+                await juntas.wait()
+            return ModelResponse(parts=[ToolCallPart(info.output_tools[0].name, PLANO)])
+        return ModelResponse(parts=[TextPart(TEXTO)])
+
+    app.state.assistente = AgenteTextoSQL(
+        FunctionModel(responder, model_name='simulado'), ExecutorAiRead(app.state.ai_engine)
+    )
+    respostas = await asyncio.gather(
+        *(
+            http.post(
+                URL,
+                json={'pergunta': pergunta, 'conversa_id': primeira['conversa_id']},
+                headers=headers,
+            )
+            for pergunta in ('A?', 'B?')
+        )
+    )
+    assert [r.status_code for r in respostas] == [200, 200]
+    trocas = await trocas_no_redis(app, primeira['conversa_id'])
+    assert trocas[0]['pergunta'] == 'UCs?'
+    assert sorted(t['pergunta'] for t in trocas[1:]) == ['A?', 'B?']
+
+
+async def test_troca_de_outra_usuaria_nao_entra_na_conversa(portal):
+    app, http = portal
+    usar_modelo(app, PLANO, TEXTO)
+    headers = await entrar(http, 'perdas')
+    primeira = (await http.post(URL, json={'pergunta': 'UCs?'}, headers=headers)).json()
+    resposta = RespostaAgente(tipo='resposta', texto=TEXTO, metrica='UCs', modelo='simulado')
+    await conversas.registrar(app.state.redis, primeira['conversa_id'], uuid4(), 'Outra?', resposta)
+    trocas = await trocas_no_redis(app, primeira['conversa_id'])
+    assert [t['pergunta'] for t in trocas] == ['UCs?']
+
+
+async def trocas_no_redis(app, conversa_id):
+    trocas = await app.state.redis.lrange(chave_das_trocas(conversa_id), 0, -1)
+    return [json.loads(troca) for troca in trocas]
 
 
 async def test_sem_redis_a_conversa_segue_sem_historico(portal):

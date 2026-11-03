@@ -1,3 +1,4 @@
+import re
 from datetime import date
 from pathlib import Path
 
@@ -142,3 +143,49 @@ async def test_avaliar_e_relatorio():
     assert '| "Não sei" correto | 100% |' in texto
     assert '| "Não sei" indevido | 1 de 3 |' in texto
     assert '| Latência média | 100 ms |' in texto
+
+
+@pytest.mark.parametrize(
+    'texto',
+    [
+        'Nos últimos 12 meses, a receita faturada foi de R$ 300.',
+        'Em 2025 e 2026, a receita faturada foi de R$ 300.',
+        'A consulta trouxe 1 linha: R$ 300.',
+    ],
+)
+def test_metadados_que_o_agente_aceita_nao_contam_como_inventados(texto):
+    # Meses e anos do período e contagem de linhas: a validação do agente aceita, e a
+    # avaliação não pode reprovar só pela redação.
+    caso = Caso(id='x', categoria='y', pergunta='Receita?', sql='SELECT 1')
+    assert conferir(caso, resposta([[300]], texto), [[300]]) == []
+
+
+def test_numero_inventado_continua_reprovado():
+    caso = Caso(id='x', categoria='y', pergunta='Receita?', sql='SELECT 1')
+    falhas = conferir(caso, resposta([[300]], 'Nos últimos 12 meses, foram R$ 450.'), [[300]])
+    assert falhas == ['número sem lastro no texto: 450']
+
+
+TOP_5 = [['ALM-A'], ['ALM-B'], ['ALM-C'], ['ALM-D'], ['ALM-E']]
+
+
+@pytest.mark.parametrize(
+    'obtido',
+    [
+        [['ALM-X'], *TOP_5],
+        TOP_5[::-1],
+        [['ALM-X'], *TOP_5[::-1]],
+    ],
+    ids=['linha-extra-antes', 'ordem-invertida', 'extra-e-invertida'],
+)
+def test_ranking_exige_as_primeiras_linhas_na_ordem(obtido):
+    assert not mesmo_resultado(TOP_5, obtido, ordem=True)
+    # Sem a ordem, os mesmos resultados passariam: por isso o caso precisa dela.
+    assert mesmo_resultado(TOP_5, obtido)
+
+
+def test_todo_ranking_da_avaliacao_confere_a_ordem():
+    for caso in carregar(PERGUNTAS):
+        sql = caso.sql or ''
+        if re.search(r'\bORDER BY\b', sql, re.I) and re.search(r'\bLIMIT\b', sql, re.I):
+            assert caso.ordem, caso.id

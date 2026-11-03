@@ -37,7 +37,7 @@ Antes de permitir a gravação, o notebook verifica:
 - Se existem protocolos duplicados ou identificadores obrigatórios vazios.
 - Se ocorreram problemas nas conversões de datas e notas de satisfação.
 - Se as datas de abertura e fechamento apresentam inconsistências.
-- Se as notas preenchidas estão na faixa de 0 a 5, permitindo valores nulos.
+- Se as notas preenchidas estão na faixa de 1 a 5, com no máximo uma casa decimal, permitindo valores nulos. É a escala do contrato (`atendimentos.nota`, `numeric(2,1)`, #117).
 - Se os valores de `id_uc` existem na Silver de unidades consumidoras.
 - Se o histórico possui eventos inválidos, sequências duplicadas ou fora de ordem e datas incompatíveis com o período do atendimento.
 - Se a quantidade de eventos foi preservada.
@@ -76,10 +76,10 @@ Se não existir uma versão anterior para restaurar, o notebook informa que ser�
 
 O notebook foi organizado em células de configuração, transformação, validação, diagnóstico e gravação.
 
-As alterações passaram por verificações locais de estrutura e sintaxe Python. Na revisão, Fernando também executou o pipeline localmente com PySpark 4.0 e Delta, verificando as contagens, as validações, a gravação Silver e o bloqueio de dados inválidos. A execução no Databricks ainda está pendente. As alterações posteriores no parâmetro de publicação e na faixa das notas ainda precisam de teste de integração.
+As alterações passaram por verificações locais de estrutura e sintaxe Python. Na revisão, Fernando também executou o pipeline localmente com PySpark 4.0 e Delta, verificando as contagens, as validações, a gravação Silver e o bloqueio de dados inválidos.
 
-Portanto, as transformações, as validações com dados reais, a gravação e o procedimento de rollback ainda precisam ser testados no Databricks.
+Em 02/11, a Silver foi publicada no Databricks com `confirmar_publicacao=true`, ainda com a regra antiga da nota (de 0 a 5). Gravou 318.871 atendimentos, com 636.857 eventos no histórico e 9.566 notas nulas, os mesmos números da execução local.
 
-Antes de definir `confirmar_publicacao=true`, será necessário confirmar que a tabela Silver de unidades consumidoras está disponível, executar as validações e conferir os resultados.
+Depois, a faixa da nota passou a ser de 1 a 5, com no máximo uma casa decimal (#117). Esta versão rodou no Databricks só com `confirmar_publicacao=false`, que valida e não grava: 0 notas fora da faixa, com as mesmas contagens. A tabela publicada continua sendo a de 02/11, e as 309.305 notas preenchidas dela também passam na regra nova. Na execução local, uma nota 0,5 e outra 4,35, injetadas na Bronze, foram barradas antes da gravação.
 
-Depois da validação da execução e da gravação, os dados poderão ser utilizados na construção da camada Gold.
+Pendente no Databricks: o `RESTORE TABLE` da seção 5, que desfaz a carga quando a gravação ou as verificações posteriores falham, ainda não foi testado lá.

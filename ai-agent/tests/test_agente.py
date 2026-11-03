@@ -119,6 +119,20 @@ async def test_sem_periodo_na_tela_usa_os_ultimos_12_meses():
     assert resposta.periodo.descricao == 'jul/2025 a jun/2026'
 
 
+async def test_periodo_padrao_nao_comeca_antes_da_base():
+    # Uma carga de jan a jun/2026: os 12 meses começariam fora da base.
+    carga = CONTEXTO.model_copy(update={'competencia_inicial': date(2026, 1, 1)})
+    plano = PLANO | {'periodo_inicio': None, 'periodo_fim': None}
+    modelo, chamadas = modelo_simulado(plano, 'Foram R$ 1.234.567,89 de jan a jun/2026.')
+    resposta = await AgenteTextoSQL(modelo, ExecutorFalso(RESULTADO)).responder(
+        'Qual a receita?', carga
+    )
+    instrucoes = chamadas[0][1].instructions
+    assert 'Sem período na pergunta: jan/2026 a jun/2026' in instrucoes
+    assert 'Sem comparação padrão' in instrucoes
+    assert resposta.periodo.descricao == 'jan/2026 a jun/2026'
+
+
 async def test_cobertura_e_data_de_referencia_da_carga_vao_para_as_instrucoes():
     carga = CONTEXTO.model_copy(
         update={'competencia_inicial': date(2022, 7, 1), 'data_referencia': date(2026, 7, 1)}
@@ -129,6 +143,8 @@ async def test_cobertura_e_data_de_referencia_da_carga_vao_para_as_instrucoes():
     assert 'A base cobre as competências de jul/2022 a jun/2026' in instrucoes
     assert "data_vencimento < DATE '2026-07-01'" in instrucoes
     assert 'Comparação padrão: jul/2024 a jun/2025' in instrucoes
+    # O último mês do período entra inteiro nas colunas de data e hora.
+    assert "Em data ou data e hora: >= DATE '2025-07-01' AND < DATE '2026-07-01'." in instrucoes
 
 
 @pytest.mark.parametrize('linhas', [[], [[None]]], ids=['zero-linhas', 'agregacao-vazia'])

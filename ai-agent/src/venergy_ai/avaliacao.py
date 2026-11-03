@@ -12,8 +12,9 @@ Cada caso traz a pergunta e o que se espera dela:
 - `ordem: true`: num ranking, as linhas esperadas são as primeiras do agente, na ordem.
 
 Toda resposta é conferida também contra número inventado: o texto só pode citar números
-das linhas que o redator recebeu. O relatório traz a taxa de acerto, a de "não sei"
-correto e a latência média.
+das linhas que o redator recebeu e os que a validação do agente aceita (os da pergunta,
+as contagens de linhas, o número de meses e os anos do período). O relatório traz a taxa
+de acerto, a de "não sei" correto e a latência média.
 """
 
 import time
@@ -23,8 +24,15 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-from venergy_ai.interface import Assistente, Contexto, ProvedorIndisponivel, RespostaAgente
-from venergy_ai.numeros import numeros_sem_lastro
+from venergy_ai.agente import numeros_permitidos
+from venergy_ai.interface import (
+    Assistente,
+    Consulta,
+    Contexto,
+    ProvedorIndisponivel,
+    RespostaAgente,
+)
+from venergy_ai.numeros import numeros_citados, numeros_sem_lastro
 from venergy_ai.semantica import Periodo
 
 TOLERANCIA = Decimal('0.005')
@@ -89,7 +97,7 @@ async def avaliar(
             latencia = round((time.monotonic() - inicio) * 1000)
             resultados.append(Resultado(caso, False, 'erro', [f'provedor: {erro}'], latencia))
             continue
-        falhas = conferir(caso, resposta, esperado)
+        falhas = conferir(caso, resposta, esperado, contexto)
         resultados.append(
             Resultado(
                 caso,
@@ -104,20 +112,27 @@ async def avaliar(
     return resultados
 
 
-def conferir(caso: Caso, resposta: RespostaAgente, esperado: list[list[Any]] | None) -> list[str]:
+def conferir(
+    caso: Caso,
+    resposta: RespostaAgente,
+    esperado: list[list[Any]] | None,
+    contexto: Contexto | None = None,
+) -> list[str]:
     """Os motivos pelos quais a resposta não atende ao caso; vazio quando atende."""
     if caso.nao_sei:
         return [] if resposta.tipo == 'nao_sei' else ['respondeu em vez de dizer "não sei"']
     if resposta.tipo == 'nao_sei':
         return [f'disse "não sei": {resposta.motivo}']
     falhas = []
-    obtido = resposta.consultas[-1].linhas if resposta.consultas else []
+    consulta = resposta.consultas[-1] if resposta.consultas else Consulta(sql_gerado='')
+    obtido = consulta.linhas
     if not mesmo_resultado(esperado or [], obtido, caso.ordem):
         falhas.append(f'resultado diferente do esperado: {esperado[:3]} × {obtido[:3]}')
     if caso.periodo and not _mesmo_periodo(caso.periodo, resposta):
         declarado = resposta.periodo.descricao if resposta.periodo else 'nenhum'
         falhas.append(f'período declarado {declarado}, esperado {caso.periodo}')
-    if sem_lastro := numeros_sem_lastro(resposta.texto, obtido):
+    permitidos = _permitidos(caso, resposta, consulta, contexto)
+    if sem_lastro := numeros_sem_lastro(resposta.texto, obtido, permitidos):
         falhas.append(f'número sem lastro no texto: {", ".join(sem_lastro)}')
     return falhas
 
@@ -177,6 +192,16 @@ def _contexto(caso: Caso, competencia_mais_recente: date) -> Contexto:
         if chave in contexto:
             contexto[chave] = _periodo(contexto[chave])
     return Contexto(competencia_mais_recente=competencia_mais_recente, **contexto)
+
+
+def _permitidos(caso: Caso, resposta: RespostaAgente, consulta: Consulta, contexto):
+    # A mesma lista da validação do agente: a avaliação não reprova por redação uma
+    # resposta que o agente, com razão, deixou passar.
+    if resposta.periodo is None:
+        return [*numeros_citados(caso.pergunta), consulta.total_linhas, len(consulta.linhas)]
+    periodo = Periodo(resposta.periodo.inicio, resposta.periodo.fim)
+    contexto = contexto or Contexto(competencia_mais_recente=periodo.fim)
+    return numeros_permitidos(caso.pergunta, consulta, periodo, contexto)
 
 
 def _periodo(texto: str) -> Periodo:
