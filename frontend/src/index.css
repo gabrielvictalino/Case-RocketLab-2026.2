@@ -1244,3 +1244,18 @@
 .ve-agent-form .ve-btn {
   height: 40px;
 }
+
+/* Tabelas de receita: colunas compactas para comparação lado a lado. */
+.ve-receita-tabela .ve-table th,
+.ve-receita-tabela .ve-table td {
+  padding-left: 6px;
+  padding-right: 6px;
+}
+.ve-receita-tabela .ve-table th:first-child,
+.ve-receita-tabela .ve-table td:first-child {
+  padding-left: 12px;
+}
+.ve-receita-tabela .ve-table th:last-child,
+.ve-receita-tabela .ve-table td:last-child {
+  padding-right: 12px;
+}
