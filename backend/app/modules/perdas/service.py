@@ -1,8 +1,10 @@
+from decimal import Decimal
+
 from sqlalchemy.exc import IntegrityError
 
 from app.core.errors import APIError
 from app.modules.perdas import repository as repo
-from app.modules.perdas.schemas import Lote
+from app.modules.perdas.schemas import Lote, PaginaFila
 
 
 async def criar(db, body, user):
@@ -57,3 +59,29 @@ async def transicao(db, id_, acao, body, user):
         dados['inspetor'] = ordem['inspetor']
     await repo.evento(db, id_, user['id'], acao.upper(), dados)
     return result
+
+
+async def fila(db, filtro, page, size) -> PaginaFila:
+    resultado = await repo.fila(db, filtro, page, size)
+    items = resultado['items']
+    pagina = {
+        'itens': len(items),
+        'energia_recuperar_kwh': sum(
+            (item['energia_recuperar_kwh'] for item in items), Decimal('0.00')
+        ),
+        'energia_recuperar_reais': sum(
+            (item['energia_recuperar_reais'] for item in items), Decimal('0.00')
+        ),
+    }
+    filtro_totais = {
+        'itens': resultado['total'],
+        'energia_recuperar_kwh': resultado['filtro_kwh'],
+        'energia_recuperar_reais': resultado['filtro_reais'],
+    }
+    return PaginaFila(
+        items=items,
+        total=resultado['total'],
+        page=page,
+        size=size,
+        totais={'pagina': pagina, 'filtro': filtro_totais},
+    )

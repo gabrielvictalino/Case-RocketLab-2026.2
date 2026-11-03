@@ -59,6 +59,9 @@ beforeEach(() => {
     'fetch',
     vi.fn(async (req: Request | string | URL) => {
       const url = typeof req === 'string' ? req : req instanceof URL ? req.href : req.url
+      if (new URL(url, 'http://localhost').pathname.startsWith('/api/v1/kpis')) {
+        return new Response('{}', { status: 500, headers: { 'Content-Type': 'application/json' } })
+      }
       const corpo = url.includes('/api/v1/meta/filtros')
         ? FILTROS_AMOSTRA
         : url.includes('/api/v1/ordens-inspecao')

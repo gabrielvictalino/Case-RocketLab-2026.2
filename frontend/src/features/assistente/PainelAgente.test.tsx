@@ -243,7 +243,7 @@ describe('PainelAgente', () => {
 
   it('mostra o cartão de não sei com motivo e alternativa, que vira pergunta', async () => {
     roteiro = () => json(NAO_SEI)
-    renderizarApp('/visao-geral')
+    renderizarApp('/receita?periodo=2025-07..2026-06&comparacao=2024-07..2025-06')
     const painel = await abrirPainel()
 
     perguntar(painel, 'Quanto as placas geraram em jun/2026?')
