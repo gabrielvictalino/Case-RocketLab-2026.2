@@ -24,10 +24,10 @@ def indicador(valor, comparacao):
     )
 
 
-async def valores(db, periodo, recorte):
+async def valores(db, periodo, recorte, sem_evento_atipico=False):
     r = await receita.totais(db, periodo, recorte)
     u = await repository.ucs(db, periodo, recorte)
-    c = await repository.continuidade(db, periodo, recorte)
+    c = await repository.continuidade(db, periodo, recorte, sem_evento_atipico)
     i = await repository.inspecoes(db, periodo, recorte)
     return {
         'receita': r['receita'],
@@ -47,10 +47,10 @@ async def valores(db, periodo, recorte):
     }
 
 
-async def kpis(db, periodo, comparacao, recorte):
+async def kpis(db, periodo, comparacao, recorte, sem_evento_atipico=False):
     ctx = await contexto(db, periodo, comparacao)
-    atual = await valores(db, ctx.atual, recorte)
-    anterior = await valores(db, ctx.anterior, recorte) if ctx.anterior else {}
+    atual = await valores(db, ctx.atual, recorte, sem_evento_atipico)
+    anterior = await valores(db, ctx.anterior, recorte, sem_evento_atipico) if ctx.anterior else {}
     indicadores = {key: indicador(value, anterior.get(key)) for key, value in atual.items()}
     ucs = {key: indicadores.pop(key) for key in ('ativas', 'com_gd')}
     continuidade = {key: indicadores.pop(key) for key in ('dec', 'fec')}

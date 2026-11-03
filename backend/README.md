@@ -224,8 +224,8 @@ homologa uma exportação real nem altera a Gold.
 ### Continuidade (#57)
 
 As rotas `/continuidade/serie` e `/continuidade/ranking` exigem autenticação e
-`periodo=AAAA-MM..AAAA-MM`. Aceitam `municipio` e `alimentador`, combinados por
-interseção, e `sem_evento_atipico=true` (padrão `false`). `comparacao` é opcional
+`periodo=AAAA-MM..AAAA-MM`. Aceitam `municipio`, `bairro`, `classe` e
+`alimentador`, combinados por interseção, e `sem_evento_atipico=true` (padrão `false`). `comparacao` é opcional
 e segue a validação compartilhada; informa o período de referência nos metadados,
 sem acrescentar uma segunda série. As respostas incluem `periodo`, `comparacao`,
 `carga` e `sem_evento_atipico`.
@@ -240,18 +240,26 @@ decimais; contagens são inteiros. DEC/FEC usam duas casas e arredondamento meio
 para cima.
 
 CHI e interrupções somam os numeradores mensais; o denominador conta as UCs de
-cada alimentador com cobertura na Gold uma única vez no período. A exclusão
-expurga somente os numeradores das linhas alimentador × competência marcadas,
-preservando suas UCs no denominador mensal e do período. Os demais alimentadores
-da mesma competência continuam contribuindo com seus numeradores. Por exemplo,
-em julho/2025 na amostra, Recife sem evento tem CHI = 1 e 120 UCs (incluindo as
-60 do alimentador marcado): DEC = 0,01, em vez de 0,02.
+cada alimentador com cobertura na Gold uma única vez no período, usando
+`max(numero_ucs)`. Excluir evento atípico filtra as linhas alimentador × competência
+marcadas antes de somar, conforme a Gold. Um alimentador sem linhas restantes
+também sai do denominador. Os demais alimentadores do mesmo mês continuam no
+cálculo. Em julho/2025 na amostra, Recife sem evento tem CHI = 1 e 60 UCs:
+DEC = 0,02. Em um período maior, um alimentador com outra competência válida
+continua no denominador do período.
+
+Com `bairro` ou `classe`, os numeradores são reagregados de `ocorrencias_uc`
+somente para as UCs selecionadas e as competências com cobertura Gold não
+excluída. O denominador conta essas UCs por alimentador uma vez no período.
+O cálculo é compartilhado com `/kpis`, que também aceita `sem_evento_atipico`
+para DEC/FEC, inclusive no período de comparação.
 
 Um mês sem cobertura ou com todas as linhas marcadas fica com indicadores `null`;
 uma linha Gold válida sem ocorrências mantém os indicadores zerados. Um recorte
 sem observações válidas retorna ranking vazio e totais nulos. No ranking, cada
 alimentador sem nenhuma observação válida é omitido. A soma dos índices mensais
-pode diferir do índice do período por arredondamento em centésimos; os totais são
+pode diferir do índice do período por arredondamento em centésimos ou por
+variação dos alimentadores com cobertura após a exclusão; os totais são
 sempre calculados diretamente dos numeradores e do denominador fixo.
 
 As causas são contadas em `ocorrencias_uc`, pela competência de abertura e com

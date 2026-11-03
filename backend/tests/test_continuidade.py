@@ -27,35 +27,16 @@ async def get(client, headers, rota, **params):
     return response.json()
 
 
-def test_reagrega_numeradores_e_conta_denominador_uma_vez():
-    rows = [
-        dict(alimentador='pequeno', chi=D('1.01'), interrupcoes=1, numero_ucs=2),
-        dict(alimentador='pequeno', chi=D('2.02'), interrupcoes=2, numero_ucs=2),
-        dict(alimentador='grande', chi=D('3.03'), interrupcoes=3, numero_ucs=100),
-    ]
-    assert indicadores(rows).model_dump() == dict(
-        chi=D('6.06'), interrupcoes=6, numero_ucs=102, dec=D('0.06'), fec=D('0.06')
+def test_indicadores_arredondam_e_distingem_ausencia_de_zero():
+    assert indicadores(dict(chi=D('1.01'), interrupcoes=1, numero_ucs=2)).model_dump() == dict(
+        chi=D('1.01'), interrupcoes=1, numero_ucs=2, dec=D('0.51'), fec=D('0.50')
     )
-    assert indicadores(rows[:1]).dec == D('0.51')  # meio para cima
-    assert all(value is None for value in indicadores([]).model_dump().values())
-    zero = indicadores([dict(alimentador='a', chi=D(0), interrupcoes=0, numero_ucs=2)])
+    ausente = indicadores(dict(chi=None, interrupcoes=None, numero_ucs=None))
+    assert all(value is None for value in ausente.model_dump().values())
+    zero = indicadores(dict(chi=D(0), interrupcoes=0, numero_ucs=2))
     assert zero.dec == zero.fec == 0
-
-
-def test_expurgo_preserva_ucs_com_cobertura_e_distingue_ausencia_de_zero():
-    rows = [
-        dict(alimentador='a', chi=D(60), interrupcoes=30, numero_ucs=60, flag_evento_atipico=True),
-        dict(alimentador='b', chi=D(1), interrupcoes=1, numero_ucs=60, flag_evento_atipico=False),
-    ]
-    assert indicadores(rows, True).model_dump() == dict(
-        chi=D(1), interrupcoes=1, numero_ucs=120, dec=D('0.01'), fec=D('0.01')
-    )
-    assert all(v is None for v in indicadores(rows[:1], True).model_dump().values())
-    # Uma observação zero válida preserva também as UCs do alimentador expurgado.
-    rows[1].update(chi=D(0), interrupcoes=0)
-    zero = indicadores(rows, True)
-    assert zero.numero_ucs == 120
-    assert zero.dec == zero.fec == 0
+    sem_ucs = indicadores(dict(chi=D(1), interrupcoes=1, numero_ucs=0))
+    assert sem_ucs.dec is sem_ucs.fec is None
 
 
 @INTEGRATION
@@ -114,7 +95,7 @@ async def test_serie_ranking_e_causas_conferidos_contra_csv(
             return
         chi = sum(D(r['chi_horas']) for r in validas)
         interrupcoes = sum(int(r['interrupcoes']) for r in validas)
-        ucs = sum(int(alimentadores[a]['numero_ucs']) for a in {r['alimentador'] for r in rows})
+        ucs = sum(int(alimentadores[a]['numero_ucs']) for a in {r['alimentador'] for r in validas})
         assert D(indicadores['chi']) == chi
         assert indicadores['interrupcoes'] == interrupcoes
         assert indicadores['numero_ucs'] == ucs
@@ -164,19 +145,22 @@ async def test_exclusao_muda_ranking_totais_e_causas(client, headers):
 
 
 @INTEGRATION
-@pytest.mark.parametrize('recorte,ucs', [({}, 300), ({'municipio': 'Recife'}, 120)])
-async def test_expurgo_mantem_denominador_mensal_e_do_periodo(client, headers, recorte, ucs):
+@pytest.mark.parametrize('recorte,ucs', [({}, 240), ({'municipio': 'Recife'}, 60)])
+async def test_exclusao_filtra_linhas_antes_de_agregar(client, headers, recorte, ucs):
     params = dict(sem_evento_atipico=True, **recorte)
     mes = await get(client, headers, 'serie', periodo='2025-07..2025-07', **params)
     ciclo = await get(client, headers, 'serie', periodo='2025-07..2025-08', **params)
     assert mes['totais']['numero_ucs'] == mes['serie'][0]['numero_ucs'] == ucs
     assert mes['serie'][0] == ciclo['serie'][0]
-    assert ciclo['totais']['numero_ucs'] == ucs
-    for indicador in ('dec', 'fec'):
+    assert ciclo['totais']['numero_ucs'] == ucs + 60
+    for indicador in ('chi', 'interrupcoes'):
         assert sum(D(p[indicador]) for p in ciclo['serie']) == D(ciclo['totais'][indicador])
+    ranking = await get(client, headers, 'ranking', periodo='2025-07..2025-07', **params)
+    for campo in ('chi', 'interrupcoes', 'numero_ucs'):
+        assert sum(D(r[campo]) for r in ranking['ranking']) == D(mes['totais'][campo])
     if recorte:
-        # 1 / 120 = 0,01; retirar as 60 UCs do alimentador marcado daria 0,02.
-        assert D(mes['totais']['dec']) == D(mes['totais']['fec']) == D('0.01')
+        # Só as 60 UCs do alimentador com competência válida permanecem.
+        assert D(mes['totais']['dec']) == D(mes['totais']['fec']) == D('0.02')
 
 
 @INTEGRATION
@@ -284,3 +268,108 @@ async def test_primeiro_mes_sem_comparacao_e_virada_de_ano(client, headers):
     assert primeiro['comparacao'] is None
     data = await get(client, headers, 'serie', periodo='2024-12..2025-01')
     assert [p['competencia'] for p in data['serie']] == ['2024-12-01', '2025-01-01']
+
+
+@INTEGRATION
+@pytest.mark.parametrize('sem_evento', [False, True])
+@pytest.mark.parametrize('fim', ['2025-07', '2025-08'])
+@pytest.mark.parametrize(
+    'recorte',
+    [
+        {'bairro': 'Bairro sintético 1'},
+        {'municipio': 'Recife', 'classe': 'Residencial'},
+        {'alimentador': 'ALM-REC-001', 'classe': 'Comercial'},
+        {'municipio': 'Recife', 'bairro': 'Bairro sintético 3'},
+        {'bairro': 'Pina'},
+    ],
+)
+async def test_recortes_por_uc_conferidos_contra_csv_e_kpis(
+    client, headers, sem_evento, fim, recorte
+):
+    ucs = {r['id_uc']: r for r in ler('dim_uc') if all(r[k] == v for k, v in recorte.items())}
+    alimentadores = {r['alimentador'] for r in ucs.values()}
+    cobertura = {
+        (r['alimentador'], r['competencia'])
+        for r in ler('continuidade_alimentador_mensal')
+        if '2025-07-01' <= r['competencia'] <= fim + '-01'
+        and r['alimentador'] in alimentadores
+        and not (sem_evento and r['flag_evento_atipico'] == 'true')
+    }
+    ocorrencias = [
+        r
+        for r in ler('ocorrencias_uc')
+        if r['id_uc'] in ucs and (r['alimentador'], r['data_abertura'][:7] + '-01') in cobertura
+    ]
+
+    def conferir(valores, linhas, competencias):
+        if not competencias:
+            assert all(
+                valores[k] is None for k in ('chi', 'interrupcoes', 'numero_ucs', 'dec', 'fec')
+            )
+            return
+        chi = sum((D(r['duracao_efetiva_min']) / 60 for r in linhas), D(0))
+        interrupcoes = sum(r['flag_sobreposicao'] == 'false' for r in linhas)
+        cobertos = {a for a, _ in competencias}
+        denominador = sum(r['alimentador'] in cobertos for r in ucs.values())
+        assert D(valores['chi']) == chi
+        assert valores['interrupcoes'] == interrupcoes
+        assert valores['numero_ucs'] == denominador
+        assert D(valores['dec']) == arredondar(chi / denominador)
+        assert D(valores['fec']) == arredondar(D(interrupcoes) / denominador)
+
+    params = dict(periodo=f'2025-07..{fim}', sem_evento_atipico=sem_evento, **recorte)
+    serie = await get(client, headers, 'serie', **params)
+    ranking = (await get(client, headers, 'ranking', **params))['ranking']
+    conferir(serie['totais'], ocorrencias, cobertura)
+    for ponto in serie['serie']:
+        conferir(
+            ponto,
+            [r for r in ocorrencias if r['data_abertura'][:7] + '-01' == ponto['competencia']],
+            {(a, mes) for a, mes in cobertura if mes == ponto['competencia']},
+        )
+    assert {r['alimentador'] for r in ranking} == {a for a, _ in cobertura}
+    for item in ranking:
+        linhas = [r for r in ocorrencias if r['alimentador'] == item['alimentador']]
+        conferir(item, linhas, {(a, mes) for a, mes in cobertura if a == item['alimentador']})
+        assert {r['causa']: r['ocorrencias'] for r in item['causas']} == Counter(
+            r['causa'] for r in linhas
+        )
+        assert {r['causa']: r['interrupcoes'] for r in item['causas']} == {
+            causa: sum(r['causa'] == causa and r['flag_sobreposicao'] == 'false' for r in linhas)
+            for causa in {r['causa'] for r in linhas}
+        }
+    response = await client.get('/api/v1/kpis', headers=headers, params=params)
+    assert response.status_code == 200, response.text
+    for campo in ('dec', 'fec'):
+        assert response.json()['continuidade'][campo]['valor'] == serie['totais'][campo]
+
+
+@INTEGRATION
+@pytest.mark.parametrize('recorte', [{}, {'classe': 'Residencial'}])
+async def test_kpis_aplica_exclusao_tambem_na_comparacao(client, headers, recorte):
+    params = dict(
+        periodo='2026-01..2026-01',
+        comparacao='2025-07..2025-07',
+        sem_evento_atipico=True,
+        **recorte,
+    )
+    response = await client.get('/api/v1/kpis', headers=headers, params=params)
+    assert response.status_code == 200, response.text
+    anterior = await get(
+        client, headers, 'serie', periodo=params['comparacao'], sem_evento_atipico=True, **recorte
+    )
+    for campo in ('dec', 'fec'):
+        assert response.json()['continuidade'][campo]['comparacao'] == anterior['totais'][campo]
+
+
+@INTEGRATION
+async def test_totais_reagregam_numeradores_antes_de_arredondar(client, headers):
+    # 1/60 por mês arredonda a 0,02; 2/60 no período arredonda a 0,03.
+    serie = await get(
+        client, headers, 'serie', periodo='2025-08..2025-09', alimentador='ALM-REC-002'
+    )
+    for campo in ('chi', 'interrupcoes'):
+        assert sum(D(p[campo]) for p in serie['serie']) == D(serie['totais'][campo])
+    for campo in ('dec', 'fec'):
+        assert sum(D(p[campo]) for p in serie['serie']) == D('0.04')
+        assert D(serie['totais'][campo]) == D('0.03')

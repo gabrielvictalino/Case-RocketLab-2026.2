@@ -9,11 +9,6 @@ from app.modules.metricas import RespostaMetricas
 Ordem = Literal['chi', 'dec', 'fec']
 
 
-class RecorteContinuidade(BaseModel):
-    municipio: str | None = None
-    alimentador: str | None = None
-
-
 class Indicadores(BaseModel):
     chi: Decimal | None
     interrupcoes: int | None

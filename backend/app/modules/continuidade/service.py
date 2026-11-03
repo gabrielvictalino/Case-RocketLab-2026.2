@@ -1,83 +1,58 @@
 from collections import defaultdict
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 
 from app.modules.continuidade import repository
 from app.modules.continuidade.schemas import Indicadores, Ranking, Serie
+from app.modules.kpis.service import razao
 from app.modules.metricas import contexto
 
 
-def indicadores(rows, sem_evento_atipico=False):
-    observacoes = [r for r in rows if not (sem_evento_atipico and r['flag_evento_atipico'])]
-    if not observacoes:
-        return Indicadores(chi=None, interrupcoes=None, numero_ucs=None, dec=None, fec=None)
-    chi = sum((r['chi'] for r in observacoes), Decimal(0))
-    interrupcoes = sum(r['interrupcoes'] for r in observacoes)
-    # O contrato garante numero_ucs fixo. Conta cada alimentador uma vez no
-    # período, mesmo que tenha várias competências selecionadas ou expurgadas.
-    ucs = sum({r['alimentador']: r['numero_ucs'] for r in rows}.values())
-
-    def razao(numerador):
-        return (Decimal(numerador) / ucs).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-
+def indicadores(row):
     return Indicadores(
-        chi=chi, interrupcoes=interrupcoes, numero_ucs=ucs, dec=razao(chi), fec=razao(interrupcoes)
+        chi=row['chi'],
+        interrupcoes=row['interrupcoes'],
+        numero_ucs=row['numero_ucs'],
+        dec=razao(row['chi'], row['numero_ucs']),
+        fec=razao(row['interrupcoes'], row['numero_ucs']),
     )
 
 
 async def serie(db, periodo, comparacao, recorte, sem_evento_atipico):
     ctx = await contexto(db, periodo, comparacao)
-    rows = await repository.mensais(db, ctx.atual, recorte)
-    por_mes = defaultdict(list)
-    for row in rows:
-        por_mes[row['competencia']].append(row)
-    pontos = []
-    mes = ctx.atual.inicio
-    while mes <= ctx.atual.fim:
-        pontos.append(
-            dict(competencia=mes, **indicadores(por_mes[mes], sem_evento_atipico).model_dump())
-        )
-        if mes == ctx.atual.fim:
-            break
-        mes = (
-            mes.replace(year=mes.year + 1, month=1)
-            if mes.month == 12
-            else mes.replace(month=mes.month + 1)
-        )
+    rows = await repository.serie(db, ctx.atual, recorte, sem_evento_atipico)
+    totais = await repository.totais(db, ctx.atual, recorte, sem_evento_atipico)
     return Serie(
         **ctx.metadados(),
         sem_evento_atipico=sem_evento_atipico,
-        totais=indicadores(rows, sem_evento_atipico),
-        serie=pontos,
+        totais=indicadores(totais),
+        serie=[dict(competencia=r['competencia'], **indicadores(r).model_dump()) for r in rows],
     )
 
 
 async def ranking(db, periodo, comparacao, recorte, sem_evento_atipico, ordem):
     ctx = await contexto(db, periodo, comparacao)
-    rows = await repository.mensais(db, ctx.atual, recorte)
-    por_alimentador = defaultdict(list)
-    for row in rows:
-        por_alimentador[row['alimentador']].append(row)
+    rows = await repository.ranking(db, ctx.atual, recorte, sem_evento_atipico)
     causas = defaultdict(list)
     for row in await repository.causas(db, ctx.atual, recorte, sem_evento_atipico):
         causas[row['alimentador']].append(
             {k: row[k] for k in ('causa', 'ocorrencias', 'interrupcoes')}
         )
     itens = []
-    for alimentador, mensais in por_alimentador.items():
-        valores = indicadores(mensais, sem_evento_atipico)
+    for row in rows:
+        valores = indicadores(row)
         if valores.dec is None:
             continue
         itens.append(
             dict(
-                alimentador=alimentador,
-                municipio=mensais[0]['municipio'],
+                alimentador=row['alimentador'],
+                municipio=row['municipio'],
                 **valores.model_dump(),
-                causas=causas[alimentador],
+                causas=causas[row['alimentador']],
             )
         )
 
     # Ordena pelo índice exato, antes do arredondamento da resposta; código
-    # desempata para manter o resultado determinístico.
+    # desempata para manter o resultado determinístico. UCs zero são omitidas acima.
     def chave(item):
         valores = {
             'chi': item['chi'],
