@@ -32,6 +32,10 @@ def periodo_padrao(competencia_mais_recente: date) -> Periodo:
     return Periodo(deslocar(fim, 1 - MESES_PERIODO_PADRAO), fim)
 
 
-def periodo_comparacao(periodo: Periodo) -> Periodo:
-    """O mesmo intervalo no ano anterior, como no glossário."""
-    return Periodo(deslocar(periodo.inicio, -12), deslocar(periodo.fim, -12))
+def periodo_comparacao(periodo: Periodo, inicio_base: date | None = None) -> Periodo | None:
+    """O mesmo intervalo no ano anterior, como no glossário. Como no backend
+    (`validar_periodos`), não há comparação quando ele começa antes da base."""
+    anterior = Periodo(deslocar(periodo.inicio, -12), deslocar(periodo.fim, -12))
+    if inicio_base is not None and anterior.inicio < inicio_base.replace(day=1):
+        return None
+    return anterior
