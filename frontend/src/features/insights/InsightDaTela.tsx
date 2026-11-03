@@ -3,6 +3,7 @@ import { usePeriodo } from '@/app/periodo/usePeriodo'
 import { BlocoInsight } from '@/components/BlocoInsight'
 import {
   INSIGHT_INDISPONIVEL,
+  insightValido,
   motivoIndisponivel,
   parametrosDoInsight,
   rodapeDoInsight,
@@ -12,16 +13,15 @@ import { lerRecortesUrl } from '@/lib/recortes'
 
 export function InsightDaTela({ tela }: { tela: TelaInsight }) {
   const [searchParams] = useSearchParams()
-  const { parametros, carregando, erro } = usePeriodo()
+  const { carga, parametros, carregando, erro } = usePeriodo()
   const pedido = parametrosDoInsight(tela, parametros, lerRecortesUrl(searchParams))
-  const insight = useInsight(tela, pedido)
+  const insight = useInsight(tela, pedido, carga?.id ?? null)
 
   if (carregando || (!erro && insight.isPending)) {
     return <BlocoInsight carregando mensagemCarregando="Gerando insight" />
   }
-  const observacoes = insight.data?.observacoes
   // Uma falha do insight fica neste bloco: o resto da tela não depende dele.
-  if (erro || !insight.data || !Array.isArray(observacoes) || observacoes.length === 0) {
+  if (erro || !insightValido(insight.data)) {
     return (
       <BlocoInsight
         indisponivel
@@ -32,10 +32,11 @@ export function InsightDaTela({ tela }: { tela: TelaInsight }) {
   }
   return (
     <BlocoInsight
-      itens={observacoes.map((observacao) => ({
+      itens={insight.data.observacoes.map((observacao) => ({
         texto: observacao.texto,
         etiqueta: observacao.metrica,
-        destaques: observacao.valores.map((valor) => valor.trecho),
+        // A posição que o backend conferiu, e não uma busca pelo trecho no texto.
+        destaques: observacao.valores.map(({ inicio, fim }) => ({ inicio, fim })),
       }))}
       rodape={rodapeDoInsight(insight.data)}
     />

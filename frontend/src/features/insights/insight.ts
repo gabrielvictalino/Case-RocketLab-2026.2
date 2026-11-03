@@ -31,6 +31,24 @@ export function parametrosDoInsight(
   return parametros
 }
 
+// Uma resposta fora do formato (um proxy, um cache de outra versão) fica neste bloco,
+// sem derrubar a tela.
+export function insightValido(insight: Insight | undefined): insight is Insight {
+  return (
+    typeof insight?.carga?.batch_id === 'string' &&
+    Array.isArray(insight.observacoes) &&
+    insight.observacoes.length > 0 &&
+    insight.observacoes.every(
+      (observacao) =>
+        typeof observacao?.texto === 'string' &&
+        Array.isArray(observacao.valores) &&
+        observacao.valores.every(
+          (valor) => Number.isInteger(valor?.inicio) && Number.isInteger(valor?.fim),
+        ),
+    )
+  )
+}
+
 export function rodapeDoInsight(insight: Insight): string {
   const periodo = formatarIntervaloPeriodo(parsePeriodo(insight.periodo))
   const comparacao = insight.comparacao
@@ -40,6 +58,10 @@ export function rodapeDoInsight(insight: Insight): string {
 }
 
 export function motivoIndisponivel(erro: ErroApi | null): string {
+  // A cota é dividida com o assistente e só volta no dia seguinte: tentar de novo não adianta.
+  if (erro?.code === 'COTA_DE_TOKENS_ESGOTADA') {
+    return `A cota diária de IA acabou e volta à meia-noite. ${DEMAIS_DADOS}`
+  }
   if (erro?.status === 429) {
     return `Muitos insights gerados agora. Tente de novo em instantes. ${DEMAIS_DADOS}`
   }

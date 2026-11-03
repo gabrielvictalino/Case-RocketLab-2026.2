@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { QUERY_KEY_CARGA } from '@/app/periodo/useCarga'
 import { rotas } from '@/app/rotas'
 import type { Insight } from '@/features/insights/useInsight'
 import { encerrarSessao, salvarSessao } from '@/lib/auth/sessao'
@@ -41,6 +42,14 @@ const FILTROS = {
   alimentadores: ['ALM-REC-001'],
 }
 
+const TEXTO_RECEITA = 'A receita faturada subiu 5,3% e chegou a R$ 170,3 milhões.'
+
+// A posição do trecho no texto, como o backend manda.
+function posicao(texto: string, trecho: string) {
+  const inicio = texto.indexOf(trecho)
+  return { inicio, fim: inicio + trecho.length }
+}
+
 const INSIGHT: Insight = {
   periodo: '2025-07..2026-06',
   comparacao: '2024-07..2025-06',
@@ -52,10 +61,11 @@ const INSIGHT: Insight = {
     {
       chave: 'receita',
       metrica: 'Receita faturada',
-      texto: 'A receita faturada subiu 5,3% e chegou a R$ 170,3 milhões.',
+      texto: TEXTO_RECEITA,
       valores: [
         {
           trecho: '5,3%',
+          ...posicao(TEXTO_RECEITA, '5,3%'),
           chave: 'receita',
           metrica: 'Receita faturada',
           campo: 'variacao_pct',
@@ -64,6 +74,7 @@ const INSIGHT: Insight = {
         },
         {
           trecho: '170,3 milhões',
+          ...posicao(TEXTO_RECEITA, '170,3 milhões'),
           chave: 'receita',
           metrica: 'Receita faturada',
           campo: 'valor',
@@ -84,6 +95,8 @@ const INSIGHT: Insight = {
 type Roteiro = (url: URL) => Response | Promise<Response>
 
 let roteiro: Roteiro
+let cargaAtual = CARGA
+let clienteAtual: QueryClient
 const pedidos: URL[] = []
 
 function json(corpo: unknown, status = 200) {
@@ -102,6 +115,7 @@ beforeEach(() => {
   )
   pedidos.length = 0
   roteiro = () => json(INSIGHT)
+  cargaAtual = CARGA
   vi.stubGlobal(
     'fetch',
     vi.fn(async (req: Request) => {
@@ -117,7 +131,7 @@ beforeEach(() => {
       if (url.pathname.startsWith('/api/v1/kpis')) {
         return new Promise<Response>(() => {})
       }
-      return json(CARGA)
+      return json(cargaAtual)
     }),
   )
 })
@@ -129,6 +143,7 @@ afterEach(() => {
 
 function renderizarApp(caminhoInicial: string) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  clienteAtual = queryClient
   const router = createMemoryRouter(rotas, { initialEntries: [caminhoInicial] })
   render(
     <QueryClientProvider client={queryClient}>
@@ -199,6 +214,53 @@ describe('InsightDaTela', () => {
     expect(screen.getByLabelText('Indicadores do período')).toBeInTheDocument()
     // Sem nova tentativa: o 503 não melhora na hora e cada tentativa iria ao modelo.
     expect(pedidos).toHaveLength(1)
+  })
+
+  it('destaca o número pela posição, sem marcar dígitos dentro de outro número', async () => {
+    const texto = 'Há 25 UCs com GD em 2025.'
+    const [receita] = INSIGHT.observacoes as [Insight['observacoes'][number]]
+    roteiro = () =>
+      json({
+        ...INSIGHT,
+        observacoes: [
+          { ...receita, texto, valores: [{ ...receita.valores[0], trecho: '25', ...posicao(texto, '25') }] },
+        ],
+      })
+    renderizarApp(`/visao-geral?${PERIODOS}`)
+    const bloco = await blocoDoInsight()
+    const [item] = (await within(bloco).findAllByRole('listitem')) as [HTMLElement]
+    expect(item).toHaveTextContent('Há 25 UCs com GD em 2025.')
+    expect([...item.querySelectorAll('strong.ve-insight-num')].map((s) => s.textContent)).toEqual(['25'])
+  })
+
+  it.each([
+    ['sem valores', { ...INSIGHT, observacoes: [{ ...INSIGHT.observacoes[0], valores: undefined }] }],
+    ['sem carga', { ...INSIGHT, carga: undefined }],
+  ])('uma resposta %s fica indisponível no bloco, sem derrubar a tela', async (_, corpo) => {
+    roteiro = () => json(corpo)
+    renderizarApp(`/visao-geral?${PERIODOS}`)
+    const bloco = await blocoDoInsight()
+    expect(
+      await within(bloco).findByText('Insight indisponível para esta combinação de períodos'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Visão Geral' })).toBeInTheDocument()
+  })
+
+  it('explica a cota diária esgotada, que só volta à meia-noite', async () => {
+    roteiro = () =>
+      json({ detail: 'A cota diária acabou', code: 'COTA_DE_TOKENS_ESGOTADA' }, 429)
+    renderizarApp(`/visao-geral?${PERIODOS}`)
+    const bloco = await blocoDoInsight()
+    expect(await within(bloco).findByText(/cota diária de IA acabou/)).toBeInTheDocument()
+  })
+
+  it('pede outro insight quando chega uma carga nova', async () => {
+    renderizarApp(`/visao-geral?${PERIODOS}`)
+    await within(await blocoDoInsight()).findAllByRole('listitem')
+    expect(pedidos).toHaveLength(1)
+    cargaAtual = { ...CARGA, id: '00000000-0000-0000-0000-000000000002', batch_id: 'gold_nova' }
+    await act(() => clienteAtual.invalidateQueries({ queryKey: QUERY_KEY_CARGA }))
+    await waitFor(() => expect(pedidos).toHaveLength(2))
   })
 
   it('explica o limite de insights por minuto', async () => {

@@ -1,12 +1,18 @@
+import type { ReactNode } from 'react'
 import { AlertTriangle, ListFilter } from 'lucide-react'
 import { Etiqueta } from '@/components/Etiqueta'
 import { Esqueleto, TEXTO_DADOS_INDISPONIVEIS } from '@/components/Estados'
 
+export interface Destaque {
+  inicio: number
+  fim: number
+}
+
 export interface ItemInsight {
   texto: string
   etiqueta?: string
-  // Trechos do texto mostrados em destaque: os números que a observação cita.
-  destaques?: ReadonlyArray<string>
+  // Posições, no texto, dos números que a observação cita e o backend conferiu.
+  destaques?: ReadonlyArray<Destaque>
 }
 
 export interface BlocoInsightProps {
@@ -21,25 +27,26 @@ export interface BlocoInsightProps {
   rodape?: string
 }
 
-function escaparRegex(texto: string) {
-  return texto.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-function comDestaques(texto: string, destaques: ReadonlyArray<string> = []) {
-  const trechos = [...new Set(destaques.filter(Boolean))].sort((a, b) => b.length - a.length)
-  if (trechos.length === 0) {
-    return texto
+// Pela posição: buscar o trecho "25" no texto marcaria também o fim de "2025".
+function comDestaques(texto: string, destaques: ReadonlyArray<Destaque> = []) {
+  const ordenados = destaques
+    .filter(({ inicio, fim }) => inicio >= 0 && inicio < fim && fim <= texto.length)
+    .sort((a, b) => a.inicio - b.inicio)
+  const partes: ReactNode[] = []
+  let cursor = 0
+  for (const { inicio, fim } of ordenados) {
+    if (inicio < cursor) {
+      continue
+    }
+    partes.push(
+      texto.slice(cursor, inicio),
+      <strong key={inicio} className="ve-insight-num">
+        {texto.slice(inicio, fim)}
+      </strong>,
+    )
+    cursor = fim
   }
-  const padrao = new RegExp(`(${trechos.map(escaparRegex).join('|')})`)
-  return texto.split(padrao).map((parte, idx) =>
-    idx % 2 === 1 ? (
-      <strong key={idx} className="ve-insight-num">
-        {parte}
-      </strong>
-    ) : (
-      parte
-    ),
-  )
+  return partes.length === 0 ? texto : [...partes, texto.slice(cursor)]
 }
 
 export function BlocoInsight({
