@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     gemini_api_key: SecretStr | None = None
     openrouter_api_key: SecretStr | None = None
     assistente_timeout_s: float = Field(default=30, gt=0, le=120)
+    # Limites por usuário no Redis (fail-open): perguntas por minuto e tokens por dia.
+    assistente_perguntas_por_minuto: int = Field(default=20, ge=1)
+    assistente_cota_tokens_dia: int = Field(default=500_000, ge=1)
 
     @model_validator(mode='after')
     def validate_secret(self):

@@ -246,6 +246,20 @@ carga e gravar a auditoria. Enquanto o modelo responde, nenhuma conexão do port
 fica presa e as rotas das telas não disputam o pool. O agente recebe só a engine
 `ai_read`.
 
+Limites por usuário, no Redis e fail-open (se o Redis cair, vale só o limite por IP
+do Nginx):
+
+- `rl:{usuario}:assistente`: janela deslizante de 1 minuto com
+  `ASSISTENTE_PERGUNTAS_POR_MINUTO` perguntas (padrão 20). A pergunta barrada não entra
+  na janela.
+- `cota:{usuario}:{AAAA-MM-DD}`: tokens do LLM gastos no dia, também os de perguntas
+  que falharam, até `ASSISTENTE_COTA_TOKENS_DIA` (padrão 500.000). O dia vira à
+  meia-noite de Recife.
+
+Os dois respondem `429` com `Retry-After` (`LIMITE_DE_PERGUNTAS`,
+`COTA_DE_TOKENS_ESGOTADA`). `app.core.limites` fica pronto para os insights, que devem
+chamar `consumir` só quando forem ao LLM, para que um cache hit não gaste o limite.
+
 Follow-up: `conversa:{id}` no Redis guarda a dona e as últimas 5 trocas (pergunta,
 métrica, filtros, período e SQL), com TTL de 2 h renovado a cada pergunta. O agente
 recebe esse estado estruturado, e não só a transcrição: "E em Olinda?" mantém a métrica

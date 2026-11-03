@@ -65,6 +65,9 @@ def infrastructure():
             database_url_ai=f'postgresql+asyncpg://ai_read:ai_dev@{base}',
             database_url_migrations=admin_url.replace('postgresql://', 'postgresql+asyncpg://'),
             redis_url=f'redis://{redis.get_container_host_ip()}:{redis.get_exposed_port(6379)}/0',
+            # Os testes fazem muitas perguntas com o mesmo usuário; os de limite baixam estes.
+            assistente_perguntas_por_minuto=100_000,
+            assistente_cota_tokens_dia=10**12,
         )
         subprocess.run(
             [sys.executable, '-m', 'alembic', '-c', 'backend/alembic.ini', 'upgrade', 'head'],
