@@ -126,7 +126,7 @@ def test_dominios_fora_do_contrato_estao_na_limpeza(visao, coluna):
 def test_tipos_de_irregularidade_batem_com_a_view():
     sql = (RAIZ / 'importador/views.sql').read_text(encoding='utf-8')
     view = sql.split('CREATE VIEW ai_read.inspecoes', 1)[1].split(';', 1)[0]
-    tipos = re.findall(r"'([^']+)'", re.search(r'tipo_irregularidade IN \(([^)]*)\)', view)[1])
+    tipos = re.findall(r"'([^']+)'", re.search(r'tipo IN \(([^)]*)\)', view)[1])
     assert VISOES_POR_NOME['inspecoes'].coluna('tipo_irregularidade').valores == (
         *tipos,
         'OUTRO',
