@@ -5,15 +5,31 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from venergy_ai.interface import Consulta, RespostaAgente
 
+# Telas do portal, com o nome que vai para o agente.
+TELAS = {
+    'visao-geral': 'Visão Geral',
+    'receita': 'Receita',
+    'unidade-consumidora': 'Unidade Consumidora',
+    'perdas': 'Perdas',
+    'operacao': 'Operação',
+}
+Tela = Literal['visao-geral', 'receita', 'unidade-consumidora', 'perdas', 'operacao']
 Recorte = Literal['municipio', 'bairro', 'classe', 'alimentador', 'id_uc']
-ValorRecorte = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)]
+# Nomes de lugar, classes e códigos: sem aspas, quebras de linha, < nem >, que o modelo
+# poderia ler como instrução.
+ValorRecorte = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True, min_length=1, max_length=80, pattern=r"^[\w .,'()/-]+$"
+    ),
+]
 
 
 class ContextoPergunta(BaseModel):
     """O que a tela envia junto com a pergunta. Períodos em `AAAA-MM..AAAA-MM`."""
 
     model_config = ConfigDict(extra='forbid')
-    tela: Annotated[str, StringConstraints(strip_whitespace=True, max_length=40)] | None = None
+    tela: Tela | None = None
     periodo: str | None = None
     comparacao: str | None = None
     recortes: dict[Recorte, ValorRecorte] = Field(default_factory=dict)

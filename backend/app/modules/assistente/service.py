@@ -4,14 +4,22 @@ from uuid import uuid4
 
 from venergy_ai.agente import AgenteTextoSQL
 from venergy_ai.executor import ExecutorAiRead
-from venergy_ai.interface import Assistente, Contexto, ProvedorIndisponivel, RespostaAgente
+from venergy_ai.interface import (
+    Andamento,
+    Assistente,
+    BancoIndisponivel,
+    Consulta,
+    Contexto,
+    ProvedorIndisponivel,
+    RespostaAgente,
+)
 from venergy_ai.modelo import criar_modelo
 from venergy_ai.semantica import Periodo
 
 from app.core.errors import APIError
 from app.core.periodos import validar_periodos
 from app.modules.assistente import repository
-from app.modules.assistente.schemas import Auditoria, Pergunta, RespostaPergunta
+from app.modules.assistente.schemas import TELAS, Auditoria, Pergunta, RespostaPergunta
 from app.modules.meta import repository as meta
 
 
@@ -49,20 +57,35 @@ async def perguntar(state, body: Pergunta, usuario) -> RespostaPergunta:
         consultas=[],
         nao_sei=False,
     )
+    # O agente preenche o andamento enquanto trabalha: numa falha, a auditoria ainda
+    # guarda o SQL que já rodou e os tokens já gastos.
+    andamento = Andamento()
     inicio = time.monotonic()
     try:
-        async with asyncio.timeout(state.settings.assistente_timeout_s):
-            resposta = await state.assistente.responder(body.pergunta, contexto)
-    except TimeoutError:
-        await _registrar_falha(state, registro, inicio, 'TEMPO_ESGOTADO')
+        async with asyncio.timeout(state.settings.assistente_timeout_s) as limite:
+            resposta = await state.assistente.responder(body.pergunta, contexto, andamento)
+    except TimeoutError as erro:
+        # Só o prazo do assistente vira 503; outro TimeoutError é uma falha inesperada.
+        if not limite.expired():
+            await _registrar_falha(state, registro, andamento, inicio, _interno(erro))
+            raise
+        await _registrar_falha(state, registro, andamento, inicio, 'TEMPO_ESGOTADO')
         raise APIError(
             503, 'O assistente demorou demais para responder', 'ASSISTENTE_TEMPO_ESGOTADO'
         ) from None
     except ProvedorIndisponivel as erro:
-        await _registrar_falha(state, registro, inicio, f'PROVEDOR_INDISPONIVEL: {erro}')
+        await _registrar_falha(state, registro, andamento, inicio, f'PROVEDOR_INDISPONIVEL: {erro}')
         raise APIError(
             503, 'O provedor do modelo está indisponível', 'PROVEDOR_INDISPONIVEL'
         ) from None
+    except BancoIndisponivel as erro:
+        await _registrar_falha(state, registro, andamento, inicio, f'BANCO_INDISPONIVEL: {erro}')
+        raise APIError(
+            503, 'O banco de dados do assistente está indisponível', 'BANCO_INDISPONIVEL'
+        ) from None
+    except Exception as erro:
+        await _registrar_falha(state, registro, andamento, inicio, _interno(erro))
+        raise
     async with state.portal_sessions() as db, db.begin():
         await repository.registrar(db, registro | _da_resposta(resposta))
     return RespostaPergunta(
@@ -97,24 +120,31 @@ def _contexto(body: Pergunta, carga) -> Contexto:
         raise APIError(422, 'Informe periodo junto com comparacao', 'PERIODO_INVALIDO')
     return Contexto(
         competencia_mais_recente=carga['competencia_mais_recente'],
-        tela=pedido.tela,
+        tela=pedido.tela and TELAS[pedido.tela],
         periodo=periodo,
         comparacao=comparacao,
         recortes=pedido.recortes,
     )
 
 
-def _da_resposta(resposta: RespostaAgente) -> dict:
+def _das_consultas(consultas: list[Consulta]) -> dict:
     # A última tentativa é a que sustenta a resposta; todas ficam em consultas.
-    ultima = resposta.consultas[-1] if resposta.consultas else None
+    ultima = consultas[-1] if consultas else None
     return dict(
-        consultas=[c.model_dump(mode='json') for c in resposta.consultas],
+        consultas=[c.model_dump(mode='json') for c in consultas],
         sql_gerado=ultima and ultima.sql_gerado,
         sql_executado=ultima and ultima.sql_executado,
         numero_linhas=ultima and ultima.total_linhas,
+    )
+
+
+def _da_resposta(resposta: RespostaAgente) -> dict:
+    nao_sei = resposta.tipo == 'nao_sei'
+    return _das_consultas(resposta.consultas) | dict(
         resposta=resposta.texto,
-        nao_sei=resposta.tipo == 'nao_sei',
-        motivo=resposta.motivo,
+        nao_sei=nao_sei,
+        # O CHECK da auditoria exige motivo no "não sei".
+        motivo=resposta.motivo or (resposta.texto if nao_sei else None),
         modelo=resposta.modelo,
         tokens_entrada=resposta.tokens_entrada,
         tokens_saida=resposta.tokens_saida,
@@ -122,7 +152,18 @@ def _da_resposta(resposta: RespostaAgente) -> dict:
     )
 
 
-async def _registrar_falha(state, registro, inicio, erro):
-    latencia = round((time.monotonic() - inicio) * 1000)
+def _interno(erro: Exception) -> str:
+    # Só o tipo: a mensagem de uma exceção inesperada pode trazer dados da consulta.
+    return f'ERRO_INTERNO: {type(erro).__name__}'
+
+
+async def _registrar_falha(state, registro, andamento: Andamento, inicio, erro):
+    falha = _das_consultas(andamento.consultas) | dict(
+        modelo=andamento.modelo,
+        tokens_entrada=andamento.tokens_entrada,
+        tokens_saida=andamento.tokens_saida,
+        latencia_ms=round((time.monotonic() - inicio) * 1000),
+        erro=erro,
+    )
     async with state.portal_sessions() as db, db.begin():
-        await repository.registrar(db, registro | dict(latencia_ms=latencia, erro=erro))
+        await repository.registrar(db, registro | falha)

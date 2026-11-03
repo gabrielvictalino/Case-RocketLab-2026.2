@@ -233,8 +233,13 @@ com a coluna `origem`. A IA usa `ai_read.inspecoes`, uma projeção independente
 explícita: alterações na view do portal não ampliam a allowlist. Ordens não referenciam `analytics`
 por FK: o snapshot precisa sobreviver a uma recarga ou à retirada da UC da Gold.
 
-O assistente roda com um teto de 30 s (`ASSISTENTE_TIMEOUT_S`). Tempo esgotado ou
-falha do provedor respondem 503 e ficam na auditoria com o erro. A pergunta só
+O assistente roda com um teto de 30 s (`ASSISTENTE_TIMEOUT_S`). Tempo esgotado,
+falha do provedor e banco da IA fora do ar respondem 503 (`ASSISTENTE_TEMPO_ESGOTADO`,
+`PROVEDOR_INDISPONIVEL`, `BANCO_INDISPONIVEL`). Toda pergunta fica na auditoria, também
+as que falham: o erro, o SQL que já rodou e os tokens já gastos. Uma consulta lenta da
+`ai_read` é erro da consulta, com nova tentativa e "não sei", e não o 503. A `tela`
+aceita só as telas do portal, e os recortes, nomes e códigos sem aspas, quebras de
+linha, `<` nem `>`: os dois chegam às instruções do modelo. A pergunta só
 usa conexões do portal antes e depois do agente, para conferir o token, ler a
 carga e gravar a auditoria. Enquanto o modelo responde, nenhuma conexão do portal
 fica presa e as rotas das telas não disputam o pool. O agente recebe só a engine
