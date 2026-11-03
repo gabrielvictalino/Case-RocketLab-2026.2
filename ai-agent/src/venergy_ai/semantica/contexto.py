@@ -18,14 +18,17 @@ def descrever_semantica(base: Periodo | None = None, data_referencia: date | Non
     return '\n'.join((_texto_fixo(), _carga(base, data_referencia)))
 
 
-def descrever_periodo_padrao(padrao: Periodo, inicio_base: date | None = None) -> str:
+def descrever_periodo_padrao(
+    padrao: Periodo, inicio_base: date | None = None, comparacao: Periodo | None = None
+) -> str:
     """O período de uma pergunta que não diz qual, e a comparação dele.
 
     Quem escolhe o período é o agente (o da conversa, o da tela ou os últimos 12 meses
-    da base), então ele não sai da carga. A comparação é o ano anterior, se couber na base.
+    da base), então ele não sai da carga. A comparação é a que vier (a da tela, quando o
+    período é o dela) ou o ano anterior, se couber na base: o prompt nunca traz duas.
     """
     linhas = ['## Período padrão', '', f'Sem período na pergunta: {_periodo(padrao)}']
-    comparacao = periodo_comparacao(padrao, inicio_base)
+    comparacao = comparacao or periodo_comparacao(padrao, inicio_base)
     if comparacao is None:
         linhas.append('Sem comparação padrão: o mesmo intervalo do ano anterior cai antes da base.')
     else:

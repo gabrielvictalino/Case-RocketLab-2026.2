@@ -244,6 +244,16 @@ def test_periodo_padrao_traz_os_filtros_com_as_datas():
     assert 'Comparação padrão: jul/2024 a jun/2025.' in texto
 
 
+def test_comparacao_da_tela_substitui_a_do_ano_anterior():
+    # Período de jan a jun/2026 comparado com o semestre anterior, escolhido na tela.
+    semestre = Periodo(date(2026, 1, 1), date(2026, 6, 1))
+    anterior = Periodo(date(2025, 7, 1), date(2025, 12, 1))
+    texto = descrever_periodo_padrao(semestre, date(2022, 7, 1), anterior)
+    assert 'Comparação padrão: jul/2025 a dez/2025.' in texto
+    assert 'jan/2025 a jun/2025' not in texto
+    assert texto.count('Comparação padrão') == 1
+
+
 def test_sem_comparacao_padrao_no_primeiro_ano_da_base():
     base = Periodo(date(2025, 7, 1), date(2026, 6, 1))
     texto = descrever_periodo_padrao(periodo_padrao(base.fim, base.inicio), base.inicio)
