@@ -207,11 +207,21 @@ def test_texto_fixo_nao_cita_mes_nem_ano():
 def test_cobertura_e_data_de_referencia_vem_da_carga():
     base = Periodo(date(2022, 7, 1), date(2026, 7, 1))
     texto = descrever_semantica(base, date(2026, 8, 1))
-    assert 'A base cobre as competências de jul/2022 a jul/2026' in texto
+    assert 'Os dados da carga cobrem as competências de jul/2022 a jul/2026' in texto
     # Os únicos meses do texto são os da carga.
     assert set(MES.findall(texto)) == {'jul'}
     assert "data_vencimento < DATE '2026-08-01'" in texto
     assert 'não responda sobre conta atrasada' in descrever_semantica(base)
+
+
+@pytest.mark.parametrize(
+    'base', [None, Periodo(date(2022, 7, 1), date(2026, 6, 1))], ids=['sem-carga', 'com-carga']
+)
+def test_inspecoes_do_portal_ficam_fora_do_limite_da_carga(base):
+    # Uma inspeção concluída no portal em jul/2026, com a carga até jun/2026, existe.
+    carga = descrever_semantica(base).split('## Carga', 1)[1]
+    assert 'não há dado da carga' in carga
+    assert "Exceção: as inspeções com origem = 'portal'" in carga
 
 
 @pytest.mark.parametrize('visao', [v for v in VISOES if v.coluna_tempo], ids=lambda v: v.nome)

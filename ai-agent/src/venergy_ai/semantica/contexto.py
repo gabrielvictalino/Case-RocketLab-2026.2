@@ -85,12 +85,21 @@ def _texto_fixo() -> str:
 def _carga(base: Periodo | None, data_referencia: date | None) -> str:
     linhas = ['', '## Carga', '']
     if base is None:
-        linhas.append('- A base cobre só as competências carregadas. Fora delas, não há dado.')
+        linhas.append(
+            '- Os dados da carga cobrem só as competências carregadas. Fora delas, não há dado '
+            'da carga.'
+        )
     else:
         linhas.append(
-            f'- A base cobre as competências de {base.descricao} '
-            f'({base.inicio.isoformat()} a {base.fim.isoformat()}). Fora disso, não há dado.'
+            f'- Os dados da carga cobrem as competências de {base.descricao} '
+            f'({base.inicio.isoformat()} a {base.fim.isoformat()}). Fora disso, não há dado '
+            'da carga.'
         )
+    # As inspeções do portal e as ordens ativas da fila não esperam a próxima carga.
+    linhas.append(
+        "- Exceção: as inspeções com origem = 'portal' são concluídas no portal e podem ter "
+        'data depois da carga. Numa pergunta sobre elas, não diga "não sei" só pelo período.'
+    )
     if data_referencia is None:
         linhas.append(
             '- Sem data de referência das faturas: não responda sobre conta atrasada; '
