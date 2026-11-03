@@ -52,9 +52,65 @@ def test_numeros_sem_lastro(texto, sem_lastro):
 def test_direcao_da_variacao():
     assert numeros_sem_lastro('Alta de 5,3%.', [[-5.3]]) == ['5,3%']
     assert numeros_sem_lastro('Queda de 5,3%.', [[-5.3]]) == []
-    # Uma coluna com o tamanho da queda vem positiva.
-    assert numeros_sem_lastro('Queda de 5,3%.', [[5.3]]) == []
     assert numeros_sem_lastro('Alta de 5,3%.', [[5.3]]) == []
+    # Uma queda não vale para uma variação positiva...
+    assert numeros_sem_lastro('Queda de 5,3%.', [[5.3]], colunas=['variacao_pct']) == ['5,3%']
+    assert numeros_sem_lastro('A receita caiu 5,3%.', [[5.3]]) == ['5,3%']
+    # ...a não ser que a coluna seja o tamanho da queda, que vem positivo.
+    assert numeros_sem_lastro('Queda de 5,3%.', [[5.3]], colunas=['queda_pct']) == []
+
+
+@pytest.mark.parametrize(
+    'texto,linhas',
+    [
+        # "de X para Y" fala de dois níveis.
+        ('A receita caiu de R$ 10 milhões para R$ 8 milhões.', [[10_000_000, 8_000_000]]),
+        ('A inadimplência caiu de 5,1% para 4,3%.', [[5.1, 4.3]]),
+        # Perdas, o mais baixo e a energia recuperada são níveis, não quedas.
+        ('As perdas de 351 kWh se concentram em Recife.', [[351]]),
+        ('O DEC mais baixo foi 3,2 h.', [[3.2]]),
+        ('A energia recuperada de 125 kWh.', [[125]]),
+    ],
+)
+def test_niveis_nao_tem_direcao(texto, linhas):
+    assert numeros_sem_lastro(texto, linhas) == []
+
+
+def test_alta_com_real_no_meio():
+    assert numeros_sem_lastro('Aumento de R$ 1.234.', [[-1234]]) == ['1.234']
+    assert numeros_sem_lastro('Aumento de R$1.234.', [[-1234]]) == ['1.234']
+    assert numeros_sem_lastro('Aumento de R$ 1.234.', [[1234]]) == []
+    assert numeros_sem_lastro('Queda de R$ 1.234.', [[1234]]) == ['1.234']
+
+
+@pytest.mark.parametrize(
+    'texto,valor',
+    [('O volume foi de 351,2 MWh.', 351.2), ('A receita foi de R$ 1,2 milhão.', 1.2)],
+)
+def test_valor_ja_na_escala_do_texto(texto, valor):
+    # O SQL pode ter devolvido volume_mwh ou receita_milhoes.
+    assert numeros_sem_lastro(texto, [[valor]]) == []
+
+
+@pytest.mark.parametrize(
+    'texto,valor,sem_lastro',
+    [
+        ('A receita foi de R$ 1 milhão.', 1_999_999, ['1 milhão']),
+        ('Foram 2 mil kWh.', 2999, ['2 mil']),
+        ('Ficou em 0.', 0.99, ['0']),
+        # Com dois dígitos significativos, o truncamento continua valendo.
+        ('O índice ficou em 16,6.', 16.66, []),
+        ('A receita foi de R$ 1,9 milhão.', 1_999_999, []),
+    ],
+)
+def test_truncamento_so_com_dois_digitos(texto, valor, sem_lastro):
+    assert numeros_sem_lastro(texto, [[valor]]) == sem_lastro
+
+
+def test_limiar_da_pergunta_so_vale_como_limiar():
+    assert numeros_sem_lastro('Foram 33 UCs com queda acima de 30%.', [[33]], limiares=[30]) == []
+    assert numeros_sem_lastro('Pelo menos 3 UCs.', [[1]], limiares=[3]) == []
+    assert numeros_sem_lastro('A queda média foi de 30%.', [[33]], limiares=[30]) == ['30%']
 
 
 @pytest.mark.parametrize(
