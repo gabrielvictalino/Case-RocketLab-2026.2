@@ -2,9 +2,8 @@ from collections import defaultdict
 from decimal import Decimal
 
 from app.modules.continuidade import repository
-from app.modules.continuidade.schemas import Indicadores, Ranking, Serie
-from app.modules.kpis.service import razao
-from app.modules.metricas import contexto
+from app.modules.continuidade.schemas import Indicadores, Ranking, Serie, SeriePeriodo
+from app.modules.metricas import contexto, razao
 
 
 def indicadores(row):
@@ -17,23 +16,33 @@ def indicadores(row):
     )
 
 
-async def serie(db, periodo, comparacao, recorte, sem_evento_atipico):
-    ctx = await contexto(db, periodo, comparacao)
-    rows = await repository.serie(db, ctx.atual, recorte, sem_evento_atipico)
-    totais = await repository.totais(db, ctx.atual, recorte, sem_evento_atipico)
-    return Serie(
-        **ctx.metadados(),
-        sem_evento_atipico=sem_evento_atipico,
+async def serie_periodo(db, periodo, recorte, sem_evento_atipico):
+    rows = await repository.serie(db, periodo, recorte, sem_evento_atipico)
+    totais = {k: rows[0][f'total_{k}'] for k in ('chi', 'interrupcoes', 'numero_ucs')}
+    return SeriePeriodo(
         totais=indicadores(totais),
         serie=[dict(competencia=r['competencia'], **indicadores(r).model_dump()) for r in rows],
     )
 
 
-async def ranking(db, periodo, comparacao, recorte, sem_evento_atipico, ordem):
+async def serie(db, periodo, comparacao, recorte, sem_evento_atipico):
     ctx = await contexto(db, periodo, comparacao)
-    rows = await repository.ranking(db, ctx.atual, recorte, sem_evento_atipico)
+    atual = await serie_periodo(db, ctx.atual, recorte, sem_evento_atipico)
+    anterior = (
+        await serie_periodo(db, ctx.anterior, recorte, sem_evento_atipico) if ctx.anterior else None
+    )
+    return Serie(
+        **ctx.metadados(),
+        sem_evento_atipico=sem_evento_atipico,
+        **atual.model_dump(),
+        dados_comparacao=anterior,
+    )
+
+
+async def ranking_periodo(db, periodo, recorte, sem_evento_atipico, ordem):
+    rows = await repository.ranking(db, periodo, recorte, sem_evento_atipico)
     causas = defaultdict(list)
-    for row in await repository.causas(db, ctx.atual, recorte, sem_evento_atipico):
+    for row in await repository.causas(db, periodo, recorte, sem_evento_atipico):
         causas[row['alimentador']].append(
             {k: row[k] for k in ('causa', 'ocorrencias', 'interrupcoes')}
         )
@@ -62,6 +71,21 @@ async def ranking(db, periodo, comparacao, recorte, sem_evento_atipico, ordem):
         return -valores[ordem], item['alimentador']
 
     itens.sort(key=chave)
+    return itens
+
+
+async def ranking(db, periodo, comparacao, recorte, sem_evento_atipico, ordem):
+    ctx = await contexto(db, periodo, comparacao)
+    atual = await ranking_periodo(db, ctx.atual, recorte, sem_evento_atipico, ordem)
+    anterior = (
+        await ranking_periodo(db, ctx.anterior, recorte, sem_evento_atipico, ordem)
+        if ctx.anterior
+        else None
+    )
     return Ranking(
-        **ctx.metadados(), sem_evento_atipico=sem_evento_atipico, ordem=ordem, ranking=itens
+        **ctx.metadados(),
+        sem_evento_atipico=sem_evento_atipico,
+        ordem=ordem,
+        ranking=atual,
+        ranking_comparacao=anterior,
     )

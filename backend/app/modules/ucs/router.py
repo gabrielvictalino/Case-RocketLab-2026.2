@@ -10,5 +10,9 @@ router = APIRouter(prefix='/ucs', tags=['ucs'], dependencies=[Depends(usuario_at
 
 
 @router.get('/{id_uc}', response_model=VisaoUC)
-async def obter_visao_uc(id_uc: str, db: AsyncSession = Depends(session, scope='function')):
-    return await service.obter_visao_uc(db, id_uc)
+async def obter_visao_uc(
+    id_uc: str,
+    sem_evento_atipico: bool = False,
+    db: AsyncSession = Depends(session, scope='function'),
+):
+    return await service.obter_visao_uc(db, id_uc, sem_evento_atipico)

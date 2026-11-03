@@ -80,12 +80,13 @@ class OcorrenciaUC(BaseModel):
 class ResumoAlimentador(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     alimentador: str
-    interrupcoes: int
-    dec: Decimal
+    interrupcoes: int | None
+    dec: Decimal | None
 
 
 class Interrupcoes(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+    sem_evento_atipico: bool
     ocorrencias: list[OcorrenciaUC]
     alimentador: ResumoAlimentador
 

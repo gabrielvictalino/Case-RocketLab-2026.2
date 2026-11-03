@@ -17,14 +17,18 @@ class Indicadores(BaseModel):
     fec: Decimal | None
 
 
-class PontoSerie(Indicadores):
+class PontoContinuidade(Indicadores):
     competencia: date
 
 
-class Serie(RespostaMetricas):
-    sem_evento_atipico: bool
+class SeriePeriodo(BaseModel):
     totais: Indicadores
-    serie: list[PontoSerie]
+    serie: list[PontoContinuidade]
+
+
+class Serie(RespostaMetricas, SeriePeriodo):
+    sem_evento_atipico: bool
+    dados_comparacao: SeriePeriodo | None
 
 
 class Causa(BaseModel):
@@ -43,3 +47,4 @@ class Ranking(RespostaMetricas):
     sem_evento_atipico: bool
     ordem: Ordem
     ranking: list[Alimentador]
+    ranking_comparacao: list[Alimentador] | None

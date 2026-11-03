@@ -307,11 +307,17 @@ async def test_recortes_por_uc_conferidos_contra_csv_e_kpis(
                 valores[k] is None for k in ('chi', 'interrupcoes', 'numero_ucs', 'dec', 'fec')
             )
             return
-        chi = sum((D(r['duracao_efetiva_min']) / 60 for r in linhas), D(0))
+        minutos_por_mes = defaultdict(lambda: D(0))
+        for linha in linhas:
+            minutos_por_mes[linha['alimentador'], linha['data_abertura'][:7]] += D(
+                linha['duracao_efetiva_min']
+            )
+        chi = sum((arredondar(v / 60) for v in minutos_por_mes.values()), D(0))
         interrupcoes = sum(r['flag_sobreposicao'] == 'false' for r in linhas)
         cobertos = {a for a, _ in competencias}
         denominador = sum(r['alimentador'] in cobertos for r in ucs.values())
         assert D(valores['chi']) == chi
+        assert valores['chi'] == f'{chi:.2f}'
         assert valores['interrupcoes'] == interrupcoes
         assert valores['numero_ucs'] == denominador
         assert D(valores['dec']) == arredondar(chi / denominador)
@@ -340,6 +346,7 @@ async def test_recortes_por_uc_conferidos_contra_csv_e_kpis(
         }
     response = await client.get('/api/v1/kpis', headers=headers, params=params)
     assert response.status_code == 200, response.text
+    assert response.json()['sem_evento_atipico'] is sem_evento
     for campo in ('dec', 'fec'):
         assert response.json()['continuidade'][campo]['valor'] == serie['totais'][campo]
 
@@ -373,3 +380,128 @@ async def test_totais_reagregam_numeradores_antes_de_arredondar(client, headers)
     for campo in ('dec', 'fec'):
         assert sum(D(p[campo]) for p in serie['serie']) == D('0.04')
         assert D(serie['totais'][campo]) == D('0.03')
+
+
+@INTEGRATION
+@pytest.mark.parametrize('duracao,chi_mensal', [(D('1'), '0.02'), (D('0.30'), '0.01')])
+async def test_chi_do_detalhe_arredonda_por_alimentador_e_competencia(
+    client, headers, db, duracao, chi_mensal
+):
+    # Este alimentador tem uma UC. Dois meses de 1 minuto devem somar 0,04 h,
+    # como a Gold, em vez de arredondar a soma dos minutos para 0,03 h.
+    alimentador = 'ALM-OLI-006'
+    uc = next(r for r in ler('dim_uc') if r['alimentador'] == alimentador)
+    mensais = await db.fetch("""
+        SELECT * FROM analytics.continuidade_alimentador_mensal
+        WHERE alimentador = 'ALM-OLI-006' AND competencia BETWEEN '2025-08-01' AND '2025-09-01'
+    """)
+    ocorrencias = await db.fetch("""
+        SELECT * FROM analytics.ocorrencias_uc WHERE alimentador = 'ALM-OLI-006'
+        AND data_abertura >= '2025-08-01' AND data_abertura < '2025-10-01'
+    """)
+    try:
+        await db.execute(
+            """
+            UPDATE analytics.continuidade_alimentador_mensal SET chi_horas=$1, dec=$1
+            WHERE alimentador = 'ALM-OLI-006'
+              AND competencia BETWEEN '2025-08-01' AND '2025-09-01'
+        """,
+            D(chi_mensal),
+        )
+        await db.execute(
+            """
+            UPDATE analytics.ocorrencias_uc SET duracao_min=$1, duracao_efetiva_min=$1,
+                data_encerramento=data_abertura + ($1::numeric * interval '1 minute')
+            WHERE alimentador = 'ALM-OLI-006'
+              AND data_abertura >= '2025-08-01' AND data_abertura < '2025-10-01'
+        """,
+            duracao,
+        )
+        esperado = D(chi_mensal) * 2
+        for recorte in ({}, {'bairro': uc['bairro']}, {'classe': uc['classe']}):
+            params = dict(periodo='2025-08..2025-09', alimentador=alimentador, **recorte)
+            serie = await get(client, headers, 'serie', **params)
+            assert serie['totais']['chi'] == f'{esperado:.2f}'
+            assert [p['chi'] for p in serie['serie']] == [chi_mensal, chi_mensal]
+            ranking = (await get(client, headers, 'ranking', **params))['ranking']
+            assert ranking[0]['chi'] == f'{esperado:.2f}'
+            assert D(ranking[0]['dec']) == esperado
+            response = await client.get('/api/v1/kpis', headers=headers, params=params)
+            assert response.status_code == 200, response.text
+            assert D(response.json()['continuidade']['dec']['valor']) == esperado
+    finally:
+        await db.executemany(
+            """
+            UPDATE analytics.continuidade_alimentador_mensal SET chi_horas=$1, dec=$2
+            WHERE alimentador=$3 AND competencia=$4
+        """,
+            [(r['chi_horas'], r['dec'], alimentador, r['competencia']) for r in mensais],
+        )
+        await db.executemany(
+            """
+            UPDATE analytics.ocorrencias_uc SET duracao_min=$1, duracao_efetiva_min=$2,
+                data_encerramento=$3 WHERE id_ocorrencia=$4
+        """,
+            [
+                (
+                    r['duracao_min'],
+                    r['duracao_efetiva_min'],
+                    r['data_encerramento'],
+                    r['id_ocorrencia'],
+                )
+                for r in ocorrencias
+            ],
+        )
+
+
+@INTEGRATION
+@pytest.mark.parametrize('sem_evento', [False, True])
+@pytest.mark.parametrize('recorte', [{}, {'municipio': 'Recife', 'classe': 'Residencial'}])
+async def test_comparacao_calcula_serie_ranking_e_causas(client, headers, sem_evento, recorte):
+    params = dict(
+        periodo='2026-01..2026-02',
+        comparacao='2025-07..2025-08',
+        sem_evento_atipico=sem_evento,
+        **recorte,
+    )
+    atual = await get(client, headers, 'serie', **params)
+    anterior = await get(
+        client,
+        headers,
+        'serie',
+        periodo=params['comparacao'],
+        sem_evento_atipico=sem_evento,
+        **recorte,
+    )
+    assert atual['dados_comparacao'] == {k: anterior[k] for k in ('totais', 'serie')}
+    for ordem in ('chi', 'dec', 'fec'):
+        ranking = await get(client, headers, 'ranking', ordem=ordem, **params)
+        esperado = await get(
+            client,
+            headers,
+            'ranking',
+            periodo=params['comparacao'],
+            ordem=ordem,
+            sem_evento_atipico=sem_evento,
+            **recorte,
+        )
+        assert ranking['ranking_comparacao'] == esperado['ranking']
+
+
+@INTEGRATION
+async def test_comparacao_ausente_e_comparacao_sem_observacoes(client, headers):
+    primeiro = await get(client, headers, 'serie', periodo='2022-07..2022-07')
+    assert primeiro['comparacao'] is primeiro['dados_comparacao'] is None
+    ranking = await get(client, headers, 'ranking', periodo='2022-07..2022-07')
+    assert ranking['comparacao'] is ranking['ranking_comparacao'] is None
+    params = dict(
+        periodo='2025-08..2025-08',
+        comparacao='2025-07..2025-07',
+        sem_evento_atipico=True,
+        alimentador='ALM-REC-001',
+    )
+    serie = await get(client, headers, 'serie', **params)
+    assert serie['totais']['chi'] is not None
+    assert all(v is None for v in serie['dados_comparacao']['totais'].values())
+    assert serie['dados_comparacao']['serie'][0]['chi'] is None
+    assert (await get(client, headers, 'ranking', **params))['ranking_comparacao'] == []

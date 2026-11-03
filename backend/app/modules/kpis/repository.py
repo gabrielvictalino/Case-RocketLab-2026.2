@@ -1,7 +1,5 @@
 from sqlalchemy import text
 
-from app.modules.continuidade import repository as continuidade_repository
-
 
 async def ucs(db, periodo, recorte):
     return (
@@ -46,7 +44,3 @@ async def inspecoes(db, periodo, recorte):
         .mappings()
         .one()
     )
-
-
-async def continuidade(db, periodo, recorte, sem_evento_atipico=False):
-    return await continuidade_repository.totais(db, periodo, recorte, sem_evento_atipico)

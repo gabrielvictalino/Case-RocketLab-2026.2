@@ -19,7 +19,7 @@ def observacoes(recorte):
                 GROUP BY c.alimentador, c.competencia
             ), ocorrencias AS (
                 SELECT o.alimentador, date_trunc('month', o.data_abertura)::date AS competencia,
-                       sum(o.duracao_efetiva_min) / 60 AS chi,
+                       round(sum(o.duracao_efetiva_min) / 60, 2) AS chi,
                        count(*) FILTER (WHERE NOT o.flag_sobreposicao) AS interrupcoes
                 FROM analytics.ocorrencias_uc o
                 JOIN ucs USING (id_uc, alimentador)
@@ -27,7 +27,7 @@ def observacoes(recorte):
                   AND o.data_abertura < CAST(:fim AS date) + interval '1 month'
                 GROUP BY o.alimentador, date_trunc('month', o.data_abertura)::date
             )
-            SELECT c.alimentador, c.competencia, coalesce(o.chi, 0) AS chi,
+            SELECT c.alimentador, c.competencia, coalesce(o.chi, 0.00) AS chi,
                    coalesce(o.interrupcoes, 0) AS interrupcoes, c.numero_ucs
             FROM cobertura c LEFT JOIN ocorrencias o USING (alimentador, competencia)
         """
@@ -42,13 +42,15 @@ def observacoes(recorte):
     """
 
 
+POR_ALIMENTADOR = """
+    SELECT alimentador, sum(chi) AS chi, sum(interrupcoes) AS interrupcoes,
+           max(numero_ucs) AS numero_ucs
+    FROM observacoes GROUP BY alimentador
+"""
+
+
 def por_alimentador(recorte):
-    return f"""
-        WITH observacoes AS ({observacoes(recorte)})
-        SELECT alimentador, sum(chi) AS chi, sum(interrupcoes) AS interrupcoes,
-               max(numero_ucs) AS numero_ucs
-        FROM observacoes GROUP BY alimentador
-    """
+    return f'WITH observacoes AS ({observacoes(recorte)}) {POR_ALIMENTADOR}'
 
 
 def parametros(periodo, recorte, sem_evento_atipico):
@@ -82,16 +84,20 @@ async def serie(db, periodo, recorte, sem_evento_atipico):
         (
             await db.execute(
                 text(f"""
-                    WITH observacoes AS ({observacoes(recorte)}), mensal AS (
+                    WITH observacoes AS MATERIALIZED ({observacoes(recorte)}), mensal AS (
                         SELECT competencia, sum(chi) AS chi, sum(interrupcoes) AS interrupcoes,
                                sum(numero_ucs) AS numero_ucs
                         FROM observacoes GROUP BY competencia
+                    ), por_alimentador AS ({POR_ALIMENTADOR}), totais AS (
+                        SELECT sum(chi) AS total_chi, sum(interrupcoes) AS total_interrupcoes,
+                               sum(numero_ucs) AS total_numero_ucs FROM por_alimentador
                     )
                     SELECT calendario.competencia::date AS competencia,
-                           mensal.chi, mensal.interrupcoes, mensal.numero_ucs
+                           mensal.chi, mensal.interrupcoes, mensal.numero_ucs, totais.*
                     FROM generate_series(CAST(:inicio AS timestamp), CAST(:fim AS timestamp),
                                          interval '1 month') AS calendario(competencia)
                     LEFT JOIN mensal USING (competencia)
+                    CROSS JOIN totais
                     ORDER BY calendario.competencia
                 """),
                 parametros(periodo, recorte, sem_evento_atipico),

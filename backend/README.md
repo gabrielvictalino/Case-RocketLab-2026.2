@@ -232,10 +232,12 @@ homologa uma exportação real nem altera a Gold.
 
 As rotas `/continuidade/serie` e `/continuidade/ranking` exigem autenticação e
 `periodo=AAAA-MM..AAAA-MM`. Aceitam `municipio`, `bairro`, `classe` e
-`alimentador`, combinados por interseção, e `sem_evento_atipico=true` (padrão `false`). `comparacao` é opcional
-e segue a validação compartilhada; informa o período de referência nos metadados,
-sem acrescentar uma segunda série. As respostas incluem `periodo`, `comparacao`,
-`carga` e `sem_evento_atipico`.
+`alimentador`, combinados por interseção, e `sem_evento_atipico=true` (padrão
+`false`). `comparacao` é opcional e segue a validação compartilhada; por padrão usa o mesmo período no ano anterior
+quando há cobertura. A série inclui `dados_comparacao: {totais, serie}` e o ranking
+inclui `ranking_comparacao`, calculados com os mesmos filtros e ordenação. Sem um
+ano anterior disponível, esses campos e `comparacao` são `null`. As respostas
+incluem `periodo`, `comparacao`, `carga` e `sem_evento_atipico`.
 
 A série retorna `serie: [{competencia, chi, interrupcoes, numero_ucs, dec, fec}]`
 em ordem cronológica e `totais` com os mesmos indicadores reagregados para todo o
@@ -243,7 +245,7 @@ período. O ranking retorna `ordem` e `ranking`, com `alimentador`, `municipio`,
 os indicadores e `causas: [{causa, ocorrencias, interrupcoes}]`. `ordem` aceita
 `chi`, `dec` e `fec`, sempre decrescente, com código do alimentador como desempate.
 A ordenação usa as razões antes do arredondamento. CHI, DEC e FEC são strings
-decimais; contagens são inteiros. DEC/FEC usam duas casas e arredondamento meio
+decimais; contagens são inteiros. CHI/DEC/FEC usam duas casas e arredondamento meio
 para cima.
 
 CHI e interrupções somam os numeradores mensais; o denominador conta as UCs de
@@ -257,9 +259,17 @@ continua no denominador do período.
 
 Com `bairro` ou `classe`, os numeradores são reagregados de `ocorrencias_uc`
 somente para as UCs selecionadas e as competências com cobertura Gold não
-excluída. O denominador conta essas UCs por alimentador uma vez no período.
+excluída. O CHI é arredondado por alimentador × competência antes da soma,
+como o `chi_horas` da Gold. O denominador conta essas UCs por alimentador uma
+vez no período. A série calcula os meses e totais em uma consulta, materializando
+as observações uma vez por período.
 O cálculo é compartilhado com `/kpis`, que também aceita `sem_evento_atipico`
-para DEC/FEC, inclusive no período de comparação.
+para DEC/FEC, inclusive no período de comparação, e devolve a opção na resposta.
+A UC 360 também aceita essa opção: aplica-a à lista de ocorrências e ao resumo
+do alimentador, que usa a mesma agregação. Sem cobertura válida, o resumo traz
+DEC e interrupções nulos. O bloco `interrupcoes` informa `sem_evento_atipico`.
+Quando o cache de métricas for implementado, sua chave deverá incluir
+`sem_evento_atipico`, além do período, filtros e versão da carga.
 
 Um mês sem cobertura ou com todas as linhas marcadas fica com indicadores `null`;
 uma linha Gold válida sem ocorrências mantém os indicadores zerados. Um recorte
