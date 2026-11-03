@@ -42,6 +42,23 @@ async def dono_da_conversa(db, conversa_id):
     )
 
 
+async def mensagens(db, conversa_id):
+    return (
+        (
+            await db.execute(
+                text(
+                    'SELECT id AS id_resposta, usuario_id, pergunta, resposta, nao_sei, motivo, '
+                    'erro, criado_em FROM operations.agente_auditoria '
+                    'WHERE conversa_id=:conversa ORDER BY criado_em, id'
+                ),
+                {'conversa': conversa_id},
+            )
+        )
+        .mappings()
+        .all()
+    )
+
+
 async def obter(db, id_resposta):
     return (
         (

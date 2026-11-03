@@ -42,14 +42,6 @@ def modelo_simulado(*respostas):
     return FunctionModel(responder, model_name='simulado')
 
 
-@pytest.fixture
-async def portal(infrastructure, db):
-    app = create_app(infrastructure['settings'])
-    async with app.router.lifespan_context(app):
-        async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as http:
-            yield app, http
-
-
 def usar_modelo(app, *respostas):
     app.state.assistente = AgenteTextoSQL(
         modelo_simulado(*respostas), ExecutorAiRead(app.state.ai_engine)

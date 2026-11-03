@@ -100,3 +100,15 @@ async def test_teto_de_tempo_cancela_a_consulta_sem_virar_erro_de_sql(executor):
             await executor.executar('SELECT count(*) FROM generate_series(1, 400000000)')
     # A conexão do pool continua servindo.
     assert (await executor.executar('SELECT 1 AS um')).linhas == [[1]]
+
+
+async def test_consultas_de_referencia_da_avaliacao_rodam_na_ai_read(executor):
+    from pathlib import Path
+
+    from venergy_ai.avaliacao import carregar
+
+    casos = carregar(Path(__file__).parents[1] / 'evals' / 'perguntas.yaml')
+    for caso in casos:
+        if caso.sql:
+            resultado = await executor.executar(caso.sql)
+            assert resultado.linhas, caso.id

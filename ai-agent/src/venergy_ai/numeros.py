@@ -23,7 +23,7 @@ o número de linhas e o número de meses. Os números da pergunta só valem como
 """
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator, Sequence
 from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal, InvalidOperation, localcontext
 from typing import NamedTuple
 
@@ -137,20 +137,56 @@ def numeros_sem_lastro(
     # Um número permitido não é variação: sustenta a queda e a alta.
     valores += [Valor(v, True) for item in permitidos for v in _decimais(item)]
     dos_limiares = [Valor(v, True) for item in limiares for v in _decimais(item)]
-    limpo = IGNORADOS.sub(' ', texto)
     sem_lastro = []
+    for trecho, leituras, limiar in _citados(texto):
+        if not leituras or any(_tem_lastro(leitura, valores) for leitura in leituras):
+            continue
+        if limiar and any(_tem_lastro(leitura, dos_limiares) for leitura in leituras):
+            continue
+        sem_lastro.append(trecho)
+    return sem_lastro
+
+
+class Citacao(NamedTuple):
+    # Como o número está escrito no texto.
+    trecho: str
+    # Posições, em `valores`, dos valores que sustentam o número. Vazia: sem lastro.
+    lastros: list[int]
+
+
+def citacoes(
+    texto: str, valores: Sequence[object], permitidos: Iterable[object] = ()
+) -> list[Citacao]:
+    """Cada número do texto com os valores que o sustentam, para mostrar ao lado do texto.
+
+    Um número igual a um dos `permitidos` (um ano, o número de meses) fica de fora. Os
+    permitidos não valem por arredondamento: "R$ 0,00 milhões" não é o ano de 2024. Um
+    número que nenhum valor sustenta vem com `lastros` vazia.
+    """
+    por_valor = [[Valor(v, True) for v in _decimais(valor)] for valor in valores]
+    livres = {v for item in permitidos for v in _decimais(item)}
+    resultado = []
+    for trecho, leituras, _ in _citados(texto):
+        if any(leitura.valor in livres for leitura in leituras):
+            continue
+        lastros = [
+            i
+            for i, decimais in enumerate(por_valor)
+            if any(_tem_lastro(leitura, decimais) for leitura in leituras)
+        ]
+        resultado.append(Citacao(trecho, lastros))
+    return resultado
+
+
+def _citados(texto: str) -> Iterator[tuple[str, list[Leitura], bool]]:
+    """Cada número do texto, com as leituras dele e se vem logo depois de um limiar."""
+    limpo = IGNORADOS.sub(' ', texto)
     for citado in NUMERO.finditer(limpo):
         nivel = PARA.match(limpo, citado.end()) is not None
         alta = not nivel and ALTA.search(limpo, 0, citado.start()) is not None
         baixa = not nivel and BAIXA.search(limpo, 0, citado.start()) is not None
-        leituras = _leituras(citado, alta, baixa)
-        if not leituras or any(_tem_lastro(leitura, valores) for leitura in leituras):
-            continue
         limiar = LIMIAR.search(limpo, 0, citado.start()) is not None
-        if limiar and any(_tem_lastro(leitura, dos_limiares) for leitura in leituras):
-            continue
-        sem_lastro.append(citado.group(0).strip().rstrip('.'))
-    return sem_lastro
+        yield citado.group(0).strip().rstrip('.'), _leituras(citado, alta, baixa), limiar
 
 
 def numeros_citados(texto: str) -> list[Decimal]:
