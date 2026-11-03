@@ -30,9 +30,13 @@ O contrato pedia um inteiro de 0 a 10, mas a nota da base vai de 1,3 a 5,0, com 
 
 Cada elemento do array `historico` da Silver vira uma linha: `sequencia` e `data` vêm da etapa, e `descricao` vem da `acao` (`ABERTURA`, `ANALISE`, `DESPACHO`, `RETORNO AO CLIENTE` e `ENCERRAMENTO`). Cada protocolo tem de 1 a 3 etapas. A ordem das ações na base não segue um fluxo: há `ENCERRAMENTO` na sequência 1 e `DESPACHO` depois. A Gold preserva a ordem da `sequencia`, que é a ordem cronológica, sem reordenar as ações.
 
+O contrato descreve a `sequencia` como ordem cronológica. A Gold confere isso por conta própria, sem depender da Silver: a sequência vai de 1 a n sem buracos, a data da etapa não diminui com a sequência e nenhuma etapa é anterior à abertura do protocolo. Datas iguais em etapas seguidas são aceitas: há 406 na base.
+
 ### 2.4. Datas sem fuso
 
-A Silver guarda as datas do arquivo de origem como `TIMESTAMP`. A Gold as grava como `TIMESTAMP_NTZ`, como as Golds de continuidade e de GD, para a hora não mudar na exportação. Uma regra confere que a data e a hora de `aberto_em` são as mesmas da Silver.
+A Silver guarda as datas do arquivo de origem como `TIMESTAMP`. A Gold as grava como `TIMESTAMP_NTZ`, como a Gold de continuidade, para a hora não mudar na exportação.
+
+A conversão de `TIMESTAMP` para `TIMESTAMP_NTZ` usa o fuso da sessão do Spark. Por isso, o notebook fixa a sessão em `UTC` logo no início, que é o fuso em que a Silver foi gravada (o padrão do Serverless). Sem isso, rodar a Gold numa sessão com outro fuso deslocaria todas as horas, e nenhuma regra acusaria. Uma regra confere que a data e a hora de `aberto_em` são as mesmas da Silver no fuso fixado.
 
 ### 2.5. Assunto, subassunto e canal
 
@@ -77,6 +81,7 @@ Todas bloqueiam a carga. A Gold anterior continua intacta quando uma falha acont
 * contrato: colunas, tipos e ordem do YAML, nulos, padrão do `id_uc`, domínio do `status` e faixa da nota;
 * chaves: `protocolo` único, e `protocolo` × `sequencia` único;
 * reconciliação com a Silver: as mesmas linhas, os mesmos protocolos, a mesma nota (inclusive as nulas), a mesma data e hora de abertura, os mesmos protocolos em aberto e as mesmas etapas;
+* ordem das etapas: sequência de 1 a n sem buracos em cada protocolo, data que não diminui com a sequência e nenhuma etapa antes da abertura do protocolo;
 * integridade: todo `protocolo` do histórico existe em `atendimentos`, e todo `id_uc` existe no cadastro.
 
 **Publicação:** antes da primeira escrita, o notebook guarda a versão de cada tabela de destino. Se a escrita, a conferência do conteúdo gravado ou a validação sobre as tabelas gravadas falhar, ele volta cada tabela afetada com `RESTORE TABLE ... TO VERSION AS OF`, ou a remove se era a primeira carga.
@@ -124,7 +129,7 @@ Por ano de abertura, a nota média é 4,10 em todos os anos, menos em 2025 (3,90
    SELECT COUNT(*) FROM `v-energy`.silver.tb_unidades_consumidoras;  -- esperado: 45000
    ```
 
-2. Importe o notebook, conecte ao **Serverless** e use **Run all**. O padrão `modo=validar` não grava nada. Para gravar, o Job passa `modo=publicar` (ou troque o widget antes de executar).
+2. Importe o notebook, conecte ao **Serverless** e use **Run all**. O padrão `modo=validar` não grava nada. Para gravar, troque o widget para `modo=publicar` antes de executar. O Workflow do Databricks (#97) vai passar `modo=publicar`.
 3. **O que conferir:**
    * todas as linhas `[OK   ]` em `(fontes)` e `(antes de gravar)`;
    * `Reconciliação: 318,871 atendimentos | 636,857 etapas no histórico | 9,566 sem nota | 0 em aberto`;
