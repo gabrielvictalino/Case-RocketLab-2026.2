@@ -10,12 +10,14 @@ from datetime import date
 from typing import Literal
 
 import pydantic_ai
+import sqlglot
 from pydantic import BaseModel, Field, model_validator
 from pydantic_ai import Agent, ModelAPIError, ModelSettings, UnexpectedModelBehavior
 from pydantic_ai.models import Model
+from sqlglot import exp
 
 from venergy_ai.executor import ConsultaFalhou, ExecutorSQL
-from venergy_ai.guarda_sql import SQLRejeitado, validar_sql
+from venergy_ai.guarda_sql import DIALETO, LIMITE_MAXIMO, SQLRejeitado, validar_sql
 from venergy_ai.instrucoes import (
     INSTRUCOES_REDACAO,
     instrucoes_do_plano,
@@ -26,6 +28,7 @@ from venergy_ai.instrucoes import (
 from venergy_ai.interface import (
     LINHAS_EXIBIDAS,
     Andamento,
+    BancoIndisponivel,
     Consulta,
     Contexto,
     PeriodoUsado,
@@ -41,6 +44,8 @@ pydantic_ai.BANNER_ENABLED = False
 # A primeira consulta e no máximo uma nova tentativa.
 TENTATIVAS_SQL = 2
 CONFIGURACAO = ModelSettings(temperature=0, timeout=20)
+# O motivo do "não sei" é texto do modelo: com número que não se sustenta, sai este.
+MOTIVO_SEM_DADO = 'Os dados disponíveis não respondem a essa pergunta.'
 
 
 class Plano(BaseModel):
@@ -115,17 +120,21 @@ class AgenteTextoSQL:
         execucao = await self.planejador.run(
             pergunta_delimitada(pergunta), instructions=instrucoes, usage=uso
         )
+        # Sem consulta, o "não sei" só pode citar anos: os da pergunta, do período e da base.
+        anos = [*_anos_citados(pergunta), *_anos(padrao, padrao, contexto)]
         for tentativa in range(TENTATIVAS_SQL):
             plano = execucao.output
+            alternativa = _sem_numero_inventado(plano.alternativa, anos)
             if plano.tipo != 'consulta':
-                return _nao_sei(plano.motivo, plano.alternativa)
-            consulta = await self._executar(plano.sql)
-            andamento.consultas.append(consulta)
+                return _nao_sei(
+                    _sem_numero_inventado(plano.motivo, anos) or MOTIVO_SEM_DADO, alternativa
+                )
+            consulta = await self._executar(plano.sql, andamento)
             if consulta.erro is None:
                 break
             if tentativa + 1 == TENTATIVAS_SQL:
                 return _nao_sei(
-                    'Não consegui montar uma consulta válida para a pergunta.', plano.alternativa
+                    'Não consegui montar uma consulta válida para a pergunta.', alternativa
                 )
             execucao = await self.planejador.run(
                 pedido_de_correcao(consulta.erro),
@@ -133,20 +142,15 @@ class AgenteTextoSQL:
                 instructions=instrucoes,
                 usage=uso,
             )
-        periodo = _periodo(plano, padrao)
+        periodo = _periodo(plano, padrao, consulta)
         usados = dict(
-            metrica=plano.metrica,
-            filtros=plano.filtros,
-            periodo=PeriodoUsado(
-                inicio=periodo.inicio, fim=periodo.fim, descricao=periodo.descricao
-            ),
+            metrica=plano.metrica, filtros=plano.filtros, periodo=periodo and _usado(periodo)
         )
         # Uma agregação sobre zero linhas devolve uma linha só de nulos: também é "sem dado".
         if not any(valor is not None for linha in consulta.linhas for valor in linha):
+            onde = f' em {periodo.descricao}' if periodo else ''
             return _nao_sei(
-                f'A consulta não encontrou dados de {plano.metrica} em {periodo.descricao}.',
-                plano.alternativa,
-                **usados,
+                f'A consulta não encontrou dados de {plano.metrica}{onde}.', alternativa, **usados
             )
         try:
             redacao = await self.redator.run(
@@ -155,39 +159,51 @@ class AgenteTextoSQL:
             )
         except UnexpectedModelBehavior:
             return _nao_sei(
-                'O modelo não redigiu a resposta no formato esperado.', plano.alternativa, **usados
+                'O modelo não redigiu a resposta no formato esperado.', alternativa, **usados
             )
         texto = redacao.output.strip()
         if not texto:
-            return _nao_sei('O modelo não redigiu a resposta.', plano.alternativa, **usados)
-        permitidos = numeros_permitidos(pergunta, consulta, periodo, contexto)
-        # Só as linhas que o redator viu: as que passam das exibidas não sustentam o texto.
-        if sem_lastro := numeros_sem_lastro(texto, consulta.linhas, permitidos):
+            return _nao_sei('O modelo não redigiu a resposta.', alternativa, **usados)
+        if sem_lastro := conferir_numeros(texto, pergunta, consulta, periodo, contexto):
             return _nao_sei(
                 'A resposta citava números que não estão no resultado da consulta: '
                 f'{", ".join(sem_lastro)}.',
-                plano.alternativa,
+                alternativa,
                 **usados,
             )
         return dict(tipo='resposta', texto=texto, **usados)
 
-    async def _executar(self, sql: str) -> Consulta:
+    async def _executar(self, sql: str, andamento: Andamento) -> Consulta:
+        """Roda o SQL e já o guarda no andamento, também quando o banco não responde."""
         try:
             seguro = validar_sql(sql, VISOES_POR_NOME)
         except SQLRejeitado as erro:
-            return Consulta(sql_gerado=sql, erro=f'SQL rejeitado pela guarda: {erro}')
-        try:
-            resultado = await self.executor.executar(seguro)
-        except ConsultaFalhou as erro:
-            return Consulta(sql_gerado=sql, sql_executado=seguro, erro=f'Erro do banco: {erro}')
-        return Consulta(
-            sql_gerado=sql,
-            sql_executado=seguro,
-            colunas=resultado.colunas,
-            linhas=resultado.linhas[:LINHAS_EXIBIDAS],
-            total_linhas=len(resultado.linhas),
-            duracao_ms=resultado.duracao_ms,
-        )
+            consulta = Consulta(sql_gerado=sql, erro=f'SQL rejeitado pela guarda: {erro}')
+        else:
+            try:
+                resultado = await self.executor.executar(seguro)
+            except ConsultaFalhou as erro:
+                consulta = Consulta(
+                    sql_gerado=sql, sql_executado=seguro, erro=f'Erro do banco: {erro}'
+                )
+            except BancoIndisponivel as erro:
+                andamento.consultas.append(
+                    Consulta(
+                        sql_gerado=sql, sql_executado=seguro, erro=f'Banco indisponível: {erro}'
+                    )
+                )
+                raise
+            else:
+                consulta = Consulta(
+                    sql_gerado=sql,
+                    sql_executado=seguro,
+                    colunas=resultado.colunas,
+                    linhas=resultado.linhas[:LINHAS_EXIBIDAS],
+                    total_linhas=len(resultado.linhas),
+                    duracao_ms=resultado.duracao_ms,
+                )
+        andamento.consultas.append(consulta)
+        return consulta
 
 
 def _nao_sei(motivo: str, alternativa: str | None = None, **usados) -> dict:
@@ -206,24 +222,59 @@ def _periodo_padrao(contexto: Contexto) -> Periodo:
     )
 
 
-def _periodo(plano: Plano, padrao: Periodo) -> Periodo:
+def _sem_numero_inventado(texto: str | None, permitidos: list) -> str | None:
+    """O texto do modelo, ou None quando ele cita um número que não se sustenta."""
+    if texto and numeros_sem_lastro(texto, [], permitidos):
+        return None
+    return texto
+
+
+def _periodo(plano: Plano, padrao: Periodo, consulta: Consulta) -> Periodo | None:
+    """O período declarado na resposta. Sem período no plano, vale o padrão, a não ser que a
+    consulta só leia retratos da carga (ucs, fila_inspecao), que não têm eixo de tempo."""
+    if plano.periodo_inicio is None and plano.periodo_fim is None:
+        visoes = {
+            t.name
+            for t in sqlglot.parse_one(consulta.sql_executado, read=DIALETO).find_all(exp.Table)
+        }
+        lidas = [VISOES_POR_NOME[nome] for nome in visoes if nome in VISOES_POR_NOME]
+        if lidas and all(visao.coluna_tempo is None for visao in lidas):
+            return None
     inicio = (plano.periodo_inicio or plano.periodo_fim or padrao.inicio).replace(day=1)
     fim = (plano.periodo_fim or plano.periodo_inicio or padrao.fim).replace(day=1)
     return Periodo(min(inicio, fim), max(inicio, fim))
 
 
-def numeros_permitidos(
-    pergunta: str, consulta: Consulta, periodo: Periodo, contexto: Contexto
-) -> list[int | str]:
-    """Números que o texto pode citar sem estar nas linhas: os da pergunta, as contagens de
-    linhas, o número de meses e os anos do período. A avaliação confere com a mesma lista."""
-    return [
-        *numeros_citados(pergunta),
-        consulta.total_linhas,
-        len(consulta.linhas),
-        _meses(periodo),
-        *_anos(periodo, _periodo_padrao(contexto), contexto),
-    ]
+def _usado(periodo: Periodo) -> PeriodoUsado:
+    return PeriodoUsado(inicio=periodo.inicio, fim=periodo.fim, descricao=periodo.descricao)
+
+
+def _anos_citados(pergunta: str) -> set[int]:
+    """Os anos escritos na pergunta: "e em 2024?" deixa a resposta citar 2024."""
+    return {
+        int(n)
+        for n in numeros_citados(pergunta)
+        if n == n.to_integral_value() and 1900 <= n <= 2100
+    }
+
+
+def conferir_numeros(
+    texto: str, pergunta: str, consulta: Consulta, periodo: Periodo | None, contexto: Contexto
+) -> list[str]:
+    """Os números do texto que não se sustentam. A avaliação confere com esta mesma função.
+
+    Valem as linhas que o redator viu, as contagens de linhas (menos o total no corte da
+    guarda), os anos da pergunta e, com período, o número de meses e os anos dele. Os
+    demais números da pergunta só valem como limiar ("acima de 30%")."""
+    permitidos = [len(consulta.linhas), *_anos_citados(pergunta)]
+    # No corte da guarda, o total é só o limite: "há 1.000 UCs" não se sustenta.
+    if consulta.total_linhas < LIMITE_MAXIMO:
+        permitidos.append(consulta.total_linhas)
+    if periodo is not None:
+        permitidos += [periodo.meses, *_anos(periodo, _periodo_padrao(contexto), contexto)]
+    return numeros_sem_lastro(
+        texto, consulta.linhas, permitidos, numeros_citados(pergunta), consulta.colunas
+    )
 
 
 def _anos(periodo: Periodo, padrao: Periodo, contexto: Contexto) -> set[int]:
@@ -234,9 +285,3 @@ def _anos(periodo: Periodo, padrao: Periodo, contexto: Contexto) -> set[int]:
     if contexto.comparacao is not None:
         anos |= {contexto.comparacao.inicio.year, contexto.comparacao.fim.year}
     return anos
-
-
-def _meses(periodo: Periodo) -> int:
-    return (
-        (periodo.fim.year - periodo.inicio.year) * 12 + periodo.fim.month - periodo.inicio.month + 1
-    )

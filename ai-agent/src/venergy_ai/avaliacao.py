@@ -12,9 +12,10 @@ Cada caso traz a pergunta e o que se espera dela:
 - `ordem: true`: num ranking, as linhas esperadas são as primeiras do agente, na ordem.
 
 Toda resposta é conferida também contra número inventado: o texto só pode citar números
-das linhas que o redator recebeu e os que a validação do agente aceita (os da pergunta,
-as contagens de linhas, o número de meses e os anos do período). O relatório traz a taxa
-de acerto, a de "não sei" correto e a latência média.
+das linhas que o redator recebeu e os que a validação do agente aceita: a conferência é
+a mesma (`conferir_numeros`), com as contagens de linhas, os meses e os anos do período e,
+como limiar, os números da pergunta. O relatório traz a taxa de acerto, a de "não sei"
+correto e a latência média.
 """
 
 import time
@@ -24,7 +25,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-from venergy_ai.agente import numeros_permitidos
+from venergy_ai.agente import conferir_numeros
 from venergy_ai.interface import (
     Assistente,
     Consulta,
@@ -32,7 +33,6 @@ from venergy_ai.interface import (
     ProvedorIndisponivel,
     RespostaAgente,
 )
-from venergy_ai.numeros import numeros_citados, numeros_sem_lastro
 from venergy_ai.semantica import Periodo
 
 TOLERANCIA = Decimal('0.005')
@@ -131,8 +131,7 @@ def conferir(
     if caso.periodo and not _mesmo_periodo(caso.periodo, resposta):
         declarado = resposta.periodo.descricao if resposta.periodo else 'nenhum'
         falhas.append(f'período declarado {declarado}, esperado {caso.periodo}')
-    permitidos = _permitidos(caso, resposta, consulta, contexto)
-    if sem_lastro := numeros_sem_lastro(resposta.texto, obtido, permitidos):
+    if sem_lastro := _sem_lastro(caso, resposta, consulta, contexto):
         falhas.append(f'número sem lastro no texto: {", ".join(sem_lastro)}')
     return falhas
 
@@ -194,14 +193,14 @@ def _contexto(caso: Caso, competencia_mais_recente: date) -> Contexto:
     return Contexto(competencia_mais_recente=competencia_mais_recente, **contexto)
 
 
-def _permitidos(caso: Caso, resposta: RespostaAgente, consulta: Consulta, contexto):
-    # A mesma lista da validação do agente: a avaliação não reprova por redação uma
-    # resposta que o agente, com razão, deixou passar.
-    if resposta.periodo is None:
-        return [*numeros_citados(caso.pergunta), consulta.total_linhas, len(consulta.linhas)]
-    periodo = Periodo(resposta.periodo.inicio, resposta.periodo.fim)
-    contexto = contexto or Contexto(competencia_mais_recente=periodo.fim)
-    return numeros_permitidos(caso.pergunta, consulta, periodo, contexto)
+def _sem_lastro(caso: Caso, resposta: RespostaAgente, consulta: Consulta, contexto):
+    # A mesma conferência do agente: a avaliação não reprova por redação uma resposta que
+    # o agente, com razão, deixou passar.
+    periodo = resposta.periodo and Periodo(resposta.periodo.inicio, resposta.periodo.fim)
+    if contexto is None:
+        recente = periodo.fim if periodo else date.today().replace(day=1)
+        contexto = Contexto(competencia_mais_recente=recente)
+    return conferir_numeros(resposta.texto, caso.pergunta, consulta, periodo, contexto)
 
 
 def _periodo(texto: str) -> Periodo:
