@@ -75,6 +75,9 @@ Todas as regras rodam antes do `overwrite`. Uma regra **crítica** violada para 
 | sem irregularidade com tipo ou `kwh_recuperado` diferente de zero | crítica | 0 |
 | `kwh_recuperado` vazio, não convertido ou negativo | crítica | 0 |
 | irregularidade confirmada com `kwh_recuperado` zero | aviso | 0 |
+| `tipo_irregularidade` fora dos 5 tipos da base (`BY-PASS`, `DESVIO DIRETO`, `LACRE VIOLADO`, `LIGACAO CLANDESTINA`, `MEDIDOR ADULTERADO`) | aviso | 0 |
+
+O contrato não tem `enum` para `tipo_irregularidade`, então um tipo novo só gera aviso. Ele serve para uma grafia nova (por exemplo, `BYPASS`) não virar, sem ninguém ver, uma categoria nova na Gold de perdas.
 
 As duas regras de coerência são a regra de negócio da base: as 871 inspeções confirmadas têm tipo e kWh maior que zero, e as 518 sem irregularidade não têm tipo e têm kWh zero.
 
@@ -106,7 +109,7 @@ As duas regras de coerência são a regra de negócio da base: as 871 inspeçõe
 | Aba só como linhagem | Usar a aba como mês | 107 linhas da aba `dez` são de outros meses |
 | Valores extremos de kWh mantidos | Remover ou limitar | São recuperações registradas em campo; tirar mudaria o total de energia recuperada |
 | Inspeções em domingos e feriados mantidas | Marcar ou remover | O achado 4.2 é um alerta sobre a origem, não um erro que a Silver possa corrigir |
-| Gravação pelo widget `confirmar_publicacao` (padrão `false`) | Gravar sempre | Mesmo padrão das Silvers de faturas e atendimentos; o Workflow passa `true` |
+| Gravação pelo widget `confirmar_publicacao` (padrão `false`) | Gravar sempre | Mesmo padrão das Silvers de faturas e atendimentos; o Workflow (#97) vai passar `true` |
 
 ---
 
@@ -125,7 +128,7 @@ Se faltar alguma, rode antes o `Landing_to_Bronze.ipynb` e a Silver de cadastro.
 3. Troque o widget para `true` e rode de novo para gravar.
 
 ### 6.3. O que conferir
-* **Tabela de validação:** 13 regras com `violacoes = 0`.
+* **Tabela de validação:** 14 regras com `violacoes = 0`.
 * **Resumo:** `Bronze: 1389 linhas | Silver: 1389 linhas | duplicatas removidas: 0` e `Confirmadas: 871 | sem irregularidade: 518 | energia recuperada: 1473112.00 kWh | inspetores: 40 | datas: 2025-08-01 a 2025-12-31`.
 * **Confirmação final** (com `true`): `` OK: 1389 inspeções carregadas em `v-energy`.silver.tb_inspecoes ``.
 * **Evidências:**
@@ -144,13 +147,13 @@ A mensagem lista cada regra crítica violada, e logo acima aparecem até 20 exem
 | `inspetor` fora do padrão | Inspetor novo (`INSP-041`) | Atualizar o padrão aqui e no contrato |
 | `id_uc` fora do cadastro | UC nova ainda não cadastrada, ou erro de digitação | Conferir a UC na Silver de cadastro antes de liberar |
 | Coerência resultado × tipo × kWh | Laudo preenchido pela metade | Corrigir na origem; a Silver não completa o laudo |
-| `A carga foi desfeita` (depois da escrita) | Erro na própria escrita | A Silver já voltou para a versão anterior; rodar de novo |
+| `A carga foi desfeita` (depois da escrita) | Erro na escrita, na conferência da tabela gravada ou no comentário da tabela | A Silver já voltou para a versão anterior; rodar de novo |
 
-### 6.5. No Workflow (Job)
+### 6.5. No Workflow (Job), previsto na #97
+O Job versionado ainda não existe: ele vem na #97. Até lá, a Silver só é gravada por quem roda o notebook à mão com o widget em `true`. Quando o Job entrar, esta tarefa fica nesta posição e passa `confirmar_publicacao = true`:
 ```text
 landing_to_bronze ──► bronze_to_silver_unidades_consumidoras ──► bronze_to_silver_inspecoes ──► (Golds de perdas e dim_uc)
 ```
-A tarefa passa o parâmetro `confirmar_publicacao = true`.
 
 ---
 
@@ -168,8 +171,15 @@ No Databricks (Serverless), sobre a `` `v-energy`.bronze.tb_inspecoes `` versão
 
 | Teste | Resultado |
 | :--- | :--- |
-| `confirmar_publicacao = false` | 13 regras OK; nada gravado |
+| `confirmar_publicacao = false` | 14 regras OK; nada gravado |
 | `confirmar_publicacao = true` | Silver criada na versão 0, com os mesmos números da execução local. As saídas estão salvas no notebook |
+
+Depois da review do #116, também no Spark local:
+
+| Teste | Resultado |
+| :--- | :--- |
+| `tipo_irregularidade = 'BYPASS'` injetado numa inspeção confirmada | Aviso (`ATENÇÃO`, 1 linha), e a validação seguiu; a Bronze voltou ao original |
+| Falha simulada logo depois da escrita, numa cópia do notebook | `A carga foi desfeita (versão anterior: 3)`: a Silver voltou à versão anterior com `RESTORE` |
 
 ---
 
@@ -177,4 +187,3 @@ No Databricks (Serverless), sobre a `` `v-energy`.bronze.tb_inspecoes `` versão
 
 * **Golds de perdas:** `inspecoes_historicas` e `fila_inspecao` leem esta Silver.
 * **`dim_uc`:** a `flag_irregularidade_confirmada` sai das UCs com pelo menos uma inspeção confirmada (hoje 871).
-* **Gold de faturas (#67):** o Job do PR ainda aponta `tabela_inspecoes` para `venergy.silver.inspecoes`. Depois deste PR, o nome é `` `v-energy`.silver.tb_inspecoes ``.
