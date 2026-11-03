@@ -1235,6 +1235,10 @@ export interface components {
         ValorCitado: {
             /** Trecho */
             trecho: string;
+            /** Inicio */
+            inicio: number;
+            /** Fim */
+            fim: number;
             /** Chave */
             chave: string;
             /** Metrica */

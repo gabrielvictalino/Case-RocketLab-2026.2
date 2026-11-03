@@ -2,11 +2,13 @@
 
 O backend calcula os fatos com os serviços da tela e os manda aqui. O modelo devolve
 de 3 a 5 observações, cada uma ligada a um fato. Cada número do texto precisa estar nos
-fatos, com as mesmas regras da resposta do agente (`numeros`). A observação com um
-número sem lastro é descartada; sem nenhuma observação válida, o insight fica
-indisponível.
+fatos, com as mesmas regras da resposta do agente (`numeros`), e com a unidade certa: um
+número com % só casa com um percentual dos fatos, um com R$ só com um valor em reais.
+A observação com um número sem lastro é descartada; com menos de 3 observações válidas,
+o insight fica indisponível.
 """
 
+import hashlib
 import time
 
 import pydantic_ai
@@ -25,11 +27,12 @@ from venergy_ai.interface import (
     ProvedorIndisponivel,
     ValorCitado,
 )
-from venergy_ai.numeros import Citacao, citacoes, numeros_citados
-from venergy_ai.semantica.periodo import Periodo
+from venergy_ai.numeros import Citacao, citacoes
 
 pydantic_ai.BANNER_ENABLED = False
 
+# O contrato da seção 4 do system design: de 3 a 5 observações.
+MINIMO_DE_OBSERVACOES = 3
 OBSERVACOES = 5
 CAMPOS: tuple[CampoDoFato, ...] = ('valor', 'comparacao', 'variacao', 'variacao_pct')
 CONFIGURACAO = ModelSettings(temperature=0, timeout=20)
@@ -51,6 +54,9 @@ class RedatorDeInsights:
 
     def __init__(self, modelo: Model):
         self.modelo = modelo
+        # Muda com o modelo e com as instruções: entra na chave do cache do backend.
+        assinatura = f'{modelo.system}:{modelo.model_name}\n{INSTRUCOES_INSIGHT}'
+        self.versao = hashlib.sha1(assinatura.encode()).hexdigest()[:12]
         self.agente = Agent(
             modelo,
             output_type=Rascunhos,
@@ -72,9 +78,12 @@ class RedatorDeInsights:
                 'O modelo não devolveu as observações no formato esperado.'
             ) from erro
         observacoes, descartadas = validar(execucao.output.observacoes, pedido)
-        if not observacoes:
+        if len(observacoes) < MINIMO_DE_OBSERVACOES:
             motivo = '; '.join(descartadas) or 'o modelo não redigiu nenhuma observação'
-            raise InsightIndisponivel(f'Nenhuma observação passou na validação: {motivo}.')
+            raise InsightIndisponivel(
+                f'{len(observacoes)} observações passaram na validação, menos que '
+                f'{MINIMO_DE_OBSERVACOES}: {motivo}.'
+            )
         return Insight(
             observacoes=observacoes[:OBSERVACOES],
             descartadas=descartadas,
@@ -95,7 +104,10 @@ def validar(rascunhos: list[Rascunho], pedido: PedidoInsight) -> tuple[list[Obse
         for campo in CAMPOS
         if getattr(fato, campo) is not None
     ]
-    permitidos = _permitidos(pedido)
+    periodos = [p for p in (pedido.periodo, pedido.comparacao) if p is not None]
+    anos = {ano for p in periodos for ano in (p.inicio.year, p.fim.year)}
+    meses = {p.meses for p in periodos}
+    nomes = _nomes(pedido)
     observacoes, descartadas, textos = [], [], set()
     for n, rascunho in enumerate(rascunhos, 1):
         texto = rascunho.texto.strip()
@@ -106,7 +118,10 @@ def validar(rascunhos: list[Rascunho], pedido: PedidoInsight) -> tuple[list[Obse
         if not texto or texto in textos:
             descartadas.append(f'{n}ª vazia ou repetida')
             continue
-        citadas = citacoes(texto, [valor for _, _, valor in alvos], permitidos)
+        citadas = [
+            _na_unidade(citada, alvos)
+            for citada in citacoes(texto, [valor for _, _, valor in alvos], anos, meses, nomes)
+        ]
         if sem_lastro := [citada.trecho for citada in citadas if not citada.lastros]:
             descartadas.append(f'{n}ª com número fora dos fatos ({", ".join(sem_lastro)})')
             continue
@@ -133,6 +148,8 @@ def _valor_citado(citada: Citacao, alvos: list[Alvo], principal: Fato) -> ValorC
     fato, campo, valor = alvos[indice]
     return ValorCitado(
         trecho=citada.trecho,
+        inicio=citada.inicio,
+        fim=citada.fim,
         chave=fato.chave,
         metrica=fato.metrica,
         campo=campo,
@@ -149,20 +166,40 @@ def _unidade(fato: Fato, campo: CampoDoFato) -> str:
     return fato.unidade
 
 
-def _permitidos(pedido: PedidoInsight) -> list[object]:
-    """O texto pode citar os anos e o número de meses do período e da comparação, e os
-    números que fazem parte de um nome: "Setor 2" num local ou num recorte."""
-    periodos = [p for p in (pedido.periodo, pedido.comparacao) if p is not None]
-    anos = {ano for p in periodos for ano in (p.inicio.year, p.fim.year)}
-    nomes = [fato.metrica for fato in pedido.fatos] + list(pedido.recortes.values())
-    return [
-        *anos,
-        *{_meses(p) for p in periodos},
-        *(n for nome in nomes for n in numeros_citados(nome)),
-    ]
+def _na_unidade(citada: Citacao, alvos: list[Alvo]) -> Citacao:
+    """Fica só com os fatos na unidade que o texto escreveu: a tarifa de 0,85 R$/kWh não
+    sustenta "inadimplência de 85%", nem o FEC sustenta "DEC de 12,4 h"."""
+    lastros = [i for i in citada.lastros if _mesma_unidade(citada.unidade, *alvos[i][:2])]
+    return citada._replace(lastros=lastros)
 
 
-def _meses(periodo: Periodo) -> int:
-    return (
-        (periodo.fim.year - periodo.inicio.year) * 12 + periodo.fim.month - periodo.inicio.month + 1
-    )
+def _mesma_unidade(escrita: str | None, fato: Fato, campo: CampoDoFato) -> bool:
+    unidade = _unidade(fato, campo)
+    if escrita == '%':
+        return unidade == '%'
+    if escrita == 'pp':
+        return unidade == 'pp'
+    # Sem % nem pp, o número não é percentual nem variação em pontos.
+    if unidade in ('%', 'pp'):
+        return False
+    if escrita == 'R$':
+        return unidade.startswith('R$')
+    if escrita == 'kWh':
+        return unidade == 'kWh'
+    if escrita == 'h':
+        return unidade.startswith('h')
+    return True
+
+
+def _nomes(pedido: PedidoInsight) -> list[str]:
+    """Nomes de locais e recortes, que saem do texto antes da conferência: o "2" de
+    "Setor 2 (Recife)" faz parte do nome, não é um número citado."""
+    brutos = [fato.metrica for fato in pedido.fatos]
+    brutos += [fato.chave.split(':', 1)[1] for fato in pedido.fatos if ':' in fato.chave]
+    brutos += list(pedido.recortes.values())
+    nomes = set()
+    for nome in brutos:
+        # "Receita · Setor 2 (Recife)" também aparece como "Setor 2 (Recife)" e "Setor 2".
+        local = nome.rsplit(' · ', 1)[-1]
+        nomes |= {nome, local, local.split(' (', 1)[0]}
+    return [nome for nome in nomes if any(c.isdigit() for c in nome)]

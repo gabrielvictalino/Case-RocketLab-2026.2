@@ -153,6 +153,11 @@ def test_periodo_padrao_sao_os_12_meses_ate_a_mais_recente(mais_recente, inicio,
     assert periodo_padrao(mais_recente) == Periodo(inicio, fim)
 
 
+def test_meses_do_periodo():
+    assert Periodo(date(2025, 7, 1), date(2026, 6, 1)).meses == 12
+    assert Periodo(date(2026, 6, 1), date(2026, 6, 1)).meses == 1
+
+
 def test_periodo_padrao_nao_comeca_antes_da_base():
     # Carga de jan a jun/2026: jul/2025 a jun/2026 cairia em PERIODO_FORA_DA_BASE.
     assert periodo_padrao(date(2026, 6, 1), date(2026, 1, 1)) == Periodo(
@@ -207,11 +212,21 @@ def test_texto_fixo_nao_cita_mes_nem_ano():
 def test_cobertura_e_data_de_referencia_vem_da_carga():
     base = Periodo(date(2022, 7, 1), date(2026, 7, 1))
     texto = descrever_semantica(base, date(2026, 8, 1))
-    assert 'A base cobre as competências de jul/2022 a jul/2026' in texto
+    assert 'Os dados da carga cobrem as competências de jul/2022 a jul/2026' in texto
     # Os únicos meses do texto são os da carga.
     assert set(MES.findall(texto)) == {'jul'}
     assert "data_vencimento < DATE '2026-08-01'" in texto
     assert 'não responda sobre conta atrasada' in descrever_semantica(base)
+
+
+@pytest.mark.parametrize(
+    'base', [None, Periodo(date(2022, 7, 1), date(2026, 6, 1))], ids=['sem-carga', 'com-carga']
+)
+def test_inspecoes_do_portal_ficam_fora_do_limite_da_carga(base):
+    # Uma inspeção concluída no portal em jul/2026, com a carga até jun/2026, existe.
+    carga = descrever_semantica(base).split('## Carga', 1)[1]
+    assert 'não há dado da carga' in carga
+    assert "Exceção: as inspeções com origem = 'portal'" in carga
 
 
 @pytest.mark.parametrize('visao', [v for v in VISOES if v.coluna_tempo], ids=lambda v: v.nome)
@@ -232,6 +247,16 @@ def test_periodo_padrao_traz_os_filtros_com_as_datas():
         "AND < DATE '2026-07-01'." in texto
     )
     assert 'Comparação padrão: jul/2024 a jun/2025.' in texto
+
+
+def test_comparacao_da_tela_substitui_a_do_ano_anterior():
+    # Período de jan a jun/2026 comparado com o semestre anterior, escolhido na tela.
+    semestre = Periodo(date(2026, 1, 1), date(2026, 6, 1))
+    anterior = Periodo(date(2025, 7, 1), date(2025, 12, 1))
+    texto = descrever_periodo_padrao(semestre, date(2022, 7, 1), anterior)
+    assert 'Comparação padrão: jul/2025 a dez/2025.' in texto
+    assert 'jan/2025 a jun/2025' not in texto
+    assert texto.count('Comparação padrão') == 1
 
 
 def test_sem_comparacao_padrao_no_primeiro_ano_da_base():

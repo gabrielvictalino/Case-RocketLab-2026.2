@@ -21,6 +21,11 @@ class Periodo:
     def descricao(self) -> str:
         return f'{rotulo(self.inicio)} a {rotulo(self.fim)}'
 
+    @property
+    def meses(self) -> int:
+        """Quantas competências o período tem, contando o primeiro e o último mês."""
+        return (self.fim.year - self.inicio.year) * 12 + self.fim.month - self.inicio.month + 1
+
 
 def rotulo(competencia: date) -> str:
     return f'{MESES[competencia.month - 1]}/{competencia.year}'
