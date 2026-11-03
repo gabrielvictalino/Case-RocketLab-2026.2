@@ -2,11 +2,11 @@ import { Download } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import { usePeriodo } from '@/app/periodo/usePeriodo'
 import { BarraRecorte } from '@/components/BarraRecorte'
-import { BlocoInsight } from '@/components/BlocoInsight'
 import { CabecalhoPagina } from '@/components/CabecalhoPagina'
 import { EstadoIndisponivel } from '@/components/Estados'
 import { Painel } from '@/components/Painel'
 import { Selecao } from '@/components/Selecao'
+import { InsightDaTela } from '@/features/insights/InsightDaTela'
 import { formatarIntervaloPeriodo } from '@/lib/formatacao'
 import {
   atualizarRecorteUrl,
@@ -17,7 +17,7 @@ import { useFiltrosMeta } from '@/lib/useFiltrosMeta'
 
 export function PaginaReceita() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const { periodo, comparacao, carga } = usePeriodo()
+  const { periodo, comparacao } = usePeriodo()
   const filtros = useFiltrosMeta()
   const recortes = lerRecortesUrl(searchParams)
 
@@ -31,10 +31,6 @@ export function PaginaReceita() {
       ? `${rotuloPeriodo} × ${rotuloComparacao}`
       : rotuloPeriodo
     : 'período atual'
-
-  const metaInsight = carga
-    ? `${resumoPeriodo} · carga ${carga.batch_id}`
-    : resumoPeriodo
 
   const municipios = filtros.data?.municipios ?? []
   const classes = filtros.data?.classes ?? []
@@ -92,11 +88,7 @@ export function PaginaReceita() {
         <EstadoIndisponivel />
       </Painel>
 
-      <BlocoInsight
-        titulo="Insight do período"
-        meta={metaInsight}
-        indisponivel
-      />
+      <InsightDaTela tela="receita" />
 
       <div
         style={{

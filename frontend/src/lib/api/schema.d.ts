@@ -311,6 +311,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/insights/{tela}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Insight */
+        get: operations["insight_api_v1_insights__tela__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -714,6 +731,28 @@ export interface components {
             /** Variacao Pct */
             variacao_pct: string | null;
         };
+        /** Insight */
+        Insight: {
+            /** Periodo */
+            periodo: string;
+            /** Comparacao */
+            comparacao: string | null;
+            carga: components["schemas"]["Carga"];
+            /**
+             * Tela
+             * @enum {string}
+             */
+            tela: "visao-geral" | "receita";
+            /** Observacoes */
+            observacoes: components["schemas"]["Observacao"][];
+            /** Modelo */
+            modelo: string;
+            /**
+             * Gerado Em
+             * Format: date-time
+             */
+            gerado_em: string;
+        };
         /** Inspecao */
         Inspecao: {
             /** Id Inspecao */
@@ -852,6 +891,17 @@ export interface components {
             competencia: string;
             atual: components["schemas"]["PontoConsumo"] | null;
             anterior: components["schemas"]["PontoConsumo"] | null;
+        };
+        /** Observacao */
+        Observacao: {
+            /** Chave */
+            chave: string;
+            /** Metrica */
+            metrica: string;
+            /** Texto */
+            texto: string;
+            /** Valores */
+            valores: components["schemas"]["ValorCitado"][];
         };
         /** OcorrenciaUC */
         OcorrenciaUC: {
@@ -1114,6 +1164,27 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /**
+         * ValorCitado
+         * @description Um número da observação e o valor do fato que o sustenta.
+         */
+        ValorCitado: {
+            /** Trecho */
+            trecho: string;
+            /** Chave */
+            chave: string;
+            /** Metrica */
+            metrica: string;
+            /**
+             * Campo
+             * @enum {string}
+             */
+            campo: "valor" | "comparacao" | "variacao" | "variacao_pct";
+            /** Valor */
+            valor: string;
+            /** Unidade */
+            unidade: string;
         };
         /** VisaoUC */
         VisaoUC: {
@@ -1747,6 +1818,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Auditoria"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    insight_api_v1_insights__tela__get: {
+        parameters: {
+            query: {
+                periodo: string;
+                municipio?: string | null;
+                bairro?: string | null;
+                classe?: string | null;
+                alimentador?: string | null;
+                comparacao?: string | null;
+            };
+            header?: never;
+            path: {
+                tela: "visao-geral" | "receita";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Insight"];
                 };
             };
             /** @description Validation Error */

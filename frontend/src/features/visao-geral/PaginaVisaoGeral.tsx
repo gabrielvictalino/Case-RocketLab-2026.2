@@ -1,14 +1,14 @@
 import { Download } from 'lucide-react'
 import { usePeriodo } from '@/app/periodo/usePeriodo'
-import { BlocoInsight } from '@/components/BlocoInsight'
 import { CabecalhoPagina } from '@/components/CabecalhoPagina'
 import { CartaoKpi } from '@/components/CartaoKpi'
 import { EstadoIndisponivel } from '@/components/Estados'
 import { Painel } from '@/components/Painel'
+import { InsightDaTela } from '@/features/insights/InsightDaTela'
 import { formatarIntervaloPeriodo } from '@/lib/formatacao'
 
 export function PaginaVisaoGeral() {
-  const { periodo, comparacao, carga } = usePeriodo()
+  const { periodo, comparacao } = usePeriodo()
 
   const rotuloPeriodo = periodo ? formatarIntervaloPeriodo(periodo) : null
   const rotuloComparacao = comparacao
@@ -20,10 +20,6 @@ export function PaginaVisaoGeral() {
       ? `${rotuloPeriodo} × ${rotuloComparacao}`
       : rotuloPeriodo
     : 'período atual'
-
-  const metaInsight = carga
-    ? `Gerado para ${resumoPeriodo} · carga ${carga.batch_id}`
-    : `Gerado para ${resumoPeriodo}`
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -101,11 +97,7 @@ export function PaginaVisaoGeral() {
         <EstadoIndisponivel />
       </Painel>
 
-      <BlocoInsight
-        titulo="Insight do período"
-        meta={metaInsight}
-        indisponivel
-      />
+      <InsightDaTela tela="visao-geral" />
     </div>
   )
 }
