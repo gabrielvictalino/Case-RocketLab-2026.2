@@ -1,0 +1,40 @@
+name: Avaliação do agente
+# Roda as perguntas de ai-agent/evals com o modelo real. Fica fora dos checks
+# obrigatórios: depende da chave e da cota do provedor, e mede qualidade, não quebra.
+on:
+  workflow_dispatch:
+    inputs:
+      modelo:
+        description: Modelo do provedor (vazio = gemini-3.1-flash-lite)
+        required: false
+        default: ''
+  schedule:
+    # Segunda-feira, 6h em Recife.
+    - cron: '0 9 * * 1'
+permissions:
+  contents: read
+concurrency:
+  group: avaliacao-agente
+  cancel-in-progress: false
+jobs:
+  avaliacao:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.23'
+          enable-cache: true
+      - run: uv sync --frozen --all-packages
+      - name: Avaliar com o modelo real
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          AI_MODELO: ${{ inputs.modelo }}
+        run: uv run pytest ai-agent/evals -q -rs -p no:cacheprovider
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: relatorio-avaliacao-agente
+          path: ai-agent/evals/relatorio.md
+          if-no-files-found: ignore

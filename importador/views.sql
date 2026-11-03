@@ -19,7 +19,9 @@ BEGIN
   END IF;
 END $$;
 -- Colunas listadas uma a uma: coluna nova no contrato só chega à IA depois de revisão.
--- A projeção da IA é independente da view do portal.
+-- Quem muda uma view também atualiza o catálogo do agente (ai-agent/src/venergy_ai/
+-- semantica/catalogo.py); um teste compara os dois. A projeção da IA é independente
+-- da view do portal.
 CREATE VIEW ai_read.inspecoes AS
  SELECT id_inspecao,id_uc,data,inspetor,resultado,tipo_irregularidade,kwh_recuperado,
         'historica'::text AS origem FROM analytics.inspecoes_historicas

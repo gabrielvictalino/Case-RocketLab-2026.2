@@ -1,4 +1,3 @@
-import asyncpg
 import pytest
 
 from venergy_ai.guarda_sql import FUNCOES_ANONIMAS_PERMITIDAS, LIMITE_MAXIMO, validar_sql
@@ -76,16 +75,6 @@ CONSULTAS_REESCRITAS = [
     '(SELECT x FROM generate_series(1, 5) AS g(x) ORDER BY x LIMIT 3) OFFSET 1',
     '(SELECT 1 AS x UNION SELECT 2) ORDER BY x DESC LIMIT 1',
 ]
-
-
-@pytest.fixture
-async def ai(infrastructure):
-    url = infrastructure['settings'].database_url_ai.replace(
-        'postgresql+asyncpg://', 'postgresql://'
-    )
-    connection = await asyncpg.connect(url)
-    yield connection
-    await connection.close()
 
 
 # O texto executado é o regenerado pelo sqlglot; estes casos conferem que o Postgres
