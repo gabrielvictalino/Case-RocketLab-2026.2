@@ -234,3 +234,30 @@ async def test_ia_nao_ve_o_texto_livre_do_tipo_de_irregularidade(client, headers
         ('historica', 'DESVIO DIRETO'),
         ('portal', 'OUTRO'),
     ]
+
+
+async def test_tipo_escrito_no_portal_e_normalizado(client, headers, infrastructure):
+    # Como no portal: "desvio direto" e "Ligação clandestina" são tipos conhecidos.
+    for uc, tipo in (('UC100002', ' desvio direto '), ('UC100003', 'Ligação clandestina')):
+        url = f'{BASE}/{await criar(client, headers, uc)}'
+        await client.post(url + '/despachar', headers=headers, json={'inspetor': 'INSP-001'})
+        body = dict(
+            resultado='IRREGULARIDADE CONFIRMADA',
+            tipo_irregularidade=tipo,
+            kwh_recuperado='10',
+            data='2026-06-20',
+        )
+        assert (
+            await client.post(url + '/resultado', headers=headers, json=body)
+        ).status_code == 200
+    ai = await asyncpg.connect(ai_url(infrastructure))
+    try:
+        tipos = await ai.fetch(
+            "SELECT tipo_irregularidade FROM ai_read.inspecoes WHERE origem = 'portal'"
+        )
+    finally:
+        await ai.close()
+    assert sorted(r['tipo_irregularidade'] for r in tipos) == [
+        'DESVIO DIRETO',
+        'LIGACAO CLANDESTINA',
+    ]

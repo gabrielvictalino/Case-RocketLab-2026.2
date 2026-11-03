@@ -2,6 +2,7 @@ import asyncio
 import time
 from uuid import uuid4
 
+from pydantic_ai.models import Model
 from venergy_ai.agente import AgenteTextoSQL
 from venergy_ai.executor import ExecutorAiRead
 from venergy_ai.interface import (
@@ -17,6 +18,7 @@ from venergy_ai.interface import (
 from venergy_ai.modelo import criar_modelo
 from venergy_ai.semantica import Periodo
 
+from app.core import limites
 from app.core.errors import APIError
 from app.core.periodos import validar_periodos
 from app.modules.assistente import conversas, repository
@@ -30,20 +32,30 @@ from app.modules.assistente.schemas import (
 from app.modules.meta import repository as meta
 
 
-def criar_assistente(settings, ai_engine) -> Assistente | None:
-    """O agente recebe só a engine da role ai_read; a do portal fica com a auditoria."""
+def modelo_configurado(settings) -> Model | None:
+    """O modelo do provedor escolhido. Sem a chave dele, não há modelo e a IA responde 503."""
     chave = {'google': settings.gemini_api_key, 'openrouter': settings.openrouter_api_key}[
         settings.ai_provedor
     ]
     if chave is None or not chave.get_secret_value():
         return None
-    modelo = criar_modelo(settings.ai_provedor, settings.ai_modelo, chave.get_secret_value())
-    return AgenteTextoSQL(modelo, ExecutorAiRead(ai_engine))
+    return criar_modelo(settings.ai_provedor, settings.ai_modelo, chave.get_secret_value())
+
+
+def criar_assistente(settings, ai_engine) -> Assistente | None:
+    """O agente recebe só a engine da role ai_read; a do portal fica com a auditoria."""
+    modelo = modelo_configurado(settings)
+    return None if modelo is None else AgenteTextoSQL(modelo, ExecutorAiRead(ai_engine))
 
 
 async def perguntar(state, body: Pergunta, usuario) -> RespostaPergunta:
     if state.assistente is None:
         raise APIError(503, 'Assistente não configurado neste ambiente', 'ASSISTENTE_INDISPONIVEL')
+    settings = state.settings
+    await limites.conferir_cota(state.redis, usuario['id'], settings.assistente_cota_tokens_dia)
+    await limites.consumir(
+        state.redis, usuario['id'], 'assistente', settings.assistente_perguntas_por_minuto
+    )
     # Sessões curtas do portal antes e depois do agente: nenhuma conexão do portal fica
     # presa enquanto o modelo responde, e as rotas das telas seguem com o pool livre.
     async with state.portal_sessions() as db, db.begin():
@@ -72,7 +84,7 @@ async def perguntar(state, body: Pergunta, usuario) -> RespostaPergunta:
     andamento = Andamento()
     inicio = time.monotonic()
     try:
-        async with asyncio.timeout(state.settings.assistente_timeout_s) as limite:
+        async with asyncio.timeout(settings.assistente_timeout_s) as limite:
             resposta = await state.assistente.responder(body.pergunta, contexto, andamento)
     except TimeoutError as erro:
         # Só o prazo do assistente vira 503; outro TimeoutError é uma falha inesperada.
@@ -103,6 +115,11 @@ async def perguntar(state, body: Pergunta, usuario) -> RespostaPergunta:
             _registrar_falha(state, registro, andamento, inicio, 'CANCELADA_PELO_CLIENTE')
         )
         raise
+    finally:
+        # A cota conta os tokens de toda pergunta, também os de uma que falhou no meio.
+        await limites.gastar_tokens(
+            state.redis, usuario['id'], andamento.tokens_entrada + andamento.tokens_saida
+        )
     async with state.portal_sessions() as db, db.begin():
         await repository.registrar(db, registro | _da_resposta(resposta))
     await conversas.registrar(
