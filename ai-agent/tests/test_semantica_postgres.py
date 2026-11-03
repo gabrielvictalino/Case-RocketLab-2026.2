@@ -1,4 +1,3 @@
-import asyncpg
 import pytest
 
 from venergy_ai.semantica import VISOES
@@ -6,18 +5,11 @@ from venergy_ai.semantica import VISOES
 pytestmark = pytest.mark.integration
 
 
-async def test_catalogo_e_as_views_de_ai_read_tem_as_mesmas_colunas(infrastructure):
-    url = infrastructure['settings'].database_url_ai.replace(
-        'postgresql+asyncpg://', 'postgresql://'
+async def test_catalogo_e_as_views_de_ai_read_tem_as_mesmas_colunas(ai):
+    linhas = await ai.fetch(
+        """SELECT table_name, column_name FROM information_schema.columns
+        WHERE table_schema = 'ai_read'"""
     )
-    ai = await asyncpg.connect(url)
-    try:
-        linhas = await ai.fetch(
-            """SELECT table_name, column_name FROM information_schema.columns
-            WHERE table_schema = 'ai_read'"""
-        )
-    finally:
-        await ai.close()
     no_banco = {}
     for linha in linhas:
         no_banco.setdefault(linha['table_name'], set()).add(linha['column_name'])
