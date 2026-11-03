@@ -209,6 +209,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/receita/decomposicao": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Decomposicao */
+        get: operations["decomposicao_api_v1_receita_decomposicao_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/receita/locais": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Locais */
+        get: operations["locais_api_v1_receita_locais_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/receita/grupos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Grupos */
+        get: operations["grupos_api_v1_receita_grupos_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/assistente/perguntas": {
         parameters: {
             query?: never;
@@ -410,7 +461,7 @@ export interface components {
             colunas?: string[];
             /**
              * Linhas
-             * @description At� 50 linhas, para exibi��o.
+             * @description Até 50 linhas, para exibição.
              */
             linhas?: unknown[][];
             /**
@@ -440,7 +491,7 @@ export interface components {
         };
         /**
          * ContextoPergunta
-         * @description O que a tela envia junto com a pergunta. Per�odos em `AAAA-MM..AAAA-MM`.
+         * @description O que a tela envia junto com a pergunta. Períodos em `AAAA-MM..AAAA-MM`.
          */
         ContextoPergunta: {
             /** Tela */
@@ -474,10 +525,46 @@ export interface components {
             /** Ucs */
             ucs: string[];
         };
+        /** Decomposicao */
+        Decomposicao: {
+            /** Receita Base */
+            receita_base: string;
+            /** Receita Atual */
+            receita_atual: string;
+            /** Variacao */
+            variacao: string;
+            /** Variacao Pct */
+            variacao_pct: string | null;
+            /** Volume Base Kwh */
+            volume_base_kwh: string;
+            /** Volume Atual Kwh */
+            volume_atual_kwh: string;
+            /** Variacao Volume Kwh */
+            variacao_volume_kwh: string;
+            /** Variacao Volume Pct */
+            variacao_volume_pct: string | null;
+            /** Periodo */
+            periodo: string;
+            /** Comparacao */
+            comparacao: string | null;
+            carga: components["schemas"]["Carga"];
+            efeitos: components["schemas"]["Efeitos"];
+        };
         /** Despacho */
         Despacho: {
             /** Inspetor */
             inspetor: string;
+        };
+        /** Efeitos */
+        Efeitos: {
+            /** Volume */
+            volume: string;
+            /** Reajuste */
+            reajuste: string;
+            /** Bandeira */
+            bandeira: string;
+            /** Mix */
+            mix: string;
         };
         /** EfeitosConta */
         EfeitosConta: {
@@ -577,6 +664,40 @@ export interface components {
              */
             data_conexao: string;
         };
+        /** Grupo */
+        Grupo: {
+            /** Receita Base */
+            receita_base: string;
+            /** Receita Atual */
+            receita_atual: string;
+            /** Variacao */
+            variacao: string;
+            /** Variacao Pct */
+            variacao_pct: string | null;
+            /** Volume Base Kwh */
+            volume_base_kwh: string;
+            /** Volume Atual Kwh */
+            volume_atual_kwh: string;
+            /** Variacao Volume Kwh */
+            variacao_volume_kwh: string;
+            /** Variacao Volume Pct */
+            variacao_volume_pct: string | null;
+            /**
+             * Grupo Uc
+             * @enum {string}
+             */
+            grupo_uc: "GD" | "IRREGULARIDADE_CONFIRMADA" | "DEMAIS";
+        };
+        /** Grupos */
+        Grupos: {
+            /** Periodo */
+            periodo: string;
+            /** Comparacao */
+            comparacao: string | null;
+            carga: components["schemas"]["Carga"];
+            /** Itens */
+            itens: components["schemas"]["Grupo"][];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -634,6 +755,41 @@ export interface components {
             ucs: components["schemas"]["UCs"];
             continuidade: components["schemas"]["Continuidade"];
             taxa_acerto: components["schemas"]["Indicador"];
+        };
+        /** Locais */
+        Locais: {
+            /** Periodo */
+            periodo: string;
+            /** Comparacao */
+            comparacao: string | null;
+            carga: components["schemas"]["Carga"];
+            /** Itens */
+            itens: components["schemas"]["Local"][];
+            total: components["schemas"]["Decomposicao"];
+        };
+        /** Local */
+        Local: {
+            /** Receita Base */
+            receita_base: string;
+            /** Receita Atual */
+            receita_atual: string;
+            /** Variacao */
+            variacao: string;
+            /** Variacao Pct */
+            variacao_pct: string | null;
+            /** Volume Base Kwh */
+            volume_base_kwh: string;
+            /** Volume Atual Kwh */
+            volume_atual_kwh: string;
+            /** Variacao Volume Kwh */
+            variacao_volume_kwh: string;
+            /** Variacao Volume Pct */
+            variacao_volume_pct: string | null;
+            /** Municipio */
+            municipio: string;
+            /** Bairro */
+            bairro: string | null;
+            efeitos: components["schemas"]["Efeitos"];
         };
         /** Login */
         Login: {
@@ -1387,6 +1543,115 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Serie"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decomposicao_api_v1_receita_decomposicao_get: {
+        parameters: {
+            query: {
+                periodo: string;
+                municipio?: string | null;
+                bairro?: string | null;
+                classe?: string | null;
+                alimentador?: string | null;
+                comparacao?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Decomposicao"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    locais_api_v1_receita_locais_get: {
+        parameters: {
+            query: {
+                periodo: string;
+                nivel: "municipio" | "bairro";
+                municipio?: string | null;
+                bairro?: string | null;
+                classe?: string | null;
+                alimentador?: string | null;
+                comparacao?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Locais"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    grupos_api_v1_receita_grupos_get: {
+        parameters: {
+            query: {
+                periodo: string;
+                municipio?: string | null;
+                bairro?: string | null;
+                classe?: string | null;
+                alimentador?: string | null;
+                comparacao?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Grupos"];
                 };
             };
             /** @description Validation Error */
