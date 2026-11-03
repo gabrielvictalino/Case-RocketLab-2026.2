@@ -68,6 +68,7 @@ def infrastructure():
             # Os testes fazem muitas perguntas com o mesmo usuário; os de limite baixam estes.
             assistente_perguntas_por_minuto=100_000,
             assistente_cota_tokens_dia=10**12,
+            insights_por_minuto=100_000,
         )
         subprocess.run(
             [sys.executable, '-m', 'alembic', '-c', 'backend/alembic.ini', 'upgrade', 'head'],

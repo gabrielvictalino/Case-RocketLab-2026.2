@@ -1,9 +1,8 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.security import HTTPAuthorizationCredentials
 
-from app.core.auth import bearer, usuario_atual
+from app.core.auth import usuario_atual, usuario_em_sessao_curta
 from app.core.database import session
 from app.modules.assistente import service
 from app.modules.assistente.schemas import Auditoria, Conversa, Pergunta, RespostaPergunta
@@ -11,17 +10,8 @@ from app.modules.assistente.schemas import Auditoria, Conversa, Pergunta, Respos
 router = APIRouter(prefix='/assistente', tags=['assistente'])
 
 
-async def usuario_da_pergunta(
-    request: Request, credentials: HTTPAuthorizationCredentials | None = Depends(bearer)
-):
-    # A sessão de `usuario_atual` duraria a rota inteira, inclusive a espera pelo modelo.
-    # Aqui ela fecha logo depois de conferir o token.
-    async with request.app.state.portal_sessions() as db, db.begin():
-        return await usuario_atual(request, credentials, db)
-
-
 @router.post('/perguntas', response_model=RespostaPergunta)
-async def perguntar(body: Pergunta, request: Request, user=Depends(usuario_da_pergunta)):
+async def perguntar(body: Pergunta, request: Request, user=Depends(usuario_em_sessao_curta)):
     return await service.perguntar(request.app.state, body, user)
 
 
