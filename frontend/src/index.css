@@ -1441,3 +1441,9 @@
 .ve-motivos { display: inline-block; max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
 .ve-acoes-ordem { display: flex; flex-wrap: wrap; gap: .3rem; }
 .ve-lote-resumo { padding: .5rem 1rem; }
+
+.ve-kpi-link, .ve-kpi-link:hover { color: inherit; text-decoration: none; }
+.ve-kpi-link:hover { border-color: var(--focus); }
+.ve-kpi-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; box-shadow: var(--focus-ring); }
+.ve-kpi-sem-dados { white-space: normal; font-size: 12px; line-height: 16px; color: var(--ink-muted); font-weight: 400; }
+.ve-kpi-pair > div { min-width: 0; }
