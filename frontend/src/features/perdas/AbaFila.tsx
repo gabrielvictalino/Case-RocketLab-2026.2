@@ -14,13 +14,14 @@ import {
   formatarMoeda,
   formatarNumero,
 } from '@/lib/formatacao'
-import { mensagemErro, somarEnergia, TAMANHO_PAGINA } from './ordens'
+import { mensagemErro, paginaValida, somarEnergia, TAMANHO_PAGINA } from './ordens'
 
 type Item = components['schemas']['ItemFila']
 type Pagina = components['schemas']['PaginaFila']
 type Lote = components['schemas']['Lote']
 type Props = {
   dados: Pagina | undefined
+  atualizado: boolean
   erro: string | null
   carregando: boolean
   recortes: { municipio: string; bairro: string; classe: string }
@@ -60,11 +61,12 @@ export function AbaFila(props: Props) {
     if (cabecalho.current)
       cabecalho.current.indeterminate = ids.size > 0 && ids.size < itens.length
   }, [ids.size, itens.length])
-  const { dados, pagina, mudarPagina } = props
+  const { dados, pagina, mudarPagina, atualizado } = props
   useEffect(() => {
-    if (dados && pagina > 1 && dados.items.length === 0)
-      mudarPagina(Math.max(1, Math.ceil(dados.total / TAMANHO_PAGINA)))
-  }, [dados, pagina, mudarPagina])
+    if (!atualizado || !dados || pagina <= 1) return
+    const nova = paginaValida(dados.total, dados.items.length, pagina)
+    if (nova !== null && nova !== pagina) mudarPagina(nova)
+  }, [dados, pagina, mudarPagina, atualizado])
   const mutacao = useMutation({
     mutationFn: (ucs: string[]) =>
       desembrulhar(api.POST('/api/v1/ordens-inspecao', { body: { ucs } })),

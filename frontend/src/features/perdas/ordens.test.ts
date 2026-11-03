@@ -3,6 +3,8 @@ import { ErroApi } from '@/lib/api/cliente'
 import {
   acoesDisponiveis,
   INSPETORES,
+  invalidaKpis,
+  paginaValida,
   mensagemErro,
   montarPayload,
   somarEnergia,
@@ -19,6 +21,19 @@ const v: Valores = {
   data: '2020-01-01',
 }
 describe('ordens de inspeção', () => {
+  it('corrige apenas páginas vazias além da primeira, sempre recuando', () => {
+    expect(paginaValida(25, 0, 2)).toBe(1)
+    expect(paginaValida(0, 0, 3)).toBe(1)
+    expect(paginaValida(26, 1, 2)).toBeNull()
+    expect(paginaValida(0, 0, 1)).toBeNull()
+    expect(paginaValida(100, 0, 2)).toBe(1)
+  })
+  it('invalida KPIs somente ao registrar resultado', () => {
+    expect(invalidaKpis('resultado')).toBe(true)
+    expect(invalidaKpis('despachar')).toBe(false)
+    expect(invalidaKpis('tentativas')).toBe(false)
+    expect(invalidaKpis('cancelar')).toBe(false)
+  })
   it('oferece ações por status', () => {
     expect(acoesDisponiveis('ABERTA')).toEqual(['despachar', 'cancelar'])
     expect(acoesDisponiveis('EM_CAMPO')).toEqual([

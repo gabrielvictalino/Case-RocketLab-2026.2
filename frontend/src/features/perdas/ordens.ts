@@ -5,6 +5,20 @@ export const TAMANHO_PAGINA = 25
 
 type Ordem = components['schemas']['Ordem']
 export type AcaoOrdem = 'despachar' | 'tentativas' | 'resultado' | 'cancelar'
+
+export function paginaValida(
+  total: number,
+  itens: number,
+  pagina: number,
+  tamanho = TAMANHO_PAGINA,
+): number | null {
+  if (pagina <= 1 || itens !== 0) return null
+  return Math.max(1, Math.min(pagina - 1, Math.ceil(total / tamanho)))
+}
+
+export function invalidaKpis(acao: AcaoOrdem): boolean {
+  return acao === 'resultado'
+}
 export type Valores = {
   inspetor: string
   observacao: string

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { BarraRecorte } from '@/components/BarraRecorte'
@@ -16,6 +16,8 @@ import {
 } from '@/lib/formatacao'
 import {
   acoesDisponiveis,
+  invalidaKpis,
+  paginaValida,
   montarPayload,
   mensagemErro,
   ROTULOS,
@@ -42,6 +44,7 @@ const variantes: Record<Status, VarianteEtiqueta> = {
 }
 type Props = {
   dados: Pagina | undefined
+  atualizado: boolean
   carregando: boolean
   erro: string | null
   status: Status | null
@@ -61,6 +64,12 @@ export function AbaOrdens(props: Props) {
     null,
   )
   const [erro, setErro] = useState<string | null>(null)
+  const { dados, pagina, mudarPagina, atualizado } = props
+  useEffect(() => {
+    if (!atualizado || !dados || pagina <= 1) return
+    const nova = paginaValida(dados.total, dados.items.length, pagina)
+    if (nova !== null && nova !== pagina) mudarPagina(nova)
+  }, [dados, pagina, mudarPagina, atualizado])
   const invalidar = () =>
     Promise.all([
       cliente.invalidateQueries({
@@ -121,10 +130,15 @@ export function AbaOrdens(props: Props) {
         }),
       )
     },
-    onSuccess: async () => {
+    onSuccess: async (_resultado, variaveis) => {
       setAcao(null)
       setErro(null)
-      await invalidar()
+      await Promise.all([
+        invalidar(),
+        ...(invalidaKpis(variaveis.acaoSelecionada.acao)
+          ? [cliente.invalidateQueries({ queryKey: ['kpis'] })]
+          : []),
+      ])
     },
     onError: (erroApi: ErroApi) => {
       setErro(mensagemErro(erroApi))

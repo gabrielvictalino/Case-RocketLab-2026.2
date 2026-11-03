@@ -433,7 +433,9 @@ describe('Telas do portal e PainelAgente', () => {
     expect(
       new URLSearchParams(router.state.location.search).get('status'),
     ).toBe('ABERTA')
-    expect(await screen.findByText('UC100123')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('UC100123')).toBeInTheDocument()
+    })
     const ultimaUrl = new URL(
       fetchOrdens.mock.calls
         .map(([req]) => req.url)

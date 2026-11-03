@@ -167,22 +167,18 @@ afterEach(() => {
   encerrarSessao()
   vi.unstubAllGlobals()
 })
-function abrir(url = '/perdas') {
+function abrir(
+  url = '/perdas',
+  cliente = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  }),
+) {
   const router = createMemoryRouter(
     [{ path: '/perdas', element: <PaginaPerdas /> }],
     { initialEntries: [url] },
   )
   render(
-    <QueryClientProvider
-      client={
-        new QueryClient({
-          defaultOptions: {
-            queries: { retry: false },
-            mutations: { retry: false },
-          },
-        })
-      }
-    >
+    <QueryClientProvider client={cliente}>
       <RouterProvider router={router} />
     </QueryClientProvider>,
   )
@@ -269,6 +265,183 @@ describe('Página Perdas', () => {
       inspetor: 'INSP-001',
     })
   })
+  it.each([
+    ['resultado', true],
+    ['despachar', false],
+  ] as const)(
+    'invalida KPIs somente no sucesso de %s',
+    async (acao, invalidado) => {
+      const cliente = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      })
+      const chaveKpis = ['kpis', '2025-07..2026-06', '2024-07..2025-06']
+      const outraChave = ['kpis', '2024-07..2025-06', null]
+      const chaveSerie = ['kpis-serie', '2025-07..2026-06']
+      cliente.setQueryData(chaveKpis, { valor: 1 })
+      cliente.setQueryData(outraChave, { valor: 2 })
+      cliente.setQueryData(chaveSerie, { serie: [] })
+      expect(cliente.getQueryState(chaveKpis)?.isInvalidated).toBe(false)
+      abrir('/perdas?aba=ordens', cliente)
+      fireEvent.click(
+        await screen.findByRole('button', {
+          name: acao === 'resultado' ? 'Registrar resultado' : 'Despachar',
+        }),
+      )
+      const dialogo = screen.getByRole('dialog')
+      if (acao === 'resultado') {
+        fireEvent.click(within(dialogo).getByLabelText('Sem irregularidade'))
+      } else {
+        fireEvent.change(within(dialogo).getByLabelText('Inspetor'), {
+          target: { value: 'INSP-001' },
+        })
+      }
+      const consultasAntes = requests.filter(
+        (requisicao) =>
+          requisicao.method === 'GET' &&
+          new URL(requisicao.url).pathname === '/api/v1/ordens-inspecao',
+      ).length
+      fireEvent.click(
+        within(dialogo).getByRole('button', {
+          name: acao === 'resultado' ? 'Registrar resultado' : 'Despachar',
+        }),
+      )
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+      )
+      await waitFor(() =>
+        expect(
+          requests.filter(
+            (requisicao) =>
+              requisicao.method === 'GET' &&
+              new URL(requisicao.url).pathname === '/api/v1/ordens-inspecao',
+          ).length,
+        ).toBeGreaterThan(consultasAntes),
+      )
+      await waitFor(() => expect(cliente.isMutating()).toBe(0))
+      expect(cliente.getQueryState(chaveKpis)?.isInvalidated).toBe(invalidado)
+      expect(cliente.getQueryState(outraChave)?.isInvalidated).toBe(invalidado)
+      expect(cliente.getQueryState(chaveSerie)?.isInvalidated).toBe(false)
+    },
+  )
+
+  it('recua a página de ordens depois de despachar o último item filtrado', async () => {
+    const fetchOriginal = globalThis.fetch
+    let despachada = false
+    const requisicoes: number[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (requisicao: Request) => {
+        const url = new URL(requisicao.url)
+        if (url.pathname.endsWith('/despachar')) {
+          despachada = true
+          return new Response(JSON.stringify(ordem('EM_CAMPO', 'ord-26')), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        if (url.pathname === '/api/v1/ordens-inspecao') {
+          const pagina = Number(url.searchParams.get('page'))
+          requisicoes.push(pagina)
+          const total = despachada ? 25 : 26
+          const quantidade = pagina === 1 ? 25 : despachada ? 0 : 1
+          return new Response(
+            JSON.stringify({
+              items: Array.from({ length: quantidade }, (_, indice) =>
+                ordem('ABERTA', `ord-${pagina}-${indice}`),
+              ),
+              total,
+              page: pagina,
+              size: 25,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return fetchOriginal(requisicao)
+      }),
+    )
+    abrir('/perdas?aba=ordens&status=ABERTA')
+    fireEvent.click(await screen.findByRole('button', { name: 'Próxima' }))
+    expect(await screen.findByText('Página 2 de 2')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Despachar' }))
+    const dialogo = screen.getByRole('dialog')
+    fireEvent.change(within(dialogo).getByLabelText('Inspetor'), {
+      target: { value: 'INSP-001' },
+    })
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Despachar' }))
+    await waitFor(() => expect(requisicoes.slice(-2)).toEqual([2, 1]))
+    expect(
+      await screen.findByText(/Mostrando 25 de 25 ordens/),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText('Nenhuma ordem de inspeção encontrada'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('recua a página da fila quando o lote esvazia a última página', async () => {
+    const fetchOriginal = globalThis.fetch
+    let gerada = false
+    const requisicoes: number[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (requisicao: Request) => {
+        const url = new URL(requisicao.url)
+        if (
+          url.pathname === '/api/v1/ordens-inspecao' &&
+          requisicao.method === 'POST'
+        ) {
+          gerada = true
+          return new Response(
+            JSON.stringify({
+              criadas: [ordem('ABERTA', 'ord-26')],
+              rejeitadas: [],
+            }),
+            { status: 201, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.pathname === '/api/v1/perdas/fila') {
+          const pagina = Number(url.searchParams.get('page'))
+          requisicoes.push(pagina)
+          const total = gerada ? 25 : 26
+          const quantidade = pagina === 1 ? 25 : gerada ? 0 : 1
+          const totais = {
+            itens: total,
+            energia_recuperar_kwh: '0.00',
+            energia_recuperar_reais: '0.00',
+          }
+          return new Response(
+            JSON.stringify({
+              items: Array.from({ length: quantidade }, (_, indice) => ({
+                ...itens[0],
+                id_uc: `UC${String((pagina - 1) * 25 + indice).padStart(6, '0')}`,
+              })),
+              total,
+              page: pagina,
+              size: 25,
+              totais: { pagina: totais, filtro: totais },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return fetchOriginal(requisicao)
+      }),
+    )
+    abrir()
+    fireEvent.click(await screen.findByRole('button', { name: 'Próxima' }))
+    expect(await screen.findByText('Página 2 de 2')).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Selecionar UC000025'))
+    fireEvent.click(screen.getByRole('button', { name: 'Gerar ordens (1)' }))
+    await waitFor(() => expect(requisicoes.slice(-2)).toEqual([2, 1]))
+    expect(
+      await screen.findByText(/Mostrando 25 de 25 UCs/),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '1 ordem(ns) gerada(s).',
+    )
+  })
+
   it('mostra erro 403 no lote e mantém seleção', async () => {
     statusResposta = 403
     abrir()

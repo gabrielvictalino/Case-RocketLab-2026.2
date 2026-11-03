@@ -115,6 +115,7 @@ export function PaginaPerdas() {
       {aba === 'fila' ? (
         <AbaFila
           dados={fila.data}
+          atualizado={fila.isSuccess && !fila.isFetching}
           erro={(fila.error as ErroApi | null)?.message ?? null}
           carregando={fila.isLoading}
           recortes={recortes}
@@ -145,6 +146,7 @@ export function PaginaPerdas() {
       ) : (
         <AbaOrdens
           dados={ordens.data}
+          atualizado={ordens.isSuccess && !ordens.isFetching}
           erro={(ordens.error as ErroApi | null)?.message ?? null}
           carregando={ordens.isLoading}
           status={status}
