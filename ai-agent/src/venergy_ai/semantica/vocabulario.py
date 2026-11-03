@@ -28,13 +28,25 @@ VOCABULARIO = (
         ('uc_consumo_faturamento_mensal.valor_total', 'receita_volume_mensal.receita'),
     ),
     Termo(
-        ('conta atrasada', 'conta em aberto', 'inadimplência'),
-        'Fatura com status_pagamento = ABERTA. Inadimplência é a receita em aberto dividida '
-        'pela receita do período.',
+        ('conta atrasada', 'conta vencida', 'conta em atraso'),
+        "Fatura vencida e não paga: status_pagamento = 'ABERTA' AND data_vencimento antes da "
+        'data de referência da carga (informada abaixo). Uma ABERTA que ainda não venceu não '
+        'está atrasada.',
         (
             'uc_consumo_faturamento_mensal.status_pagamento',
-            'receita_volume_mensal.receita_arrecadada',
+            'uc_consumo_faturamento_mensal.data_vencimento',
         ),
+    ),
+    Termo(
+        ('conta em aberto', 'conta não paga'),
+        "Fatura com status_pagamento = 'ABERTA', vencida ou não.",
+        ('uc_consumo_faturamento_mensal.status_pagamento',),
+    ),
+    Termo(
+        ('inadimplência',),
+        'Indicador do portal: receita em aberto ÷ receita do período, sem olhar o vencimento. '
+        'Para o valor atrasado de fato, use conta atrasada.',
+        ('receita_volume_mensal.receita', 'receita_volume_mensal.receita_arrecadada'),
     ),
     Termo(
         ('consumo', 'quanto gastou de energia', 'gasto de energia'),
@@ -90,12 +102,16 @@ VOCABULARIO = (
     ),
     Termo(
         ('gato', 'furto', 'fraude', 'desvio'),
-        'Inspeção com resultado IRREGULARIDADE CONFIRMADA.',
+        "Fonte padrão: inspecoes com resultado = 'IRREGULARIDADE CONFIRMADA', que inclui as "
+        'confirmadas no portal. ucs.flag_irregularidade_confirmada é o retrato da última carga '
+        'e não tem as confirmações do portal feitas depois dela: use só para cruzar com o '
+        'cadastro, e diga isso na resposta.',
         ('inspecoes.resultado', 'ucs.flag_irregularidade_confirmada'),
     ),
     Termo(
         ('suspeitos', 'quem inspecionar'),
-        'Fila de inspeção, da UC mais para a menos promissora.',
+        'Fila de inspeção da última carga, da UC mais para a menos promissora. Ela não desconta '
+        'as ordens abertas no portal depois da carga.',
         ('fila_inspecao.score',),
     ),
     Termo(
@@ -110,7 +126,8 @@ VOCABULARIO = (
     ),
     Termo(
         ('nota', 'satisfação', 'avaliação do atendimento'),
-        'Nota de 0 a 10 do protocolo. Nula é "não avaliou" e fica fora da média.',
+        'Nota de 1 a 5 do protocolo, com uma casa decimal. Nula é "não avaliou" e fica fora '
+        'da média.',
         ('atendimentos.nota',),
     ),
     Termo(
@@ -120,11 +137,8 @@ VOCABULARIO = (
     ),
 )
 
+# A cobertura da base vem da carga: `descrever_semantica` a escreve antes destes limites.
 LIMITES = (
-    Limite(
-        'A base cobre as competências de jul/2022 a jun/2026. Fora disso, não há dado.',
-        ('uc_consumo_faturamento_mensal.competencia',),
-    ),
     Limite(
         'As inspeções históricas são só de ago a dez/2025. Antes disso não há taxa de acerto.',
         ('inspecoes.origem',),
