@@ -110,7 +110,9 @@ class AgenteTextoSQL:
 
     async def _responder(self, pergunta: str, contexto: Contexto, andamento: Andamento) -> dict:
         uso = andamento.uso
-        padrao = contexto.periodo or periodo_padrao(contexto.competencia_mais_recente)
+        padrao = contexto.periodo or periodo_padrao(
+            contexto.competencia_mais_recente, contexto.competencia_inicial
+        )
         instrucoes = instrucoes_do_plano(contexto, padrao)
         execucao = await self.planejador.run(
             pergunta_delimitada(pergunta), instructions=instrucoes, usage=uso

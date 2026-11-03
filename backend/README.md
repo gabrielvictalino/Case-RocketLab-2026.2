@@ -84,8 +84,10 @@ também o importador e a suíte completa, use `--all-packages`.
    desconhecida aborta a publicação e preserva todo o estado anterior.
 5. As views de `ai_read` são apagadas num único `DROP` e recriadas a cada carga, cada
    uma com seu `GRANT SELECT` só para `ai_read`. A IA lê só as que estão em
-   `importador/views.sql`, sem nome, documento e endereço do titular nem a descrição
-   das tratativas.
+   `importador/views.sql`, sem nome, documento e endereço do titular, sem a descrição
+   das tratativas e sem o texto livre do tipo de irregularidade (fora dos cinco tipos
+   da Silver, a IA vê `OUTRO`). A `ai_read.fila_inspecao` tira as UCs com ordem ativa,
+   lendo `id_uc` e `status` das ordens a cada consulta.
 
 Cada importação ganha um UUID distinto, mesmo para o mesmo `batch_id` de origem.
 O UUID é a versão da carga, também publicada na chave Redis `versao_carga`.
