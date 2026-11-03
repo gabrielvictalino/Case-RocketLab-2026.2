@@ -34,7 +34,7 @@ INSERT em cargas e SELECT em inspeções, sem escrita nas demais tabelas operaci
 | Contrato Gold e exportador | Revisão das 12 tabelas, nomes, grãos, chaves, tipos, nulls, manifesto e versão, com amostra real coerente | Importação real e todos os módulos |
 | Consumo analítico | Média × mediana, janela de referência, negativos não confirmados, fallback, flag da troca e versão da regra | UC 360, receita, KPIs, fila |
 | Receita e volume | Pareamento de faturas/leitura, órfãos e quarentena, tributos, arredondamento, pago/aberto; múltiplas faturas na mesma competência têm regra provisória em 0.3.0-provisional (segregadas, competência sem fatura) | Receita, explicação da conta, KPIs |
-| Decomposição | R5 define quatro efeitos com fechamento exato, mas ainda é necessário alinhar na #55/P20 o grão de cálculo: decompor os totais filtrados ou somar efeitos por subgrão. As leituras dão efeitos diferentes; esclarecer a R5 antes de publicar a rota e conferir KPIs × decomposição. A rota foi retirada da #59 conforme a revisão do PR #112 | Receita e insights (P20) |
+| Decomposição | Resolvida na #55/P20: R5 define o grão e a soma dos efeitos por subgrão; rotas de receita publicadas e conferidas com KPIs. | Receita e insights (P20) |
 | UC ativa (P05) | Homologar se a presença de registro mensal representa atividade. Se a Gold real publicar a grade UC × competência completa, inclusive sem fatura, o card contará todas as UCs e poderá ficar constante; validar cobertura e disponibilidade de status cadastral histórico | KPIs |
 | Grupos de UC | Formalizado em 0.3.0-provisional (R3: regra temporal GD > IRREGULARIDADE > DEMAIS com date_trunc) | Receita, fila e avaliações |
 | DEC/FEC/CHI | Sobreposições, interrupções contadas, competência de eventos que cruzam meses, denominador temporal e flag de evento atípico | Operação e KPIs |
@@ -48,10 +48,12 @@ arquiteturas em `docs/22-analise-arquitetura`; Silver de leituras em
 `feat/17-silver-leituras`, ocorrências em `feat/21-silver-ocorrencias-rede` e faturas
 no PR #62. Nenhum notebook foi executado ou tabela do Databricks modificada.
 
+P17: fila filtrada e paginada entregue; a aprovação do score pela Gold segue pendente.
+
 ## Próximos módulos
 
 1. Aprovar contratos e homologar exportação real com hashes, totais e cobertura.
-2. P13/P14 UC 360 e explicação da conta, P17 fila filtrada/paginada, P20 receita,
+2. P13/P14 UC 360 e explicação da conta, P20 receita,
    P22 continuidade e P24 KPIs, após fechar as regras correspondentes.
 3. Implementação do agente com executor somente leitura, validação SQL, timeout e
    auditoria; insights compartilham os mesmos serviços de métricas.
