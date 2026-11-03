@@ -6,13 +6,14 @@ from app.modules.continuidade.schemas import Indicadores, Ranking, Serie
 from app.modules.metricas import contexto
 
 
-def indicadores(rows):
-    if not rows:
+def indicadores(rows, sem_evento_atipico=False):
+    observacoes = [r for r in rows if not (sem_evento_atipico and r['flag_evento_atipico'])]
+    if not observacoes:
         return Indicadores(chi=None, interrupcoes=None, numero_ucs=None, dec=None, fec=None)
-    chi = sum((r['chi'] for r in rows), Decimal(0))
-    interrupcoes = sum(r['interrupcoes'] for r in rows)
+    chi = sum((r['chi'] for r in observacoes), Decimal(0))
+    interrupcoes = sum(r['interrupcoes'] for r in observacoes)
     # O contrato garante numero_ucs fixo. Conta cada alimentador uma vez no
-    # período, mesmo que tenha várias competências selecionadas.
+    # período, mesmo que tenha várias competências selecionadas ou expurgadas.
     ucs = sum({r['alimentador']: r['numero_ucs'] for r in rows}.values())
 
     def razao(numerador):
@@ -25,14 +26,16 @@ def indicadores(rows):
 
 async def serie(db, periodo, comparacao, recorte, sem_evento_atipico):
     ctx = await contexto(db, periodo, comparacao)
-    rows = await repository.mensais(db, ctx.atual, recorte, sem_evento_atipico)
+    rows = await repository.mensais(db, ctx.atual, recorte)
     por_mes = defaultdict(list)
     for row in rows:
         por_mes[row['competencia']].append(row)
     pontos = []
     mes = ctx.atual.inicio
     while mes <= ctx.atual.fim:
-        pontos.append(dict(competencia=mes, **indicadores(por_mes[mes]).model_dump()))
+        pontos.append(
+            dict(competencia=mes, **indicadores(por_mes[mes], sem_evento_atipico).model_dump())
+        )
         if mes == ctx.atual.fim:
             break
         mes = (
@@ -43,14 +46,14 @@ async def serie(db, periodo, comparacao, recorte, sem_evento_atipico):
     return Serie(
         **ctx.metadados(),
         sem_evento_atipico=sem_evento_atipico,
-        totais=indicadores(rows),
+        totais=indicadores(rows, sem_evento_atipico),
         serie=pontos,
     )
 
 
 async def ranking(db, periodo, comparacao, recorte, sem_evento_atipico, ordem):
     ctx = await contexto(db, periodo, comparacao)
-    rows = await repository.mensais(db, ctx.atual, recorte, sem_evento_atipico)
+    rows = await repository.mensais(db, ctx.atual, recorte)
     por_alimentador = defaultdict(list)
     for row in rows:
         por_alimentador[row['alimentador']].append(row)
@@ -59,26 +62,29 @@ async def ranking(db, periodo, comparacao, recorte, sem_evento_atipico, ordem):
         causas[row['alimentador']].append(
             {k: row[k] for k in ('causa', 'ocorrencias', 'interrupcoes')}
         )
-    itens = [
-        dict(
-            alimentador=alimentador,
-            municipio=mensais[0]['municipio'],
-            **indicadores(mensais).model_dump(),
-            causas=causas[alimentador],
+    itens = []
+    for alimentador, mensais in por_alimentador.items():
+        valores = indicadores(mensais, sem_evento_atipico)
+        if valores.dec is None:
+            continue
+        itens.append(
+            dict(
+                alimentador=alimentador,
+                municipio=mensais[0]['municipio'],
+                **valores.model_dump(),
+                causas=causas[alimentador],
+            )
         )
-        for alimentador, mensais in por_alimentador.items()
-    ]
 
     # Ordena pelo índice exato, antes do arredondamento da resposta; código
     # desempata para manter o resultado determinístico.
     def chave(item):
-        valor = (
-            item['chi']
-            if ordem == 'chi'
-            else (item['chi'] if ordem == 'dec' else Decimal(item['interrupcoes']))
-            / item['numero_ucs']
-        )
-        return -valor, item['alimentador']
+        valores = {
+            'chi': item['chi'],
+            'dec': item['chi'] / item['numero_ucs'],
+            'fec': Decimal(item['interrupcoes']) / item['numero_ucs'],
+        }
+        return -valores[ordem], item['alimentador']
 
     itens.sort(key=chave)
     return Ranking(

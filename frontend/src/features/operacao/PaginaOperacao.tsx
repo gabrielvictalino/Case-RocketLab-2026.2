@@ -103,6 +103,11 @@ export function PaginaOperacao() {
         </label>
       </BarraRecorte>
 
+      <p>
+        Ao excluir eventos atípicos, saem apenas as competências marcadas de cada
+        alimentador. Os demais alimentadores do mesmo mês continuam no cálculo.
+      </p>
+
       <div
         style={{
           display: 'grid',

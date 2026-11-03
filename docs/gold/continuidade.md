@@ -23,7 +23,7 @@ Pelo glossário do case (seção 3.2), cada ocorrência é uma UC interrompida, 
 
 **Período maior** (um ano, um ciclo, o período inteiro): some o CHI e as interrupções das competências e divida pelo número de UCs. Para um conjunto de alimentadores, divida pela soma das UCs deles. Nunca tire a média dos DECs mensais: um alimentador pequeno pesaria o mesmo que um grande. Por isso a tabela guarda os numeradores (`chi_horas`, `interrupcoes`) e o denominador (`numero_ucs`) ao lado do DEC e do FEC.
 
-**Com ou sem evento atípico:** a tabela traz todas as competências, e `flag_evento_atipico` marca as do evento. Excluir o evento é filtrar `NOT flag_evento_atipico` antes de somar. O glossário define CHI como o critério padrão para priorizar manutenção, e o padrão do ranking no backend (#57) é o CHI.
+**Com ou sem evento atípico:** a tabela traz todas as competências, e `flag_evento_atipico` marca as do evento. Excluir o evento é somar apenas o CHI e as interrupções com `NOT flag_evento_atipico`, preservando no denominador as UCs de todos os alimentadores do recorte com linha na Gold, inclusive os marcados. Isso vale para cada mês e para o período, contando cada alimentador uma vez. Um mês sem linha ou com todas as linhas marcadas retorna indicadores nulos no backend. O glossário define CHI como o critério padrão para priorizar manutenção, e o padrão do ranking no backend (#57) é o CHI.
 
 ## 3. Regras e decisões
 

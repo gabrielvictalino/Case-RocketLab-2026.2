@@ -42,6 +42,22 @@ def test_reagrega_numeradores_e_conta_denominador_uma_vez():
     assert zero.dec == zero.fec == 0
 
 
+def test_expurgo_preserva_ucs_com_cobertura_e_distingue_ausencia_de_zero():
+    rows = [
+        dict(alimentador='a', chi=D(60), interrupcoes=30, numero_ucs=60, flag_evento_atipico=True),
+        dict(alimentador='b', chi=D(1), interrupcoes=1, numero_ucs=60, flag_evento_atipico=False),
+    ]
+    assert indicadores(rows, True).model_dump() == dict(
+        chi=D(1), interrupcoes=1, numero_ucs=120, dec=D('0.01'), fec=D('0.01')
+    )
+    assert all(v is None for v in indicadores(rows[:1], True).model_dump().values())
+    # Uma observação zero válida preserva também as UCs do alimentador expurgado.
+    rows[1].update(chi=D(0), interrupcoes=0)
+    zero = indicadores(rows, True)
+    assert zero.numero_ucs == 120
+    assert zero.dec == zero.fec == 0
+
+
 @INTEGRATION
 async def test_pequeno_lidera_por_dec_e_fec_mas_nao_por_chi(client, headers):
     params = dict(periodo='2025-07..2025-08')
@@ -66,33 +82,38 @@ async def test_pequeno_lidera_por_dec_e_fec_mas_nao_por_chi(client, headers):
 @INTEGRATION
 @pytest.mark.parametrize('sem_evento', [False, True])
 @pytest.mark.parametrize('recorte', [{}, {'municipio': 'Recife'}, {'alimentador': 'ALM-REC-001'}])
-async def test_serie_ranking_e_causas_conferidos_contra_csv(client, headers, sem_evento, recorte):
+@pytest.mark.parametrize('fim', ['2025-07', '2025-08'])
+async def test_serie_ranking_e_causas_conferidos_contra_csv(
+    client, headers, sem_evento, recorte, fim
+):
     # Oráculo independente do SQL e da agregação do serviço.
     alimentadores = {r['alimentador']: r for r in ler('dim_alimentador')}
     mensais = [
         r
         for r in ler('continuidade_alimentador_mensal')
-        if '2025-07-01' <= r['competencia'] <= '2025-08-01'
-        and not (sem_evento and r['flag_evento_atipico'] == 'true')
+        if '2025-07-01' <= r['competencia'] <= fim + '-01'
         and all(alimentadores[r['alimentador']][k] == v for k, v in recorte.items())
     ]
-    params = dict(periodo='2025-07..2025-08', sem_evento_atipico=sem_evento, **recorte)
+    params = dict(periodo=f'2025-07..{fim}', sem_evento_atipico=sem_evento, **recorte)
     serie = await get(client, headers, 'serie', **params)
     ranking = await get(client, headers, 'ranking', **params)
     assert serie['carga'] == ranking['carga']
     assert serie['carga']['sintetica'] is True
     assert serie['sem_evento_atipico'] is sem_evento
-    assert serie['comparacao'] == ranking['comparacao'] == '2024-07..2024-08'
-    assert [p['competencia'] for p in serie['serie']] == ['2025-07-01', '2025-08-01']
+    assert serie['comparacao'] == ranking['comparacao'] == f'2024-07..{fim.replace("2025", "2024")}'
+    assert [p['competencia'] for p in serie['serie']] == [
+        mes for mes in ['2025-07-01', '2025-08-01'] if mes <= fim + '-01'
+    ]
 
     def conferir(indicadores, rows):
-        if not rows:
+        validas = [r for r in rows if not (sem_evento and r['flag_evento_atipico'] == 'true')]
+        if not validas:
             assert all(
                 indicadores[k] is None for k in ('chi', 'interrupcoes', 'numero_ucs', 'dec', 'fec')
             )
             return
-        chi = sum(D(r['chi_horas']) for r in rows)
-        interrupcoes = sum(int(r['interrupcoes']) for r in rows)
+        chi = sum(D(r['chi_horas']) for r in validas)
+        interrupcoes = sum(int(r['interrupcoes']) for r in validas)
         ucs = sum(int(alimentadores[a]['numero_ucs']) for a in {r['alimentador'] for r in rows})
         assert D(indicadores['chi']) == chi
         assert indicadores['interrupcoes'] == interrupcoes
@@ -103,14 +124,18 @@ async def test_serie_ranking_e_causas_conferidos_contra_csv(client, headers, sem
     conferir(serie['totais'], mensais)
     for ponto in serie['serie']:
         conferir(ponto, [r for r in mensais if r['competencia'] == ponto['competencia']])
-    cobertura = {(r['alimentador'], r['competencia'][:7]) for r in mensais}
+    cobertura = {
+        (r['alimentador'], r['competencia'][:7])
+        for r in mensais
+        if not (sem_evento and r['flag_evento_atipico'] == 'true')
+    }
     ocorrencias = defaultdict(Counter)
     interrupcoes = defaultdict(Counter)
     for row in ler('ocorrencias_uc'):
         if (row['alimentador'], row['data_abertura'][:7]) in cobertura:
             ocorrencias[row['alimentador']][row['causa']] += 1
             interrupcoes[row['alimentador']][row['causa']] += row['flag_sobreposicao'] == 'false'
-    assert {r['alimentador'] for r in ranking['ranking']} == {r['alimentador'] for r in mensais}
+    assert {r['alimentador'] for r in ranking['ranking']} == {a for a, _ in cobertura}
     for item in ranking['ranking']:
         conferir(item, [r for r in mensais if r['alimentador'] == item['alimentador']])
         assert {r['causa']: r['ocorrencias'] for r in item['causas']} == ocorrencias[
@@ -136,6 +161,22 @@ async def test_exclusao_muda_ranking_totais_e_causas(client, headers):
     assert D(serie['totais']['chi']) - D(filtrada['totais']['chi']) == 200
     assert serie['totais']['numero_ucs'] == filtrada['totais']['numero_ucs'] == 300
     assert serie['serie'][1] == filtrada['serie'][1]
+
+
+@INTEGRATION
+@pytest.mark.parametrize('recorte,ucs', [({}, 300), ({'municipio': 'Recife'}, 120)])
+async def test_expurgo_mantem_denominador_mensal_e_do_periodo(client, headers, recorte, ucs):
+    params = dict(sem_evento_atipico=True, **recorte)
+    mes = await get(client, headers, 'serie', periodo='2025-07..2025-07', **params)
+    ciclo = await get(client, headers, 'serie', periodo='2025-07..2025-08', **params)
+    assert mes['totais']['numero_ucs'] == mes['serie'][0]['numero_ucs'] == ucs
+    assert mes['serie'][0] == ciclo['serie'][0]
+    assert ciclo['totais']['numero_ucs'] == ucs
+    for indicador in ('dec', 'fec'):
+        assert sum(D(p[indicador]) for p in ciclo['serie']) == D(ciclo['totais'][indicador])
+    if recorte:
+        # 1 / 120 = 0,01; retirar as 60 UCs do alimentador marcado daria 0,02.
+        assert D(mes['totais']['dec']) == D(mes['totais']['fec']) == D('0.01')
 
 
 @INTEGRATION

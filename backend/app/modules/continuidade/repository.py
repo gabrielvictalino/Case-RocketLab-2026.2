@@ -1,18 +1,19 @@
 from sqlalchemy import text
 
 
-async def mensais(db, periodo, recorte, sem_evento_atipico):
-    # A exclusão é por alimentador × competência, antes de qualquer agregação.
+async def mensais(db, periodo, recorte):
+    # Preserva a cobertura Gold e as UCs, inclusive nos meses marcados.
+    # O serviço expurga apenas os numeradores das linhas atípicas.
     return (
         (
             await db.execute(
                 text("""
                     SELECT c.alimentador, a.municipio, c.competencia,
-                           c.chi_horas AS chi, c.interrupcoes, c.numero_ucs
+                           c.chi_horas AS chi, c.interrupcoes, c.numero_ucs,
+                           c.flag_evento_atipico
                     FROM analytics.continuidade_alimentador_mensal c
                     JOIN analytics.dim_alimentador a USING (alimentador)
                     WHERE c.competencia BETWEEN :inicio AND :fim
-                      AND (NOT :sem_evento_atipico OR NOT c.flag_evento_atipico)
                       AND (CAST(:municipio AS text) IS NULL OR a.municipio = :municipio)
                       AND (CAST(:alimentador AS text) IS NULL OR c.alimentador = :alimentador)
                     ORDER BY c.competencia, c.alimentador
@@ -20,7 +21,6 @@ async def mensais(db, periodo, recorte, sem_evento_atipico):
                 dict(
                     inicio=periodo.inicio,
                     fim=periodo.fim,
-                    sem_evento_atipico=sem_evento_atipico,
                     **recorte.model_dump(),
                 ),
             )

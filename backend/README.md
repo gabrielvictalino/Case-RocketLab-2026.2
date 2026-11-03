@@ -240,13 +240,19 @@ decimais; contagens são inteiros. DEC/FEC usam duas casas e arredondamento meio
 para cima.
 
 CHI e interrupções somam os numeradores mensais; o denominador conta as UCs de
-cada alimentador uma única vez no período. A exclusão remove apenas as linhas
-alimentador × competência marcadas, antes da agregação. Não remove outros
-alimentadores da mesma competência. Se restar alguma competência do alimentador,
-suas UCs continuam contadas uma vez nos totais. Um mês inteiramente excluído ou
-sem cobertura fica com indicadores `null`; uma linha Gold sem ocorrências mantém
-os indicadores zerados. Um recorte inteiramente vazio retorna ranking vazio e
-totais nulos.
+cada alimentador com cobertura na Gold uma única vez no período. A exclusão
+expurga somente os numeradores das linhas alimentador × competência marcadas,
+preservando suas UCs no denominador mensal e do período. Os demais alimentadores
+da mesma competência continuam contribuindo com seus numeradores. Por exemplo,
+em julho/2025 na amostra, Recife sem evento tem CHI = 1 e 120 UCs (incluindo as
+60 do alimentador marcado): DEC = 0,01, em vez de 0,02.
+
+Um mês sem cobertura ou com todas as linhas marcadas fica com indicadores `null`;
+uma linha Gold válida sem ocorrências mantém os indicadores zerados. Um recorte
+sem observações válidas retorna ranking vazio e totais nulos. No ranking, cada
+alimentador sem nenhuma observação válida é omitido. A soma dos índices mensais
+pode diferir do índice do período por arredondamento em centésimos; os totais são
+sempre calculados diretamente dos numeradores e do denominador fixo.
 
 As causas são contadas em `ocorrencias_uc`, pela competência de abertura e com
 a mesma cobertura e exclusão do agregado. `ocorrencias` conta todos os registros;
