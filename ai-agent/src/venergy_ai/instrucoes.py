@@ -71,7 +71,11 @@ def pergunta_delimitada(pergunta: str) -> str:
 
 
 def instrucoes_do_plano(contexto: Contexto, padrao: Periodo) -> str:
-    partes = [INSTRUCOES_PLANO, descrever_semantica(padrao), _contexto(contexto)]
+    base = None
+    if contexto.competencia_inicial is not None:
+        base = Periodo(contexto.competencia_inicial, contexto.competencia_mais_recente)
+    semantica = descrever_semantica(padrao, base, contexto.data_referencia)
+    partes = [INSTRUCOES_PLANO, semantica, _contexto(contexto)]
     if contexto.historico:
         partes.append(_conversa(contexto.historico))
     return '\n\n'.join(partes)
