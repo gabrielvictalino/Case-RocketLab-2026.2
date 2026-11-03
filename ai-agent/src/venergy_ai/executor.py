@@ -1,5 +1,6 @@
 """Execução do SQL já conferido pela guarda, com a engine da role `ai_read`."""
 
+import asyncio
 import math
 import time
 from dataclasses import dataclass
@@ -54,9 +55,11 @@ class ExecutorAiRead:
                 colunas, linhas = [], []
                 if resultado.returns_rows:
                     colunas = list(resultado.keys())
-                    linhas = [[_valor(v) for v in linha] for linha in resultado]
+                    brutas = list(resultado)
+                    colunas = _com_unidade_dos_intervalos(colunas, brutas)
+                    linhas = [[_valor(v) for v in linha] for linha in brutas]
             finally:
-                await transacao.rollback()
+                await _sem_mascarar_o_cancelamento(transacao.rollback())
         except TimeoutError as erro:
             # O command_timeout do asyncpg pode disparar antes do statement_timeout da role,
             # e o SQLAlchemy não traduz o TimeoutError dele.
@@ -70,8 +73,33 @@ class ExecutorAiRead:
         except OSError as erro:
             raise BancoIndisponivel(_mensagem(erro)) from erro
         finally:
-            await conexao.close()
+            await _sem_mascarar_o_cancelamento(conexao.close())
         return ResultadoSQL(colunas, linhas, round((time.monotonic() - inicio) * 1000))
+
+
+async def _sem_mascarar_o_cancelamento(passo) -> None:
+    """Roda o rollback ou o close do fim da consulta.
+
+    Cancelada no meio (o teto de tempo do assistente), a conexão pode recusar o passo com
+    "another operation is in progress". Esse erro não pode tomar o lugar do cancelamento:
+    viraria `ConsultaFalhou`, o agente pediria outra consulta e o teto não valeria."""
+    try:
+        await passo
+    except (SQLAlchemyError, OSError):
+        tarefa = asyncio.current_task()
+        if tarefa is None or not tarefa.cancelling():
+            raise
+
+
+def _com_unidade_dos_intervalos(colunas: list[str], linhas: list) -> list[str]:
+    # Um interval vira horas: o nome da coluna passa a dizer isso, para "2 dias" não virar
+    # "48 dias" na resposta.
+    return [
+        nome
+        if nome.endswith('_horas') or not any(isinstance(linha[i], timedelta) for linha in linhas)
+        else f'{nome}_em_horas'
+        for i, nome in enumerate(colunas)
+    ]
 
 
 def _mensagem(erro: Exception) -> str:
