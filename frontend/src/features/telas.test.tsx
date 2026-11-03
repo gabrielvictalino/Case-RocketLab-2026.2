@@ -83,7 +83,11 @@ const ORDENS_FIXTURE = {
   size: 25,
 }
 
+const INDICADOR_FIXTURE = { valor: '1840000000', comparacao: '1000000000', variacao: '10', variacao_pct: '10' }
+const KPIS_FIXTURE = { periodo: '2025-07..2026-06', comparacao: '2024-07..2025-06', carga: CARGA_FIXTURE, receita: INDICADOR_FIXTURE, receita_arrecadada: INDICADOR_FIXTURE, volume_faturado_kwh: INDICADOR_FIXTURE, tarifa_media: INDICADOR_FIXTURE, inadimplencia: INDICADOR_FIXTURE, ucs: { ativas: INDICADOR_FIXTURE, com_gd: INDICADOR_FIXTURE }, continuidade: { dec: INDICADOR_FIXTURE, fec: INDICADOR_FIXTURE }, taxa_acerto: { ...INDICADOR_FIXTURE, valor: null } }
+let endpointComErro = ''
 beforeEach(() => {
+  endpointComErro = ''
   localStorage.clear()
   encerrarSessao()
   salvarSessao(
@@ -99,6 +103,10 @@ beforeEach(() => {
           : req instanceof URL
             ? req.href
             : req.url
+      const pathname = new URL(url, 'http://localhost').pathname
+      if (pathname === endpointComErro) return new Response(JSON.stringify({ detail: 'erro' }), { status: 500 })
+      if (pathname === '/api/v1/kpis') return new Response(JSON.stringify(KPIS_FIXTURE), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (pathname === '/api/v1/kpis/serie') return new Response(JSON.stringify({ serie: [{ competencia: '2026-06-01', receita: '1000', volume_faturado_kwh: '2000' }] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
       if (url.includes('/api/v1/meta/filtros')) {
         return new Response(JSON.stringify(FILTROS_FIXTURE), {
           status: 200,
@@ -152,32 +160,33 @@ function renderizar(rotaInicial: string) {
 }
 
 describe('Telas do portal e PainelAgente', () => {
-  it('renderiza Visão Geral com os 8 KPIs e painéis em estado indisponível e abre o PainelAgente', async () => {
-    renderizar('/visao-geral')
-
-    expect(
-      await screen.findByRole('heading', { level: 1, name: 'Visão Geral' }),
-    ).toBeInTheDocument()
-    expect(screen.getByText('Receita faturada')).toBeInTheDocument()
-    expect(screen.getByText('Taxa de acerto')).toBeInTheDocument()
-    expect(
-      screen.getAllByText(
-        'Dados ainda não disponíveis nesta versão do portal.',
-      ).length,
-    ).toBeGreaterThanOrEqual(8)
-
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Perguntar ao agente' }),
-    )
-    expect(
-      screen.getByRole('dialog', { name: 'Pergunte aos dados' }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText(
-        'O agente ainda não está disponível nesta versão do portal.',
-      ),
-    ).toBeInTheDocument()
+  it('renderiza Visão Geral, navega com período resolvido e abre o PainelAgente', async () => {
+    const { router } = renderizar('/visao-geral')
+    const link = await screen.findByRole('link', { name: 'Receita faturada · ver detalhe' })
+    expect(link).toHaveTextContent(/1,84\s*bi/)
+    expect(screen.getByText('Sem dados no período')).toBeInTheDocument()
+    expect(link.getAttribute('href')).toContain('periodo=2025-07..2026-06')
+    expect(link.getAttribute('href')).toContain('comparacao=2024-07..2025-06')
+    fireEvent.click(screen.getByRole('button', { name: 'Perguntar ao agente' }))
+    expect(screen.getByRole('dialog', { name: 'Pergunte aos dados' })).toBeInTheDocument()
     expect(screen.getByLabelText('Pergunte sobre os dados')).toBeDisabled()
+    fireEvent.click(link)
+    await waitFor(() => expect(router.state.location.pathname).toBe('/receita'))
+    expect(router.state.location.search).toContain('periodo=2025-07..2026-06')
+  })
+
+  it('mostra erro dos indicadores e mantém insight', async () => {
+    endpointComErro = '/api/v1/kpis'
+    renderizar('/visao-geral')
+    expect(await screen.findByText('Não foi possível carregar os indicadores.')).toBeInTheDocument()
+    expect(screen.getByText(/O insight de IA deste período/)).toBeInTheDocument()
+  })
+
+  it('mostra erro de carga sem esqueleto eterno', async () => {
+    endpointComErro = '/api/v1/meta/carga'
+    renderizar('/visao-geral')
+    expect(await screen.findByText('Não foi possível carregar a carga publicada')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Carregando dados')).not.toBeInTheDocument()
   })
 
   it('renderiza Receita populando selects de /meta/filtros e limpa recortes mantendo período', async () => {
