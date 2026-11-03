@@ -104,15 +104,16 @@ def citacoes(
 ) -> list[Citacao]:
     """Cada número do texto com os valores que o sustentam, para mostrar ao lado do texto.
 
-    Um número que os `permitidos` sustentam (um ano, o número de meses) fica de fora:
-    "12 meses" fala do período, mesmo que um valor arredonde para 12. Um número que
+    Um número igual a um dos `permitidos` (um ano, o número de meses) fica de fora:
+    "12 meses" fala do período, mesmo que um valor arredonde para 12. Os permitidos não
+    valem por arredondamento: "R$ 0,00 milhões" não é o ano de 2024. Um número que
     nenhum valor sustenta vem com `lastros` vazia.
     """
     por_valor = [_decimais(valor) for valor in valores]
-    livres = [v for item in permitidos for v in _decimais(item)]
+    livres = {v for item in permitidos for v in _decimais(item)}
     resultado = []
     for trecho, leituras in _citados(texto):
-        if any(_tem_lastro(leitura, livres) for leitura in leituras):
+        if any(leitura.valor in livres for leitura in leituras):
             continue
         lastros = [
             i
