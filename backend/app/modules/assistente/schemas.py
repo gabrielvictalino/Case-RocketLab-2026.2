@@ -36,8 +36,13 @@ class ContextoPergunta(BaseModel):
 
 
 class Pergunta(BaseModel):
+    # O Postgres recusa NUL em text: sem esta trava, a pergunta iria ao LLM e só falharia
+    # no INSERT da auditoria, com um 500 e sem linha auditada.
     pergunta: Annotated[
-        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)
+        str,
+        StringConstraints(
+            strip_whitespace=True, min_length=1, max_length=1000, pattern=r'^[^\x00]*$'
+        ),
     ]
     conversa_id: UUID | None = None
     contexto: ContextoPergunta = Field(default_factory=ContextoPergunta)

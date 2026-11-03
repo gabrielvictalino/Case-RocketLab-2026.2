@@ -12,9 +12,11 @@ from pydantic_ai.models.function import FunctionModel
 from sqlalchemy.ext.asyncio import create_async_engine
 from venergy_ai.agente import AgenteTextoSQL
 from venergy_ai.executor import ExecutorAiRead
-from venergy_ai.interface import BancoIndisponivel, RespostaAgente
+from venergy_ai.interface import BancoIndisponivel, Consulta, RespostaAgente
 
 from app.main import create_app
+from app.modules.assistente import service
+from app.modules.assistente.schemas import Pergunta
 from app.modules.assistente.service import criar_assistente
 
 pytestmark = pytest.mark.integration
@@ -72,7 +74,8 @@ async def test_pergunta_auditada(portal, db):
     assert resposta.status_code == 200, resposta.text
     corpo = resposta.json()
     assert corpo['tipo'] == 'resposta' and corpo['texto'] == TEXTO
-    assert corpo['periodo']['descricao'] == 'jul/2025 a jun/2026'
+    # A consulta só lê o cadastro, um retrato da carga: não há período a declarar.
+    assert corpo['periodo'] is None
     assert corpo['consultas'][0]['linhas'] == [[300]]
     linha = await db.fetchrow(
         'SELECT a.*, u.login FROM operations.agente_auditoria a '
@@ -241,6 +244,7 @@ async def test_contexto_da_tela_chega_ao_agente(portal):
             'VALIDACAO_INVALIDA',
         ),
         ({'pergunta': '   '}, 'VALIDACAO_INVALIDA'),
+        ({'pergunta': 'Receita\x00?'}, 'VALIDACAO_INVALIDA'),
         ({'pergunta': 'x' * 1001}, 'VALIDACAO_INVALIDA'),
     ],
 )
@@ -351,6 +355,24 @@ class AgenteQuebrado:
         raise RuntimeError('dados da consulta que não devem ir para a auditoria')
 
 
+class AgenteCancelado:
+    """Roda uma consulta e é cancelado, como quando o cliente fecha o painel."""
+
+    async def responder(self, pergunta, contexto, andamento=None):
+        andamento.consultas.append(
+            Consulta(sql_gerado='SELECT 1', sql_executado='SELECT 1', total_linhas=1)
+        )
+        raise asyncio.CancelledError
+
+
+class AgenteComSqlRejeitado:
+    async def responder(self, pergunta, contexto, andamento=None):
+        consulta = Consulta(sql_gerado='DELETE FROM ucs', erro='SQL rejeitado pela guarda: x')
+        return RespostaAgente(
+            tipo='nao_sei', texto='Não sei.', motivo='x', consultas=[consulta], modelo='x'
+        )
+
+
 class AgenteSemMotivo:
     async def responder(self, pergunta, contexto, andamento=None):
         return RespostaAgente(tipo='nao_sei', texto='Não sei.', modelo='x')
@@ -415,5 +437,33 @@ async def test_cobertura_e_data_de_referencia_da_carga_chegam_ao_agente(portal):
     )
     assert resposta.status_code == 200, resposta.text
     # A amostra cobre jul/2022 a jun/2026, e o manifesto traz reference_date 2026-07-01.
-    assert 'A base cobre as competências de jul/2022 a jun/2026' in instrucoes[0]
+    assert 'Os dados da carga cobrem as competências de jul/2022 a jun/2026' in instrucoes[0]
     assert "data_vencimento < DATE '2026-07-01'" in instrucoes[0]
+
+
+async def test_cliente_que_desconecta_tambem_e_auditado(portal, db):
+    app, http = portal
+    app.state.assistente = AgenteCancelado()
+    await entrar(http, 'perdas')
+    usuario = {'id': await db.fetchval("SELECT id FROM operations.usuarios WHERE login = 'perdas'")}
+    # Direto no serviço: é a tarefa da rota que o servidor cancela quando o cliente sai.
+    with pytest.raises(asyncio.CancelledError):
+        await service.perguntar(app.state, Pergunta(pergunta='Fechei'), usuario)
+    linha = await db.fetchrow(
+        'SELECT erro, sql_executado FROM operations.agente_auditoria WHERE pergunta = $1',
+        'Fechei',
+    )
+    assert linha['erro'] == 'CANCELADA_PELO_CLIENTE' and linha['sql_executado'] == 'SELECT 1'
+
+
+async def test_consulta_que_nao_rodou_nao_tem_numero_de_linhas(portal, db):
+    app, http = portal
+    app.state.assistente = AgenteComSqlRejeitado()
+    resposta = await http.post(
+        URL, json={'pergunta': 'Apaga'}, headers=await entrar(http, 'perdas')
+    )
+    assert resposta.status_code == 200
+    numero = await db.fetchval(
+        'SELECT numero_linhas FROM operations.agente_auditoria WHERE pergunta = $1', 'Apaga'
+    )
+    assert numero is None
