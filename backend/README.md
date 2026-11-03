@@ -257,8 +257,10 @@ do Nginx):
   `ASSISTENTE_PERGUNTAS_POR_MINUTO` perguntas (padrão 20). A pergunta barrada não entra
   na janela.
 - `cota:{usuario}:{AAAA-MM-DD}`: tokens do LLM gastos no dia, também os de perguntas
-  que falharam, até `ASSISTENTE_COTA_TOKENS_DIA` (padrão 500.000). O dia vira à
-  meia-noite de Recife.
+  que falharam, até `ASSISTENTE_COTA_TOKENS_DIA` (padrão 500.000). Antes do LLM, um
+  script confere o saldo e já reserva 20.000 tokens; no fim, a reserva vira o gasto
+  real. Perguntas simultâneas do mesmo usuário não passam com o mesmo saldo, também
+  entre workers. O dia vira à meia-noite de Recife.
 
 Os dois respondem `429` com `Retry-After` (`LIMITE_DE_PERGUNTAS`,
 `COTA_DE_TOKENS_ESGOTADA`). `app.core.limites` fica pronto para os insights, que devem
