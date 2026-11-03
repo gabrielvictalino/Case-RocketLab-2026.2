@@ -75,7 +75,7 @@ não houve perda de clientes.
 ## 3. Quanto foi preço e quanto foi volume
 
 A tarifa de cada mês é explicada com erro médio de 0,2% por um modelo simples:
-**tarifa = tarifa base da classe (bandeira verde) + adicional da bandeira**.
+**tarifa = tarifa base por subgrupo tarifário × competência (líquida da bandeira) + adicional da bandeira**.
 O adicional é o mesmo para todas as classes: amarela +R$ 0,0189/kWh,
 vermelha P1 +R$ 0,0446/kWh, vermelha P2 +R$ 0,0788/kWh (sem tributos). Isso
 permite separar o efeito do reajuste do efeito da bandeira:
