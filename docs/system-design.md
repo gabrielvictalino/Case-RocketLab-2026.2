@@ -202,6 +202,8 @@ Decisões de backend da Visão 360:
 
 ### 4.4 Perdas (F4, F5, D1)
 
+Na fila de inspeção, a seleção é restrita à página; após gerar ordens em lote, a pessoa permanece na fila e pode abrir as ordens abertas. A exportação Excel e a planilha de campo permanecem para a leva 2 (D1).
+
 Duas abas.
 
 **Fila**: UCs da `fila_inspecao` sem ordem ativa, ordenadas por score, com
@@ -367,6 +369,13 @@ texto. A resposta volta com os números citados, e o frontend os exibe ao
 lado. O resultado fica em cache por tela, filtros e versão da carga. Se o
 LLM falhar, o endpoint responde `503` e o frontend mostra "insight
 indisponível".
+
+Cada observação aponta o fato principal (a etiqueta mostrada) e passa pela mesma
+validação de números das respostas do agente (`venergy_ai.numeros`): a que cita um
+número fora dos fatos é descartada, e cada número mantido volta com o valor e o campo
+do fato que o sustenta (valor, comparação, variação ou variação %). A chave do cache
+inclui os fatos, então um número que muda sem nova carga (a taxa de acerto, depois de
+uma inspeção) gera outro insight sem invalidação.
 
 ## 7. Frontend
 
@@ -579,6 +588,19 @@ percentual. O CI usa Python 3.12, a mesma versão da imagem Docker.
 5. **Diferenciais**: testes do backend (D5) → follow-up (D3) → planilha de
    campo (D1) → avaliações (D4) → telas por cargo (D2).
 
+### Semântica comercial da Gold de faturas (#67)
+
+Consumo original é o valor da Silver após normalizações e correções de sinal
+comprovadas. O analítico preserva leituras utilizáveis e estima leituras bloqueadas
+pela mediana da própria UC na fase da GD, com fallback histórico. A troca é
+identificada também pelo mês de retirada do medidor antecessor vinculado.
+Sem doador, a exportação falha com contagem. Volume faturado é o analítico ligado
+à fatura elegível, incluindo estimativas; sem fatura é zero. Faturas sem leitura
+são segregadas. A tarifa base é derivada por subgrupo × competência, líquida dos
+adicionais fixos do case, e não homologada. Método, doadores e cobertura ficam
+nas auxiliares da Gold. O complemento explícito fornece tarifas e proveniência;
+o volume sempre vem do analítico.
+
 ## 13. Pendências do contrato com o time de dados
 
 O portal depende destes pontos para sair da amostra e usar a Gold real (regras formalizadas no contrato `0.3.0-provisional`):
@@ -586,7 +608,7 @@ O portal depende destes pontos para sair da amostra e usar a Gold real (regras f
 | # | Pendência | Bloqueia | Status no Contrato 0.3.0-provisional |
 |---|---|---|---|
 | 1 | **Consumo original e analítico** em colunas separadas em `uc_consumo_faturamento_mensal`, com a marcação de leitura estimada e de troca de medidor e o método de estimativa | Visão 360, volume faturado | **Formalizado (R2)**: colunas separadas, `metodo_consumo` e gate de troca de medidor. |
-| 2 | **Fórmula da decomposição da receita** (volume, reajuste, bandeira, mix), aplicável a qualquer par de períodos sobre `receita_volume_mensal`, incluindo como obter a tarifa base da classe por competência | Receita, insights, agente | **Formalizado (R5)**: fórmula canônica com fator $k_0$, quatro efeitos e fechamento exato em Decimal no README. |
+| 2 | **Fórmula da decomposição da receita** (volume, reajuste, bandeira, mix), aplicável a qualquer par de períodos sobre `receita_volume_mensal`, incluindo como obter a tarifa base derivada por subgrupo tarifário e competência | Receita, insights, agente | **Formalizado (R5)**: fórmula canônica com fator $k_0$, quatro efeitos e fechamento exato em Decimal no README. |
 | 3 | **Grupo de UC** em `receita_volume_mensal` (com GD, irregularidade confirmada, demais), respeitando a data de conexão da GD | Receita | **Formalizado (R3)**: regra temporal GD > IRREGULARIDADE_CONFIRMADA > DEMAIS com `date_trunc` e gate SQL. |
 | 4 | **Regra de DEC/FEC**: sobreposição de interrupções (fórmula simples ou `duracao_efetiva_min`), denominador por alimentador e marcação de evento atípico | Operação, Visão Geral | **Proposta no #98** (`docs/gold/continuidade.md`): CHI com `duracao_efetiva_min`, interrupções com `flag_sobreposicao = false`, denominador fixo com as UCs do alimentador no cadastro e evento atípico marcado pela Silver, sem remoção. Falta o aceite do backend (#57) para a causa principal por linha e o valor `SEM OCORRENCIA`. |
 | 5 | **Fila de inspeção** com score, motivos em formato legível (lista de sinais com valor) e energia a recuperar em kWh e R$, sem UCs com GD | Perdas | **Formalizado (R4)**: gate estrito excluindo UCs de `gd_uc` da fila; `dim_uc.flag_gd` auditado contra `gd_uc`. |
