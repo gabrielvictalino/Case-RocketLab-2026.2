@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date
 
 import pytest
@@ -80,3 +81,22 @@ async def test_pergunta_respondida_com_a_role_ai_read(executor):
     [consulta] = resposta.consultas
     assert 'ai_read.ucs' in consulta.sql_executado
     assert consulta.linhas == [[300]]
+
+
+async def test_intervalo_vira_horas_e_o_nome_diz_isso(executor):
+    resultado = await executor.executar(
+        "SELECT interval '2 days' AS tempo_dias, interval '90 minutes' AS duracao_horas"
+    )
+    # "2 dias" chegaria ao redator como 48 numa coluna de dias.
+    assert resultado.colunas == ['tempo_dias_em_horas', 'duracao_horas']
+    assert resultado.linhas == [[48.0, 1.5]]
+
+
+async def test_teto_de_tempo_cancela_a_consulta_sem_virar_erro_de_sql(executor):
+    # O cancelamento no meio da consulta não pode virar ConsultaFalhou: o agente pediria
+    # outra consulta ao modelo e o 503 por tempo esgotado não viria.
+    with pytest.raises(TimeoutError):
+        async with asyncio.timeout(0.3):
+            await executor.executar('SELECT count(*) FROM generate_series(1, 400000000)')
+    # A conexão do pool continua servindo.
+    assert (await executor.executar('SELECT 1 AS um')).linhas == [[1]]
