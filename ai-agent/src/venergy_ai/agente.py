@@ -207,7 +207,9 @@ def _periodo_padrao(contexto: Contexto) -> Periodo:
     anterior = next((t.periodo for t in reversed(contexto.historico) if t.periodo), None)
     if anterior is not None:
         return Periodo(anterior.inicio, anterior.fim)
-    return contexto.periodo or periodo_padrao(contexto.competencia_mais_recente)
+    return contexto.periodo or periodo_padrao(
+        contexto.competencia_mais_recente, contexto.competencia_inicial
+    )
 
 
 def _periodo(plano: Plano, padrao: Periodo) -> Periodo:
