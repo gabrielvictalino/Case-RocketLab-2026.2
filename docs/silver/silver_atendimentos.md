@@ -37,7 +37,7 @@ Antes de permitir a gravação, o notebook verifica:
 - Se existem protocolos duplicados ou identificadores obrigatórios vazios.
 - Se ocorreram problemas nas conversões de datas e notas de satisfação.
 - Se as datas de abertura e fechamento apresentam inconsistências.
-- Se as notas preenchidas estão na faixa de 0 a 5, permitindo valores nulos.
+- Se as notas preenchidas estão na faixa de 1 a 5, com no máximo uma casa decimal, permitindo valores nulos. É a escala do contrato (`atendimentos.nota`, `numeric(2,1)`, #117). Na base, as notas vão de 1,3 a 5,0.
 - Se os valores de `id_uc` existem na Silver de unidades consumidoras.
 - Se o histórico possui eventos inválidos, sequências duplicadas ou fora de ordem e datas incompatíveis com o período do atendimento.
 - Se a quantidade de eventos foi preservada.
@@ -76,10 +76,8 @@ Se não existir uma versão anterior para restaurar, o notebook informa que ser�
 
 O notebook foi organizado em células de configuração, transformação, validação, diagnóstico e gravação.
 
-As alterações passaram por verificações locais de estrutura e sintaxe Python. Na revisão, Fernando também executou o pipeline localmente com PySpark 4.0 e Delta, verificando as contagens, as validações, a gravação Silver e o bloqueio de dados inválidos. A execução no Databricks ainda está pendente. As alterações posteriores no parâmetro de publicação e na faixa das notas ainda precisam de teste de integração.
+As alterações passaram por verificações locais de estrutura e sintaxe Python. Na revisão, Fernando também executou o pipeline localmente com PySpark 4.0 e Delta, verificando as contagens, as validações, a gravação Silver e o bloqueio de dados inválidos.
 
-Portanto, as transformações, as validações com dados reais, a gravação e o procedimento de rollback ainda precisam ser testados no Databricks.
+Em 02/11, a Silver rodou no Databricks com `confirmar_publicacao=true`. Gravou 318.871 atendimentos, com 636.857 eventos no histórico e 9.566 notas nulas, os mesmos números da execução local.
 
-Antes de definir `confirmar_publicacao=true`, será necessário confirmar que a tabela Silver de unidades consumidoras está disponível, executar as validações e conferir os resultados.
-
-Depois da validação da execução e da gravação, os dados poderão ser utilizados na construção da camada Gold.
+A faixa da nota passou a ser de 1 a 5, com no máximo uma casa decimal (#117). As 309.305 notas preenchidas da base passam na regra. Uma nota 0,5 e outra 4,35, injetadas na Bronze local, foram barradas antes da gravação.
