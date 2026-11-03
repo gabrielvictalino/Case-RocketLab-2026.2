@@ -4,7 +4,7 @@ import json
 import re
 
 from venergy_ai.interface import Consulta, Contexto, PedidoInsight, Troca
-from venergy_ai.semantica import Periodo, descrever_semantica
+from venergy_ai.semantica import Periodo, descrever_periodo_padrao, descrever_semantica
 from venergy_ai.semantica.periodo import rotulo
 
 INSTRUCOES_PLANO = """\
@@ -21,6 +21,8 @@ Transforme a pergunta do usuário em um plano e numa consulta SQL para PostgreSQ
 - Numa comparação entre períodos, traga o valor atual, o anterior e a variação na mesma linha.
 - competencia é DATE no primeiro dia do mês: filtre com
   competencia BETWEEN DATE 'AAAA-MM-01' AND DATE 'AAAA-MM-01'.
+- Em colunas de data ou de data e hora, o último mês entra inteiro: coluna >= DATE
+  'AAAA-MM-01' AND coluna < DATE 'AAAA-MM-01' + INTERVAL '1 month'.
 - Use os recortes da tela como filtros, a não ser que a pergunta peça outra coisa.
 - Em rankings, ordene e limite: ORDER BY ... DESC LIMIT 10, ou o número que a pergunta pedir.
 - Preencha metrica (com a unidade), filtros e o período usado (periodo_inicio e periodo_fim).
@@ -101,8 +103,9 @@ def instrucoes_do_plano(contexto: Contexto, padrao: Periodo) -> str:
     base = None
     if contexto.competencia_inicial is not None:
         base = Periodo(contexto.competencia_inicial, contexto.competencia_mais_recente)
-    semantica = descrever_semantica(padrao, base, contexto.data_referencia)
-    partes = [INSTRUCOES_PLANO, semantica, _contexto(contexto)]
+    semantica = descrever_semantica(base, contexto.data_referencia)
+    periodo = descrever_periodo_padrao(padrao, contexto.competencia_inicial)
+    partes = [INSTRUCOES_PLANO, semantica, periodo, _contexto(contexto)]
     if contexto.historico:
         partes.append(_conversa(contexto.historico))
     return '\n\n'.join(partes)

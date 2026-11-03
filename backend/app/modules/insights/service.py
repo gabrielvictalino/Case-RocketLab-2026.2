@@ -28,6 +28,8 @@ from app.modules.kpis import service as kpis
 from app.modules.receita import service as receita
 
 TTL_S = 24 * 60 * 60
+# Reserva da cota diária por insight: os fatos e as instruções somam uns 2 mil tokens.
+RESERVA_TOKENS = 5_000
 
 logger = logging.getLogger('venergy.insights')
 
@@ -61,10 +63,12 @@ async def insight(state, tela, periodo, comparacao, recorte, usuario) -> Insight
         return guardado
     # Só o que vai ao modelo conta no limite e na cota: um insight do cache não gasta.
     settings = state.settings
-    await limites.conferir_cota(state.redis, usuario['id'], settings.assistente_cota_tokens_dia)
-    await limites.consumir(state.redis, usuario['id'], 'insights', settings.insights_por_minuto)
+    reserva = await limites.reservar_cota(
+        state.redis, usuario['id'], settings.assistente_cota_tokens_dia, RESERVA_TOKENS
+    )
     uso = RunUsage()
     try:
+        await limites.consumir(state.redis, usuario['id'], 'insights', settings.insights_por_minuto)
         async with asyncio.timeout(settings.assistente_timeout_s) as limite:
             gerado = await state.redator.redigir(pedido, uso)
     except TimeoutError:
@@ -83,9 +87,7 @@ async def insight(state, tela, periodo, comparacao, recorte, usuario) -> Insight
             503, 'Nenhuma observação do modelo passou na validação', 'INSIGHT_INDISPONIVEL'
         ) from None
     finally:
-        await limites.gastar_tokens(
-            state.redis, usuario['id'], uso.input_tokens + uso.output_tokens
-        )
+        await limites.acertar_cota(state.redis, reserva, uso.input_tokens + uso.output_tokens)
     if gerado.descartadas:
         logger.info('tela=%s observações descartadas: %s', tela, '; '.join(gerado.descartadas))
     resposta = Insight(

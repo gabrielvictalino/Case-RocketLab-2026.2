@@ -1,3 +1,4 @@
+import asyncio
 from uuid import uuid4
 
 import pytest
@@ -96,11 +97,40 @@ async def test_cota_vira_a_meia_noite_de_recife(redis):
     usuario = uuid4()
     # 02:59 UTC de 3/11 ainda é 2/11 em Recife; 03:00 UTC já é 3/11.
     antes, depois = 1793674740.0, 1793674800.0
-    await limites.gastar_tokens(redis, usuario, 100, agora=antes)
+    await limites.reservar_cota(redis, usuario, 100, 100, agora=antes)
     with pytest.raises(APIError) as barrada:
-        await limites.conferir_cota(redis, usuario, 100, agora=antes)
+        await limites.reservar_cota(redis, usuario, 100, 1, agora=antes)
     assert barrada.value.headers == {'Retry-After': '60'}
-    await limites.conferir_cota(redis, usuario, 100, agora=depois)
+    await limites.reservar_cota(redis, usuario, 100, 1, agora=depois)
+
+
+async def test_perguntas_ao_mesmo_tempo_nao_passam_com_o_mesmo_saldo(redis):
+    # 90 de 100 tokens gastos e duas perguntas de 10 ao mesmo tempo: em sequência, a
+    # segunda seria barrada. A reserva faz a simultânea ver o saldo da primeira.
+    usuario, agora = uuid4(), 1793674800.0
+    gasto = await limites.reservar_cota(redis, usuario, 100, 90, agora=agora)
+    resultados = await asyncio.gather(
+        *(limites.reservar_cota(redis, usuario, 100, 10, agora=agora) for _ in range(2)),
+        return_exceptions=True,
+    )
+    reservas = [r for r in resultados if isinstance(r, limites.Reserva)]
+    barradas = [r for r in resultados if isinstance(r, APIError)]
+    assert len(reservas) == len(barradas) == 1
+    assert barradas[0].code == 'COTA_DE_TOKENS_ESGOTADA'
+    # No fim, cada reserva vira o gasto real.
+    await limites.acertar_cota(redis, reservas[0], 12)
+    await limites.acertar_cota(redis, gasto, 90)
+    assert int(await redis.get(gasto.chave)) == 102
+
+
+async def test_reserva_volta_quando_a_pergunta_nem_chega_ao_llm(portal_limitado, redis):
+    app, http = portal_limitado
+    usar_modelo(app)
+    corpo = {'pergunta': 'E agora?', 'conversa_id': str(uuid4())}
+    resposta = await http.post(URL, json=corpo, headers=await entrar(http, 'perdas'))
+    assert resposta.status_code == 404
+    [chave] = [c async for c in redis.scan_iter('cota:*')]
+    assert int(await redis.get(chave)) == 0
 
 
 async def test_tokens_de_uma_pergunta_que_falhou_tambem_contam(portal_limitado, redis):

@@ -83,6 +83,8 @@ const NAO_SEI: RespostaPergunta = {
 type Roteiro = (corpo: Record<string, unknown>) => Response | Promise<Response>
 
 let roteiro: Roteiro
+// Quando definida, /meta/carga espera esta promessa: a carga ainda não chegou.
+let cargaAdiada: Promise<Response> | null = null
 const perguntasEnviadas: Record<string, unknown>[] = []
 
 function json(corpo: unknown, status = 200) {
@@ -101,6 +103,7 @@ beforeEach(() => {
   )
   perguntasEnviadas.length = 0
   roteiro = () => json(RESPOSTA)
+  cargaAdiada = null
   vi.stubGlobal(
     'fetch',
     vi.fn(async (req: Request) => {
@@ -114,6 +117,9 @@ beforeEach(() => {
       }
       if (req.url.includes('/api/v1/ordens-inspecao')) {
         return json({ items: [], total: 0, page: 1, size: 25 })
+      }
+      if (req.url.includes('/api/v1/meta/carga') && cargaAdiada) {
+        return cargaAdiada
       }
       return json(CARGA)
     }),
@@ -171,6 +177,37 @@ describe('PainelAgente', () => {
         comparacao: '2024-07..2025-06',
         recortes: { municipio: 'Recife', classe: 'Residencial' },
       },
+    })
+  })
+
+  it('só envia a pergunta depois que o período da URL é resolvido', async () => {
+    let liberarCarga: () => void = () => {}
+    cargaAdiada = new Promise<Response>((resolve) => (liberarCarga = () => resolve(json(CARGA))))
+    renderizarApp('/receita?periodo=2025-01..2025-06&comparacao=2024-01..2024-06')
+    const painel = await abrirPainel()
+    const campo = within(painel).getByLabelText('Pergunte sobre os dados')
+    fireEvent.change(campo, { target: { value: 'Qual a receita?' } })
+
+    // Nem o Enter, nem o botão, nem as sugestões mandam a pergunta sem o período.
+    fireEvent.keyDown(campo, { key: 'Enter' })
+    expect(within(painel).getByRole('button', { name: 'Enviar pergunta' })).toBeDisabled()
+    const sugestao = within(painel).getByRole('button', {
+      name: 'Quais os 5 alimentadores com o pior DEC no último ano?',
+    })
+    expect(sugestao).toBeDisabled()
+    fireEvent.click(sugestao)
+    expect(within(painel).getByRole('status')).toHaveTextContent('Carregando o período da tela')
+    expect(perguntasEnviadas).toHaveLength(0)
+
+    liberarCarga()
+    await waitFor(() =>
+      expect(within(painel).getByRole('button', { name: 'Enviar pergunta' })).toBeEnabled(),
+    )
+    fireEvent.keyDown(campo, { key: 'Enter' })
+    await waitFor(() => expect(perguntasEnviadas).toHaveLength(1))
+    expect(perguntasEnviadas[0]?.contexto).toMatchObject({
+      periodo: '2025-01..2025-06',
+      comparacao: '2024-01..2024-06',
     })
   })
 

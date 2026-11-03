@@ -29,7 +29,7 @@ export interface PainelAgenteProps {
 export function PainelAgente({ aberto, aoFechar, conversa }: PainelAgenteProps) {
   const location = useLocation()
   const [searchParams] = useSearchParams()
-  const { periodo, comparacao, parametros } = usePeriodo()
+  const { periodo, comparacao, parametros, carregando } = usePeriodo()
   const [texto, setTexto] = useState('')
   const fimDaConversa = useRef<HTMLDivElement>(null)
   const { trocas, aguardando, perguntar, novaConversa } = conversa
@@ -43,6 +43,9 @@ export function PainelAgente({ aberto, aoFechar, conversa }: PainelAgenteProps) 
   }
 
   const contexto = contextoDaTela(location.pathname, searchParams, parametros)
+  // Antes de /meta/carga responder, o período da URL ainda não foi resolvido: a pergunta
+  // sairia sem ele, e o backend responderia sobre os últimos 12 meses.
+  const semPeriodo = parametros === null
   const nomeTela = contexto.tela ? ROTULO_TELA[contexto.tela] : 'Portal'
   const rotuloPeriodo = periodo ? formatarIntervaloPeriodo(periodo) : null
   const rotuloComparacao = comparacao ? formatarIntervaloPeriodo(comparacao) : null
@@ -50,11 +53,13 @@ export function PainelAgente({ aberto, aoFechar, conversa }: PainelAgenteProps) 
     ? rotuloComparacao
       ? `${rotuloPeriodo} × ${rotuloComparacao}`
       : rotuloPeriodo
-    : 'período atual'
+    : carregando
+      ? 'carregando o período'
+      : 'período indisponível'
   const recortes = rotulosDosRecortes(contexto)
 
   function enviar(pergunta: string) {
-    if (aguardando || !pergunta.trim()) {
+    if (aguardando || semPeriodo || !pergunta.trim()) {
       return
     }
     perguntar(pergunta, contexto)
@@ -125,6 +130,7 @@ export function PainelAgente({ aberto, aoFechar, conversa }: PainelAgenteProps) 
                   key={sugestao}
                   type="button"
                   className="ve-btn ve-btn-sm"
+                  disabled={semPeriodo}
                   onClick={() => enviar(sugestao)}
                 >
                   {sugestao}
@@ -151,6 +157,13 @@ export function PainelAgente({ aberto, aoFechar, conversa }: PainelAgenteProps) 
         <div ref={fimDaConversa} />
       </div>
 
+      {semPeriodo && (
+        <p className="ve-muted ve-agent-aviso" role="status">
+          {carregando
+            ? 'Carregando o período da tela. A pergunta sai com ele.'
+            : 'O período da tela não carregou. Recarregue a página para perguntar.'}
+        </p>
+      )}
       <form
         className="ve-agent-form"
         onSubmit={(evento) => {
@@ -169,7 +182,7 @@ export function PainelAgente({ aberto, aoFechar, conversa }: PainelAgenteProps) 
         />
         <button
           type="submit"
-          disabled={aguardando || !texto.trim()}
+          disabled={aguardando || semPeriodo || !texto.trim()}
           className="ve-btn ve-btn-primary"
           aria-label="Enviar pergunta"
         >
