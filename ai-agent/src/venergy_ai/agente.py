@@ -266,15 +266,26 @@ def conferir_numeros(
     Valem as linhas que o redator viu, as contagens de linhas (menos o total no corte da
     guarda), os anos da pergunta e, com período, o número de meses e os anos dele. Os
     demais números da pergunta só valem como limiar ("acima de 30%")."""
+    return numeros_sem_lastro(
+        texto,
+        consulta.linhas,
+        numeros_permitidos(pergunta, consulta, periodo, contexto),
+        numeros_citados(pergunta),
+        consulta.colunas,
+    )
+
+
+def numeros_permitidos(
+    pergunta: str, consulta: Consulta, periodo: Periodo | None, contexto: Contexto
+) -> list[int]:
+    """Números que o texto pode citar em qualquer lugar, sem estar nas linhas."""
     permitidos = [len(consulta.linhas), *_anos_citados(pergunta)]
     # No corte da guarda, o total é só o limite: "há 1.000 UCs" não se sustenta.
     if consulta.total_linhas < LIMITE_MAXIMO:
         permitidos.append(consulta.total_linhas)
     if periodo is not None:
         permitidos += [periodo.meses, *_anos(periodo, _periodo_padrao(contexto), contexto)]
-    return numeros_sem_lastro(
-        texto, consulta.linhas, permitidos, numeros_citados(pergunta), consulta.colunas
-    )
+    return permitidos
 
 
 def _anos(periodo: Periodo, padrao: Periodo, contexto: Contexto) -> set[int]:

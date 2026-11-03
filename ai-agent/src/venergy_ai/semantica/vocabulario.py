@@ -44,7 +44,8 @@ VOCABULARIO = (
     ),
     Termo(
         ('inadimplência',),
-        'Indicador do portal: receita em aberto ÷ receita do período, sem olhar o vencimento. '
+        'Indicador do portal: receita em aberto ÷ receita do período × 100, em %, sem olhar o '
+        'vencimento. '
         'Para o valor atrasado de fato, use conta atrasada.',
         ('receita_volume_mensal.receita', 'receita_volume_mensal.receita_arrecadada'),
     ),
