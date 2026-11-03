@@ -150,6 +150,15 @@ async def validate(db, specs, manifest):
             'metodo_consumo LEITURA_UTILIZAVEL exige consumo analítico igual ao original (R2)'
         )
 
+    invalid_volume = await db.fetchval("""SELECT EXISTS(
+        SELECT 1 FROM analytics_staging.uc_consumo_faturamento_mensal
+        WHERE id_fatura IS NOT NULL AND volume_faturado_kwh <> consumo_kwh_analitico)""")
+    if invalid_volume:
+        raise ContractError(
+            'uc_consumo_faturamento_mensal: '
+            'volume com fatura deve ser igual ao consumo analítico (R2)'
+        )
+
     # Gate R3: Grupo de UC temporal segundo prioridade GD > IRREGULARIDADE > DEMAIS
     invalid_group = await db.fetchval("""SELECT EXISTS(
         WITH primeira_irregularidade AS (
