@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Search } from 'lucide-react'
 import { useNavigate, useParams, useSearchParams } from 'react-router'
-import { EstadoIndisponivel } from '@/components/Estados'
+import { EstadoErro, EstadoVazio, Esqueleto } from '@/components/Estados'
 import { Etiqueta } from '@/components/Etiqueta'
 import { Painel } from '@/components/Painel'
 import { adaptarConsumoUC } from '@/features/unidade-consumidora/adaptarConsumoUC'
@@ -89,7 +89,7 @@ function ConteudoUnidadeConsumidora({ ucParametro, rotaComId }: { ucParametro: s
         <form
           onSubmit={aoSubmeterBusca}
           className={`ve-ucsearch ${erroValidacao ? 've-ucsearch-error' : ''}`.trim()}
-          style={{ minWidth: '320px' }}
+          style={{ width: '100%', maxWidth: '380px', minWidth: 0 }}
           noValidate
         >
           <label htmlFor="campo-numero-uc" className="ve-select-label">
@@ -139,15 +139,15 @@ function ConteudoUnidadeConsumidora({ ucParametro, rotaComId }: { ucParametro: s
         acoes={<Etiqueta>Últimos 12 meses da UC</Etiqueta>}
       >
         {!ucNormalizadaUrl ? (
-          <EstadoIndisponivel compacto />
+          <EstadoVazio titulo={ucParametro ? "Número de UC inválido" : "Busque uma unidade consumidora"} mensagem={ucParametro ? "Confira o número informado. Utilize UC seguido de 6 dígitos ou apenas os 6 dígitos." : "Informe o número da UC para visualizar seus dados."} compacto />
         ) : consultaUC.isPending ? (
-          <p role="status">Carregando dados da unidade consumidora...</p>
+          <Esqueleto linhas={4} />
         ) : consultaUC.isError ? (
-          <p role="alert">
-            {consultaUC.error.status === 404
-              ? 'Unidade consumidora não encontrada.'
-              : 'Não foi possível carregar os dados da unidade consumidora.'}
-          </p>
+          consultaUC.error.status === 404 ? (
+            <EstadoVazio titulo="Unidade consumidora não encontrada" mensagem="Confira o número informado e tente novamente." compacto />
+          ) : (
+            <EstadoErro mensagem="Não foi possível consultar esta unidade consumidora. Verifique a conexão e tente novamente." compacto aoTentarNovamente={() => { void consultaUC.refetch() }} />
+          )
         ) : (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-3">
@@ -167,7 +167,7 @@ function ConteudoUnidadeConsumidora({ ucParametro, rotaComId }: { ucParametro: s
                 ['Bairro', consultaUC.data.cabecalho.bairro],
                 ['Alimentador', consultaUC.data.cabecalho.alimentador],
                 ['Medidor atual', consultaUC.data.cabecalho.medidor_atual?.id_medidor],
-                ['Conexão GD', consultaUC.data.cabecalho.gd?.data_conexao],
+                ['Conexão GD', consultaUC.data.cabecalho.gd?.data_conexao?.slice(0, 10).split('-').reverse().join('/')],
               ].map(([rotulo, valor]) => (
                 <div key={rotulo}>
                   <dt className="text-xs text-muted-foreground">{rotulo}</dt>
@@ -179,14 +179,7 @@ function ConteudoUnidadeConsumidora({ ucParametro, rotaComId }: { ucParametro: s
         )}
       </Painel>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1.45fr) minmax(0, 1fr)',
-          gap: '24px',
-          alignItems: 'stretch',
-        }}
-      >
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
         <Painel
           titulo="Consumo — últimos 12 meses"
           subtitulo="kWh por competência · cinza = mesmos meses do ano anterior"
@@ -195,7 +188,7 @@ function ConteudoUnidadeConsumidora({ ucParametro, rotaComId }: { ucParametro: s
           {consultaUC.isSuccess ? (
           <GraficoConsumo dados={adaptarConsumoUC(consultaUC.data.consumo)} />
         ) : (
-          <EstadoIndisponivel compacto />
+          consultaUC.isLoading ? <Esqueleto linhas={3} /> : consultaUC.isError ? <EstadoVazio titulo="Consulta não disponível" mensagem="Os dados desta UC não puderam ser exibidos." compacto /> : <EstadoVazio titulo="Aguardando consulta" mensagem="Informe uma UC para visualizar esta seção." compacto />
         )}
         </Painel>
 
@@ -211,19 +204,12 @@ function ConteudoUnidadeConsumidora({ ucParametro, rotaComId }: { ucParametro: s
               semCartao
             />
           ) : (
-            <EstadoIndisponivel compacto />
+            consultaUC.isLoading ? <Esqueleto linhas={3} /> : consultaUC.isError ? <EstadoVazio titulo="Consulta não disponível" mensagem="Os dados desta UC não puderam ser exibidos." compacto /> : <EstadoVazio titulo="Aguardando consulta" mensagem="Informe uma UC para visualizar esta seção." compacto />
           )}
         </Painel>
       </div>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-          gap: '24px',
-          alignItems: 'stretch',
-        }}
-      >
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
         <Painel
           titulo="Faturas em aberto"
           subtitulo="Competência, vencimento, valor e atraso"
@@ -235,13 +221,13 @@ function ConteudoUnidadeConsumidora({ ucParametro, rotaComId }: { ucParametro: s
               dados={consultaUC.data.faturas_abertas.map((fatura) => ({
                 id: fatura.id_fatura,
                 competencia: fatura.competencia.slice(0, 7),
-                vencimento: fatura.data_vencimento,
+                vencimento: fatura.data_vencimento.slice(0, 10).split('-').reverse().join('/'),
                 valor: Number(fatura.valor_total),
                 diasAtraso: fatura.dias_atraso ?? 0,
               }))}
             />
           ) : (
-            <EstadoIndisponivel compacto />
+            consultaUC.isLoading ? <Esqueleto linhas={3} /> : consultaUC.isError ? <EstadoVazio titulo="Consulta não disponível" mensagem="Os dados desta UC não puderam ser exibidos." compacto /> : <EstadoVazio titulo="Aguardando consulta" mensagem="Informe uma UC para visualizar esta seção." compacto />
           )}
         </Painel>
 
@@ -261,21 +247,14 @@ function ConteudoUnidadeConsumidora({ ucParametro, rotaComId }: { ucParametro: s
               }))}
             />
           ) : (
-            <EstadoIndisponivel compacto />
+            consultaUC.isLoading ? <Esqueleto linhas={3} /> : consultaUC.isError ? <EstadoVazio titulo="Consulta não disponível" mensagem="Os dados desta UC não puderam ser exibidos." compacto /> : <EstadoVazio titulo="Aguardando consulta" mensagem="Informe uma UC para visualizar esta seção." compacto />
           )}
         </Painel>
       </div>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1.25fr) minmax(0, 1fr)',
-          gap: '24px',
-          alignItems: 'stretch',
-        }}
-      >
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
         <Painel
-          titulo="Chamados"
+          titulo="Atendimentos"
           subtitulo="Últimos 12 meses · mais recente primeiro"
           preencher
         >
@@ -297,7 +276,7 @@ function ConteudoUnidadeConsumidora({ ucParametro, rotaComId }: { ucParametro: s
               }))}
             />
           ) : (
-            <EstadoIndisponivel compacto />
+            consultaUC.isLoading ? <Esqueleto linhas={3} /> : consultaUC.isError ? <EstadoVazio titulo="Consulta não disponível" mensagem="Os dados desta UC não puderam ser exibidos." compacto /> : <EstadoVazio titulo="Aguardando consulta" mensagem="Informe uma UC para visualizar esta seção." compacto />
           )}
         </Painel>
 
@@ -311,7 +290,7 @@ function ConteudoUnidadeConsumidora({ ucParametro, rotaComId }: { ucParametro: s
               semCartao
               dados={consultaUC.data.inspecoes.map((inspecao) => ({
                 id: inspecao.id_inspecao,
-                data: new Date(inspecao.data).toLocaleDateString('pt-BR'),
+                data: inspecao.data.slice(0, 10).split('-').reverse().join('/'),
                 resultado: inspecao.resultado,
                 observacao: inspecao.tipo_irregularidade ?? inspecao.origem,
               }))}
@@ -325,7 +304,7 @@ function ConteudoUnidadeConsumidora({ ucParametro, rotaComId }: { ucParametro: s
               }
             />
           ) : (
-            <EstadoIndisponivel compacto />
+            consultaUC.isLoading ? <Esqueleto linhas={3} /> : consultaUC.isError ? <EstadoVazio titulo="Consulta não disponível" mensagem="Os dados desta UC não puderam ser exibidos." compacto /> : <EstadoVazio titulo="Aguardando consulta" mensagem="Informe uma UC para visualizar esta seção." compacto />
           )}
         </Painel>
       </div>

@@ -4,10 +4,7 @@ import {
   AlertCircle,
   ChevronDown,
   ChevronUp,
-  ClipboardList,
   Copy,
-  FileText,
-  Zap,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -57,26 +54,6 @@ export type InspecaoUC = {
   data: string
   resultado: string
   observacao: string
-}
-
-export type DadosUnidadeConsumidora = {
-  identificador: string
-  titular: string
-  documentoMascarado: string
-  classe: string
-  endereco: string
-  alimentador: string
-  medidor: string
-  situacao: string
-  geracaoDistribuida: string | null
-  consumo: ConsumoMensal[]
-  faturas: FaturaUC[]
-  interrupcoes: InterrupcaoUC[]
-  chamados: ChamadoUC[]
-  inspecoes: InspecaoUC[]
-  ordemAtiva: string | null
-  motivoSuspeita: string | null
-  explicacaoConta: string | null
 }
 
 function formatarMoeda(valor: number) {
@@ -177,7 +154,7 @@ export function GraficoConsumo({ dados }: { dados: ConsumoMensal[] }) {
             title={[
               item.competencia,
               item.consumoKwh === null ? 'Sem leitura registrada' : `${item.consumoKwh} kWh`,
-              item.estimado ? 'consumo estimado pela média da UC' : '',
+              item.estimado ? 'Leitura feita sem acesso ao medidor, com consumo estimado pela distribuidora' : '',
               item.trocaMedidor ? 'Troca de medidor' : '',
             ].filter(Boolean).join(' · ')}
           >
@@ -210,7 +187,7 @@ export function GraficoConsumo({ dados }: { dados: ConsumoMensal[] }) {
         {dados.map((item) => (
           <tr key={item.competencia}>
             <td className="px-3 py-3">{item.competencia}</td>
-            <td className="px-3 py-3">{item.consumoKwh === null ? "?" : `${item.consumoKwh} kWh`}</td>
+            <td className="px-3 py-3">{item.consumoKwh === null ? '—' : `${item.consumoKwh} kWh`}</td>
             <td className="px-3 py-3">
               {item.consumoAnoAnteriorKwh === null
                 ? '—'
@@ -316,7 +293,7 @@ export function Faturas({
       {dados.length === 0 ? (
         <SemDados mensagem="Nenhuma fatura em aberto." />
       ) : (
-        <Tabela colunas={['Compet?ncia', 'Vencimento', 'Valor', 'Atraso']}>
+        <Tabela colunas={['Competência', 'Vencimento', 'Valor', 'Atraso']}>
           {dados.map((fatura) => (
             <tr key={fatura.id}>
               <td className="px-3 py-3">{fatura.competencia}</td>
@@ -356,9 +333,9 @@ export function Interrupcoes({
   const conteudo = (
     <div className="space-y-4">
       {dados.length === 0 ? (
-        <SemDados mensagem="Nenhuma interrupcao registrada." />
+        <SemDados mensagem="Nenhuma interrupção registrada." />
       ) : (
-        <Tabela colunas={['Data', 'Duracao', 'Causa']}>
+        <Tabela colunas={['Data', 'Duração', 'Causa']}>
           {dados.map((interrupcao) => (
             <tr key={interrupcao.id}>
               <td className="px-3 py-3">{interrupcao.data}</td>
@@ -375,8 +352,8 @@ export function Interrupcoes({
 
   return (
     <Cartao
-      titulo="Interrupcoes"
-      subtitulo="Historico de interrupcoes da unidade consumidora"
+      titulo="Interrupções"
+      subtitulo="Histórico de interrupções da unidade consumidora"
     >
       {conteudo}
     </Cartao>
@@ -398,7 +375,7 @@ export function Chamados({ dados, semCartao = false }: { dados: ChamadoUC[]; sem
     <div className="space-y-4">
 
       {dados.length === 0 ? (
-        <SemDados mensagem="Histórico de chamados ainda não disponível." />
+        <SemDados mensagem="Histórico de atendimentos ainda não disponível." />
       ) : (
         <div className="space-y-3">
           {dados.map((chamado) => {
@@ -420,7 +397,7 @@ export function Chamados({ dados, semCartao = false }: { dados: ChamadoUC[]; sem
                     <span className="block text-xs text-muted-foreground">
                       {chamado.status}
                       {chamado.avaliacao !== null
-                        ? ` · Avaliação ${chamado.avaliacao}/5`
+                        ? ` · Avaliação ${Number(chamado.avaliacao).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}/5`
                         : ''}
                     </span>
                   </span>
@@ -463,8 +440,8 @@ export function Chamados({ dados, semCartao = false }: { dados: ChamadoUC[]; sem
 
   return (
     <Cartao
-      titulo="Chamados"
-      subtitulo={`${dados.length} chamado(s) ? hist?rico de atendimento`}
+      titulo="Atendimentos"
+      subtitulo={`${dados.length} atendimento(s) · histórico de atendimento`}
     >
       {conteudo}
     </Cartao>
@@ -515,84 +492,8 @@ export function Inspecoes({
   if (semCartao) return conteudo
 
   return (
-    <Cartao titulo="Inspe??es" subtitulo="Hist?rico de inspe??es e ordens">
+    <Cartao titulo="Inspeções" subtitulo="Histórico de inspeções e ordens">
       {conteudo}
     </Cartao>
-  )
-}
-
-export function SecoesUnidadeConsumidora({
-  dados,
-}: {
-  dados: DadosUnidadeConsumidora
-}) {
-  const identificacao = [
-    ['CPF/CNPJ', dados.documentoMascarado],
-    ['Classe', dados.classe],
-    ['Endereço', dados.endereco],
-    ['Alimentador', dados.alimentador],
-    ['Medidor atual', dados.medidor],
-  ]
-
-  return (
-    <div className="space-y-6">
-      <section className="rounded-lg border bg-card p-5">
-        <div className="flex flex-wrap items-center gap-3">
-          <h2 className="text-xl font-semibold">{dados.identificador}</h2>
-          <span className="rounded-md bg-secondary px-2 py-1 text-xs">
-            {dados.situacao}
-          </span>
-          {dados.geracaoDistribuida && (
-            <span className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs">
-              <Zap className="size-3" />
-              {dados.geracaoDistribuida}
-            </span>
-          )}
-        </div>
-
-        <p className="mt-2 font-medium">{dados.titular}</p>
-
-        <dl className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          {identificacao.map(([rotulo, valor]) => (
-            <div key={rotulo}>
-              <dt className="text-xs text-muted-foreground">{rotulo}</dt>
-              <dd className="mt-1 text-sm font-medium">{valor}</dd>
-            </div>
-          ))}
-        </dl>
-      </section>
-
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,1fr)]">
-        <Cartao
-          titulo="Consumo — últimos 12 meses"
-          subtitulo="kWh por competência · comparação com o mesmo mês do ano anterior"
-        >
-          <GraficoConsumo dados={dados.consumo} />
-        </Cartao>
-
-        <ExplicacaoConta texto={dados.explicacaoConta} />
-      </div>
-
-      <div className="grid gap-5 xl:grid-cols-2">
-        <Faturas dados={dados.faturas} />
-        <Interrupcoes dados={dados.interrupcoes} />
-      </div>
-
-      <div className="grid gap-5 xl:grid-cols-2">
-        <Chamados dados={dados.chamados} />
-        <Inspecoes
-          dados={dados.inspecoes}
-          ordemAtiva={dados.ordemAtiva}
-          motivoSuspeita={dados.motivoSuspeita}
-        />
-      </div>
-
-      <p className="flex items-center gap-2 text-xs text-muted-foreground">
-        <FileText className="size-4" />
-        Dados da unidade consumidora
-        <ClipboardList className="size-4" />
-        Histórico operacional
-      </p>
-    </div>
   )
 }

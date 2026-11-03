@@ -138,6 +138,55 @@ function renderizarRota(caminhoInicial: string) {
   }
 }
 
+describe('criterios da tela UC', () => {
+  it('abre diretamente uma UC pela URL e apresenta seus dados', async () => {
+    renderizarRota('/ucs/UC100123')
+
+    expect(await screen.findByText('Titular de teste')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Número da UC' })).toHaveValue('UC100123')
+  })
+
+  it('nao apresenta carregamento permanente sem UC selecionada', async () => {
+    renderizarRota('/unidade-consumidora')
+
+    expect(await screen.findByText('Busque uma unidade consumidora')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Carregando dados')).not.toBeInTheDocument()
+  })
+
+  it('mostra mensagem especifica para UC invalida na URL', async () => {
+    renderizarRota('/ucs/INVALIDA')
+
+    expect(await screen.findByText('Número de UC inválido')).toBeInTheDocument()
+  })
+
+  it('diferencia UC inexistente de falha do servidor', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (req: Request | string | URL) => {
+      const url = typeof req === 'string' ? req : req instanceof URL ? req.href : req.url
+      return new Response(JSON.stringify(url.includes('/api/v1/ucs/') ? { detail: 'UC não encontrada' } : CARGA_AMOSTRA), {
+        status: url.includes('/api/v1/ucs/') ? 404 : 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }))
+
+    renderizarRota('/ucs/UC100123')
+
+    expect(await screen.findByText('Unidade consumidora não encontrada')).toBeInTheDocument()
+  })
+
+  it('oferece nova tentativa quando o servidor falha', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (req: Request | string | URL) => {
+      const url = typeof req === 'string' ? req : req instanceof URL ? req.href : req.url
+      return new Response(JSON.stringify(url.includes('/api/v1/ucs/') ? { detail: 'Falha temporária' } : CARGA_AMOSTRA), {
+        status: url.includes('/api/v1/ucs/') ? 500 : 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }))
+
+    renderizarRota('/ucs/UC100123')
+
+    expect(await screen.findByRole('button', { name: 'Tentar novamente' })).toBeInTheDocument()
+  })
+})
 describe('rotas do portal', () => {
 
   it('sincroniza a busca ao voltar e avancar entre unidades consumidoras', async () => {
