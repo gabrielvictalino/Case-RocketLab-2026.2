@@ -67,11 +67,11 @@ A Silver aceita uma lacuna entre a retirada do anterior e a instalação do novo
 Cada linha da `tb_medidores_historico` grava `versao_regras_gold` (`GOLD_MEDIDORES_V1`), como as tabelas `tb_` da Gold de GD. A tabela do contrato fica só com as 5 colunas do YAML.
 
 ### 3.7. Contrato lido do YAML
-As colunas (nome, tipo e ordem), a chave, as colunas obrigatórias e o padrão do `id_uc` vêm de `contracts/tabelas/medidores_historico.yaml`, lido a cada execução (widget `contrato_yaml`, relativo à pasta do notebook no Git folder). Os tipos do YAML viram tipos do Spark (`text` → `string`, `numeric(p,s)` → `decimal(p,s)`). Um tipo sem equivalente para a carga, e uma coluna sem `type` ou `nullable` (obrigatórios pela regra R1 do contrato) também. O `pattern` do `id_uc` é opcional, como no importador: sem ele, a regra do padrão não se aplica.
+As colunas (nome, tipo e ordem), a chave, as colunas obrigatórias e o padrão do `id_uc` vêm de `contracts/tabelas/medidores_historico.yaml`, lido a cada execução (widget `contrato_yaml`, relativo à pasta do notebook no Git folder). Os tipos do YAML viram tipos do Spark (`text` → `string`, `numeric(p,s)` → `decimal(p,s)`). Também param a carga um tipo sem equivalente e uma coluna sem `type` ou `nullable` (obrigatórios pela regra R1 do contrato), inclusive uma coluna declarada sem nada embaixo. O `pattern` do `id_uc` é opcional, como no importador: sem ele, a regra do padrão não se aplica.
 
 Quando o YAML mudar (#111), a carga para em vez de passar contra uma cópia antiga no código:
 * um tipo ou uma ordem diferente faz falhar a regra de colunas;
-* uma coluna que a Gold não gera para a montagem, com a lista das colunas que faltam.
+* uma coluna que a Gold não gera interrompe a montagem, com a lista das colunas que faltam.
 
 Uma coluna da `tb_` que entrar no contrato passa a sair também na tabela do contrato, na posição do YAML.
 
