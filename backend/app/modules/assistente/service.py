@@ -12,14 +12,21 @@ from venergy_ai.interface import (
     Contexto,
     ProvedorIndisponivel,
     RespostaAgente,
+    Troca,
 )
 from venergy_ai.modelo import criar_modelo
 from venergy_ai.semantica import Periodo
 
 from app.core.errors import APIError
 from app.core.periodos import validar_periodos
-from app.modules.assistente import repository
-from app.modules.assistente.schemas import TELAS, Auditoria, Pergunta, RespostaPergunta
+from app.modules.assistente import conversas, repository
+from app.modules.assistente.schemas import (
+    TELAS,
+    Auditoria,
+    Conversa,
+    Pergunta,
+    RespostaPergunta,
+)
 from app.modules.meta import repository as meta
 
 
@@ -47,7 +54,10 @@ async def perguntar(state, body: Pergunta, usuario) -> RespostaPergunta:
                 raise APIError(404, 'Conversa não encontrada', 'CONVERSA_NAO_ENCONTRADA')
     if carga is None:
         raise APIError(503, 'Nenhuma carga publicada; execute o importador', 'BASE_INDISPONIVEL')
-    contexto = _contexto(body, carga)
+    historico = []
+    if body.conversa_id is not None:
+        historico = await conversas.ler(state.redis, body.conversa_id, usuario['id'])
+    contexto = _contexto(body, carga, historico)
     registro = dict(
         id=uuid4(),
         conversa_id=body.conversa_id or uuid4(),
@@ -88,9 +98,20 @@ async def perguntar(state, body: Pergunta, usuario) -> RespostaPergunta:
         raise
     async with state.portal_sessions() as db, db.begin():
         await repository.registrar(db, registro | _da_resposta(resposta))
+    await conversas.registrar(
+        state.redis, registro['conversa_id'], usuario['id'], historico, body.pergunta, resposta
+    )
     return RespostaPergunta(
         **resposta.model_dump(), id_resposta=registro['id'], conversa_id=registro['conversa_id']
     )
+
+
+async def conversa(db, conversa_id, usuario) -> Conversa:
+    """O histórico permanente, lido da auditoria. Só a dona da conversa vê."""
+    linhas = await repository.mensagens(db, conversa_id)
+    if not linhas or linhas[0]['usuario_id'] != usuario['id']:
+        raise APIError(404, 'Conversa não encontrada', 'CONVERSA_NAO_ENCONTRADA')
+    return Conversa(conversa_id=conversa_id, mensagens=[dict(linha) for linha in linhas])
 
 
 async def auditoria(db, id_resposta, usuario) -> Auditoria:
@@ -104,7 +125,7 @@ async def auditoria(db, id_resposta, usuario) -> Auditoria:
     return Auditoria(**linha)
 
 
-def _contexto(body: Pergunta, carga) -> Contexto:
+def _contexto(body: Pergunta, carga, historico: list[Troca]) -> Contexto:
     pedido = body.contexto
     periodo = comparacao = None
     if pedido.periodo is not None:
@@ -124,6 +145,7 @@ def _contexto(body: Pergunta, carga) -> Contexto:
         periodo=periodo,
         comparacao=comparacao,
         recortes=pedido.recortes,
+        historico=historico,
     )
 
 

@@ -6,7 +6,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 from app.core.auth import bearer, usuario_atual
 from app.core.database import session
 from app.modules.assistente import service
-from app.modules.assistente.schemas import Auditoria, Pergunta, RespostaPergunta
+from app.modules.assistente.schemas import Auditoria, Conversa, Pergunta, RespostaPergunta
 
 router = APIRouter(prefix='/assistente', tags=['assistente'])
 
@@ -23,6 +23,13 @@ async def usuario_da_pergunta(
 @router.post('/perguntas', response_model=RespostaPergunta)
 async def perguntar(body: Pergunta, request: Request, user=Depends(usuario_da_pergunta)):
     return await service.perguntar(request.app.state, body, user)
+
+
+@router.get('/conversas/{conversa_id}', response_model=Conversa)
+async def conversa(
+    conversa_id: UUID, user=Depends(usuario_atual), db=Depends(session, scope='function')
+):
+    return await service.conversa(db, conversa_id, user)
 
 
 @router.get('/respostas/{id_resposta}/auditoria', response_model=Auditoria)

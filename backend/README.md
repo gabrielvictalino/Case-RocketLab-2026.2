@@ -160,6 +160,7 @@ Rotas implementadas:
 | `POST /ordens-inspecao/{id}/resultado` | `{resultado, tipo_irregularidade, kwh_recuperado, data}` |
 | `POST /ordens-inspecao/{id}/cancelar` | `{motivo: "..."}` |
 | `POST /assistente/perguntas` | `{pergunta, conversa_id?, contexto: {tela, periodo, comparacao, recortes}}`; resposta do agente com `id_resposta` e `conversa_id` |
+| `GET /assistente/conversas/{id}` | Perguntas e respostas da conversa, lidas da auditoria; só a dona da conversa |
 | `GET /assistente/respostas/{id}/auditoria` | Pergunta, contexto, SQL gerado e executado, linhas, modelo, tokens e latência; só o autor ou `diretoria` |
 
 `core/periodos.py` valida `AAAA-MM..AAAA-MM`, limites e comparação padrão no ano
@@ -244,6 +245,14 @@ usa conexões do portal antes e depois do agente, para conferir o token, ler a
 carga e gravar a auditoria. Enquanto o modelo responde, nenhuma conexão do portal
 fica presa e as rotas das telas não disputam o pool. O agente recebe só a engine
 `ai_read`.
+
+Follow-up: `conversa:{id}` no Redis guarda a dona e as últimas 5 trocas (pergunta,
+métrica, filtros, período e SQL), com TTL de 2 h renovado a cada pergunta. O agente
+recebe esse estado estruturado, e não só a transcrição: "E em Olinda?" mantém a métrica
+e o período da troca anterior e troca o município. Sem período na pergunta, vale o da
+troca anterior, depois o da tela. Uma resposta sem métrica (fora do domínio) não muda o
+estado. Sem Redis, a pergunta segue sem histórico; o histórico permanente fica na
+auditoria e sai em `GET /assistente/conversas/{id}`.
 
 ## Testes e validações
 

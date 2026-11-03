@@ -48,6 +48,21 @@ class RespostaPergunta(RespostaAgente):
     conversa_id: UUID
 
 
+class Mensagem(BaseModel):
+    id_resposta: UUID
+    pergunta: str
+    resposta: str | None
+    nao_sei: bool
+    motivo: str | None
+    erro: str | None
+    criado_em: datetime
+
+
+class Conversa(BaseModel):
+    conversa_id: UUID
+    mensagens: list[Mensagem]
+
+
 class Auditoria(BaseModel):
     id_resposta: UUID
     conversa_id: UUID
