@@ -72,7 +72,9 @@ também o importador e a suíte completa, use `--all-packages`.
    Sua tabela de versões e todas as migrações ficam em `operations`. A revisão
    `0001` assume `cargas` já existente e cria usuários, ordens, eventos e inspeções.
    `0002` acrescenta a ordem de publicação de cargas e o schema `portal_read`.
-   `0003` cria `agente_auditoria`, gravada e lida só pela role `portal`.
+   `0003` dá ao `importador` `SELECT` em `id_uc` e `status` das ordens, para a fila
+   da IA tirar as UCs com ordem ativa.
+   `0004` cria `agente_auditoria`, gravada e lida só pela role `portal`.
    Alterações futuras de `cargas` devem ser migrações; não reeditar o bootstrap
    esperando que ele rode num volume existente.
 3. O importador depende dessa migração, pois as views unem inspeções novas e
@@ -84,8 +86,10 @@ também o importador e a suíte completa, use `--all-packages`.
    desconhecida aborta a publicação e preserva todo o estado anterior.
 5. As views de `ai_read` são apagadas num único `DROP` e recriadas a cada carga, cada
    uma com seu `GRANT SELECT` só para `ai_read`. A IA lê só as que estão em
-   `importador/views.sql`, sem nome, documento e endereço do titular nem a descrição
-   das tratativas.
+   `importador/views.sql`, sem nome, documento e endereço do titular, sem a descrição
+   das tratativas e sem o texto livre do tipo de irregularidade (fora dos cinco tipos
+   da Silver, a IA vê `OUTRO`). A `ai_read.fila_inspecao` tira as UCs com ordem ativa,
+   lendo `id_uc` e `status` das ordens a cada consulta.
 
 Cada importação ganha um UUID distinto, mesmo para o mesmo `batch_id` de origem.
 O UUID é a versão da carga, também publicada na chave Redis `versao_carga`.
@@ -260,8 +264,11 @@ Os dois respondem `429` com `Retry-After` (`LIMITE_DE_PERGUNTAS`,
 `COTA_DE_TOKENS_ESGOTADA`). `app.core.limites` fica pronto para os insights, que devem
 chamar `consumir` só quando forem ao LLM, para que um cache hit não gaste o limite.
 
-Follow-up: `conversa:{id}` no Redis guarda a dona e as últimas 5 trocas (pergunta,
-métrica, filtros, período e SQL), com TTL de 2 h renovado a cada pergunta. O agente
+Follow-up: `conversa:{id}` no Redis guarda a dona, e `conversa:{id}:trocas`, a lista
+das últimas 5 trocas (pergunta, métrica, filtros, período e SQL), com TTL de 2 h renovado
+a cada pergunta. A troca nova entra num script Lua que confere a dona, acrescenta e corta
+a lista no próprio Redis: duas perguntas ao mesmo tempo na mesma conversa guardam as duas
+trocas, sem uma gravar por cima da lista que a outra leu. O agente
 recebe esse estado estruturado, e não só a transcrição: "E em Olinda?" mantém a métrica
 e o período da troca anterior e troca o município. Sem período na pergunta, vale o da
 troca anterior, depois o da tela. Uma resposta sem métrica (fora do domínio) não muda o
