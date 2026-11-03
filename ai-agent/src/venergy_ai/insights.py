@@ -25,7 +25,7 @@ from venergy_ai.interface import (
     ProvedorIndisponivel,
     ValorCitado,
 )
-from venergy_ai.numeros import Citacao, citacoes
+from venergy_ai.numeros import Citacao, citacoes, numeros_citados
 from venergy_ai.semantica.periodo import Periodo
 
 pydantic_ai.BANNER_ENABLED = False
@@ -149,11 +149,17 @@ def _unidade(fato: Fato, campo: CampoDoFato) -> str:
     return fato.unidade
 
 
-def _permitidos(pedido: PedidoInsight) -> list[int]:
-    """O texto pode citar os anos e o número de meses do período e da comparação."""
+def _permitidos(pedido: PedidoInsight) -> list[object]:
+    """O texto pode citar os anos e o número de meses do período e da comparação, e os
+    números que fazem parte de um nome: "Setor 2" num local ou num recorte."""
     periodos = [p for p in (pedido.periodo, pedido.comparacao) if p is not None]
     anos = {ano for p in periodos for ano in (p.inicio.year, p.fim.year)}
-    return [*anos, *{_meses(p) for p in periodos}]
+    nomes = [fato.metrica for fato in pedido.fatos] + list(pedido.recortes.values())
+    return [
+        *anos,
+        *{_meses(p) for p in periodos},
+        *(n for nome in nomes for n in numeros_citados(nome)),
+    ]
 
 
 def _meses(periodo: Periodo) -> int:

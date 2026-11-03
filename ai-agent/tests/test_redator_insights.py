@@ -205,3 +205,29 @@ def test_citacoes_aponta_o_valor_que_sustenta_cada_numero():
 def test_citacoes_deixa_de_fora_o_numero_so_permitido():
     assert citacoes('Em 2025, 7 UCs.', [Decimal(7)], permitidos=[2025]) == [('7', [0])]
     assert citacoes('Em 2025, 8 UCs.', [Decimal(7)], permitidos=[2025]) == [('8', [])]
+
+
+def test_citacoes_nao_confunde_valor_arredondado_com_ano_permitido():
+    # Arredondado para dezenas de milhar, 2024 também daria "0,00 milhões".
+    citadas = citacoes('O efeito foi de R$ 0,00 milhões.', [Decimal('812.34')], [2024])
+    assert citadas == [('0,00 milhões', [0])]
+
+
+async def test_numero_do_nome_de_um_local_pode_ser_citado():
+    com_setor = PEDIDO.model_copy(
+        update={
+            'recortes': {'municipio': 'Recife'},
+            'fatos': [
+                Fato(
+                    chave='local:Setor 2 (Recife)',
+                    metrica='Receita · Setor 2 (Recife)',
+                    unidade='R$',
+                    valor=Decimal('1000'),
+                    variacao_pct=Decimal('-3.20'),
+                )
+            ],
+        }
+    )
+    texto = 'Setor 2 (Recife) teve a maior queda entre os locais: 3,2%.'
+    insight, _ = await redigir([('local:Setor 2 (Recife)', texto)], pedido=com_setor)
+    assert [v.trecho for v in insight.observacoes[0].valores] == ['3,2%']
