@@ -180,6 +180,14 @@ async def test_chamados_inspecoes_e_ordem_ativa(client, headers):
     assert data2['ordem_ativa']['status'] == 'ABERTA'
 
 
+async def test_nota_do_chamado_preserva_a_casa_decimal(client, headers):
+    # #117: a nota é numeric(2,1) de 1 a 5; 4,3 não pode virar 4
+    res = await client.get(f'{BASE}/UC100000', headers=headers)
+    assert res.status_code == 200
+    (chamado,) = res.json()['chamados']
+    assert Decimal(str(chamado['nota'])) == Decimal('4.3')
+
+
 async def test_explicacao_conta_casos_endpoint(client, headers):
     # P14-3: UC100004 compara 2026-05 x 2025-05 (pula a competência 2026-06 sem fatura)
     res_04 = await client.get(f'{BASE}/UC100004', headers=headers)
