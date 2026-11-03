@@ -14,7 +14,7 @@ conflitos. Esta revisão não executou produtores ou mutações no Databricks.
 | R2, volume faturado e tarifas | Complemento Delta por `id_fatura`, com `tarifa_base`, `adicional_bandeira` e `proveniencia` obrigatórios para fatura elegível | Fixtures com complemento; ausência de cada campo bloqueia; escala excedida rejeitada | Decisão 6587742059: complemento derivado no widget vazio; volume analítico e tarifa líquida da bandeira por subgrupo/mês; falta de doador bloqueia |
 | R3, grupo temporal | GD desde mês da conexão; senão, primeira inspeção confirmada; senão, demais. Snapshots de GD e inspeções obrigatórios | Testes antes/no mês de conexão, antes/no mês da inspeção e precedência da GD | Comprovar disponibilidade e coerência das fontes: `v-energy.silver.tb_geracao_distribuida` e `v-energy.silver.tb_inspecoes`, produzida por `data-engineering/bronze_to_silver/bronze-to-silver-inspecoes.ipynb` (#116), com nome parametrizável; confirmar publicação no workspace e exportar os mesmos dados ao lote |
 | R4, outros domínios | Montador recebe as dez tabelas externas, sem fabricá-las; gates relacionais continuam no importador | Suíte atual de 50 testes do importador e fixture completa aprovada | Os respectivos produtores devem fornecer dimensões, GD, fila, inspeções, medição, continuidade e atendimento reais compatíveis; esta PR não os substitui |
-| R5, quatro efeitos | Fornece volume/receita e soma Decimal dos produtos de tarifa e bandeira, arredondados uma vez por grão. Sem decomposição auxiliar; os quatro efeitos são calculados no consumidor pela R5 | Teste de soma antes do arredondamento e reconciliação por grão com `exceptAll`; docs da P20 consultadas | Três métricas do complemento são pré-condição; a fórmula canônica e seus casos de borda pertencem à P20, ainda indicada como pendência no consumidor. Não duplicada na Gold |
+| R5, quatro efeitos | Fornece volume/receita e soma Decimal dos produtos de tarifa e bandeira, arredondados uma vez por grão. Sem decomposição auxiliar; os quatro efeitos são calculados no consumidor pela R5 | Teste de soma antes do arredondamento e reconciliação por grão com `exceptAll`; docs da P20 consultadas | Volume analítico e tarifas são pré-condições; a fórmula e seus casos de borda ficam no consumidor (`backend/app/core/decomposicao.py`), sem duplicação na Gold |
 | R6, referência | `data_referencia` explícita e ISO vira `reference_date`; competência posterior bloqueia; montador/importador validam referência ≥ primeiro dia de `period.end` | Datas vazias/inválidas e lote com referência anterior rejeitados; notebook com 24 competências simulado | Responsável pela extração deve confirmar a data oficial do retrato; ingestão de 22/10 é evidência operacional, sem equivalência automática com extração. Job sem cron, com referência explícita |
 | R7, manifesto | Reutiliza `contracts/manifesto.py`, versão 0.3.0; recibo comercial separado; montador exige exatamente 12 exportações com período/referência/proveniência compatíveis | `test_lote_ci_gold`: lote completo, falta de tabela, mistura synthetic/real, PK, escala e hash inválidos | Coordenador deve reunir dez exportações dos outros domínios, com dados compatíveis com os snapshots comerciais. Não existe evidência de lote real completo |
 | R8, homologação | Fluxo de montagem + `importador --verificar` mantém FKs, gates, índices e rollback do importador da dev | CLI real sobre lote de 12 fixtures, incluindo os dois CSVs reexportados: OK, retorno 0; hash alterado: retorno 1; analytics e operations.cargas preservados | Repetir no lote real completo em banco de teste, após resolver fontes; aprovação de fixtures não homologa a Gold real |
@@ -71,7 +71,8 @@ alinhadas ao significado aprovado para o case. Isso não aprova os demais domín
   Problema na medição não exclui uma fatura válida que possui leitura estimável.
 - Tarifa base é derivada por subgrupo tarifário × competência: mediana de
   `valor_energia / consumo utilizável positivo - adicional_bandeira`, nas faturas
-  elegíveis. Subtrair a bandeira evita contá-la duas vezes nos componentes da R5.
+  elegíveis. Tarifas líquidas negativas não doam e são contadas na proveniência,
+  sem excluir as faturas. Subtrair a bandeira evita contá-la duas vezes na R5.
   A mediana é arredondada para seis casas; não é tarifa homologada. Sem doador de
   tarifa no grupo/mês, a carga falha com contagem; não há fallback entre classes.
 - Adicionais fixos: Verde 0; Amarela 0,01885; Vermelha P1 0,04463; Vermelha P2
@@ -118,3 +119,24 @@ ajustes finais foram reexecutados e passaram, incluindo CSV comercial com aspas
 e quebras de linha e complemento sem volume. O notebook em validar foi testado
 com 24 competências sintéticas e snapshots simulados. Nenhuma implantação,
 publicação ou execução Databricks foi feita nesta correção.
+
+## Reviews 5753211198 e 5754871341 — 03/11/2026
+
+Os nove ajustes foram implementados: snapshots sem cache para Serverless,
+doadores com tarifa negativa excluídos e contados na proveniência, espaços
+preservados nos dois writers CSV, retirada da decomposição auxiliar, retenção
+com identificadores normalizados inclusive no MERGE, volume agregado vazio igual
+a zero, fase `SEM_GD` e definições de domínio alinhadas nos guias e no glossário.
+A R5 continua no consumidor sobre as tabelas comerciais e o consumo analítico.
+
+Validação local com Spark 4.0.1: 45 cenários Gold verificados entre a execução
+completa e a reexecução dirigida dos cenários ajustados, incluindo notebook em
+`validar` com histórico curto e rejeição de APIs de cache, além da condição real
+do MERGE executada no Spark. Os 19 testes da raiz, Ruff 0.17.3 check/format,
+compilação das células do notebook, sintaxe do script de configuração GitHub e
+git diff --check passaram. A branch incorpora `dev` em `5b9d30e`, preservando
+as seções do portal e os demais domínios nos conflitos de documentação.
+
+A consulta autenticada a `/api/2.0/sql/warehouses` retornou HTTP 401 com a
+credencial configurada. A execução real em `validar` no Databricks permanece
+pendente; não houve deploy ou publicação de dados no workspace.

@@ -226,7 +226,8 @@ def derivar_complemento(consumo, detalhe, cadastro):
     """Decisão #67: tarifa líquida da bandeira por subgrupo × competência.
 
     Somente leitura utilizável positiva com fatura elegível doa tarifa; o volume
-    canônico usa o analítico e nunca é reconstruído pela conta.
+    canônico usa o analítico e nunca é reconstruído pela conta. Tarifas negativas
+    são contadas na proveniência e excluídas da mediana, preservando a fatura.
     """
     from decimal import Decimal
 

@@ -496,3 +496,35 @@ class ContratoGoldTest(unittest.TestCase):
             self.assertEqual(r.competencia, competencia)
         with self.assertRaisesRegex(ValueError, 'sem_doador_tarifa.*1'):
             derivar_complemento(consumo, detalhe.filter("id_fatura = 'FT1'"), cadastro)
+
+    def test_merge_retencao_reconhece_grafia_legada_sem_renovar_prazo(self):
+        from datetime import datetime, timedelta
+        from types import ModuleType
+        from unittest.mock import MagicMock
+        import gold_faturas as gold
+
+        tabela = 'tb_gold_faturas_faturas_revisao_' + 'a' * 32
+        aposentada = datetime.now() - timedelta(days=8)
+        registro = self.spark.createDataFrame(
+            [(f'`V-Energy`.`GOLD`.`{tabela}`', aposentada)],
+            'nome string, aposentada_em timestamp',
+        )
+        spark = MagicMock()
+        spark.table.return_value = registro
+        spark.sql.return_value.collect.return_value = [dict(tableName=tabela)]
+        spark.createDataFrame.side_effect = self.spark.createDataFrame
+        delta = ModuleType('delta.tables')
+        delta.DeltaTable = MagicMock()
+        with (
+            patch.object(gold, 'ler_publicacao_gold', return_value=({}, [])),
+            patch.dict(sys.modules, {'delta.tables': delta}),
+        ):
+            gold.limpar_revisoes_gold(spark, 'v-energy.gold', ['faturas'])
+        builder = delta.DeltaTable.forName.return_value.alias.return_value
+        novas, condicao = builder.merge.call_args.args
+        # Executa no Spark a condição entregue ao MERGE Delta simulado.
+        correspondentes = registro.alias('r').join(novas.alias('n'), F.expr(condicao), 'inner')
+        self.assertEqual(correspondentes.select('r.aposentada_em').first()[0], aposentada)
+        self.assertEqual(correspondentes.count(), 1)
+        builder.merge.return_value.whenMatchedUpdateAll.assert_not_called()
+        spark.sql.assert_any_call(f'DROP TABLE `v-energy`.`gold`.`{tabela}`')

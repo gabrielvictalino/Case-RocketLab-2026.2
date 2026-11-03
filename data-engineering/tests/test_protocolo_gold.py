@@ -236,7 +236,9 @@ class ProtocoloGoldTest(unittest.TestCase):
         # Entradas antigas com/sem aspas e caixa diferente são a mesma revisão.
         registros.append({**registros[0], 'nome': f'v-energy.gold.{antiga}'})
         spark = MagicMock()
-        spark.sql.return_value.collect.return_value = [dict(tableName=n) for n in tabelas]
+        spark.sql.return_value.collect.return_value = [
+            dict(tableName=n.upper() if n == antiga else n) for n in tabelas
+        ]
         spark.table.return_value.collect.return_value = registros
         delta = ModuleType('delta.tables')
         delta.DeltaTable = MagicMock()

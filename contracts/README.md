@@ -31,7 +31,8 @@ alinhadas ao significado aprovado para o case. Isso não aprova os demais domín
   Problema na medição não exclui uma fatura válida que possui leitura estimável.
 - Tarifa base é derivada por subgrupo tarifário × competência: mediana de
   `valor_energia / consumo utilizável positivo - adicional_bandeira`, nas faturas
-  elegíveis. Subtrair a bandeira evita contá-la duas vezes nos componentes da R5.
+  elegíveis. Tarifas líquidas negativas não doam e são contadas na proveniência,
+  sem excluir as faturas. Subtrair a bandeira evita contá-la duas vezes na R5.
   A mediana é arredondada para seis casas; não é tarifa homologada. Sem doador de
   tarifa no grupo/mês, a carga falha com contagem; não há fallback entre classes.
 - Adicionais fixos: Verde 0; Amarela 0,01885; Vermelha P1 0,04463; Vermelha P2
