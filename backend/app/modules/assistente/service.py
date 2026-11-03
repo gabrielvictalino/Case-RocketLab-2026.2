@@ -96,6 +96,13 @@ async def perguntar(state, body: Pergunta, usuario) -> RespostaPergunta:
     except Exception as erro:
         await _registrar_falha(state, registro, andamento, inicio, _interno(erro))
         raise
+    except asyncio.CancelledError:
+        # O cliente fechou o painel no meio da pergunta. CancelledError não é Exception:
+        # sem este ramo, as consultas e os tokens já gastos sumiriam da auditoria.
+        await asyncio.shield(
+            _registrar_falha(state, registro, andamento, inicio, 'CANCELADA_PELO_CLIENTE')
+        )
+        raise
     async with state.portal_sessions() as db, db.begin():
         await repository.registrar(db, registro | _da_resposta(resposta))
     await conversas.registrar(
@@ -158,7 +165,9 @@ def _das_consultas(consultas: list[Consulta]) -> dict:
         consultas=[c.model_dump(mode='json') for c in consultas],
         sql_gerado=ultima and ultima.sql_gerado,
         sql_executado=ultima and ultima.sql_executado,
-        numero_linhas=ultima and ultima.total_linhas,
+        # Rejeitada pela guarda ou com erro do banco, a consulta não rodou: não há linhas
+        # a contar, e 0 pareceria "rodou e voltou vazia".
+        numero_linhas=ultima.total_linhas if ultima and ultima.erro is None else None,
     )
 
 
