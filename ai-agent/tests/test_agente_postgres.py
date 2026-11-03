@@ -80,3 +80,15 @@ async def test_pergunta_respondida_com_a_role_ai_read(executor):
     [consulta] = resposta.consultas
     assert 'ai_read.ucs' in consulta.sql_executado
     assert consulta.linhas == [[300]]
+
+
+async def test_consultas_de_referencia_da_avaliacao_rodam_na_ai_read(executor):
+    from pathlib import Path
+
+    from venergy_ai.avaliacao import carregar
+
+    casos = carregar(Path(__file__).parents[1] / 'evals' / 'perguntas.yaml')
+    for caso in casos:
+        if caso.sql:
+            resultado = await executor.executar(caso.sql)
+            assert resultado.linhas, caso.id
