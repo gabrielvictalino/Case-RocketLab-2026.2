@@ -394,3 +394,26 @@ async def test_nao_sei_sem_motivo_usa_o_texto(portal, db):
         'SELECT motivo FROM operations.agente_auditoria WHERE pergunta = $1', 'Sem motivo'
     )
     assert motivo == 'Não sei.'
+
+
+async def test_cobertura_e_data_de_referencia_da_carga_chegam_ao_agente(portal):
+    app, http = portal
+    instrucoes = []
+
+    def responder(mensagens, info):
+        instrucoes.append(info.instructions)
+        if info.output_tools:
+            return ModelResponse(parts=[ToolCallPart(info.output_tools[0].name, PLANO)])
+        return ModelResponse(parts=[TextPart(TEXTO)])
+
+    app.state.assistente = AgenteTextoSQL(
+        FunctionModel(responder, model_name='simulado'), ExecutorAiRead(app.state.ai_engine)
+    )
+    headers = await entrar(http, 'perdas')
+    resposta = await http.post(
+        URL, json={'pergunta': 'Quantas UCs há?', 'contexto': {'tela': 'perdas'}}, headers=headers
+    )
+    assert resposta.status_code == 200, resposta.text
+    # A amostra cobre jul/2022 a jun/2026, e o manifesto traz reference_date 2026-07-01.
+    assert 'A base cobre as competências de jul/2022 a jun/2026' in instrucoes[0]
+    assert "data_vencimento < DATE '2026-07-01'" in instrucoes[0]
