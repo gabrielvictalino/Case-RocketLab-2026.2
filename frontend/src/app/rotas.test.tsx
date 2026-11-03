@@ -170,7 +170,7 @@ describe('criterios da tela UC', () => {
 
     renderizarRota('/ucs/UC100123')
 
-    expect(await screen.findByText('Unidade consumidora não encontrada')).toBeInTheDocument()
+    expect((await screen.findAllByText('Unidade consumidora não encontrada')).length).toBeGreaterThan(0)
   })
 
   it('oferece nova tentativa quando o servidor falha', async () => {
@@ -184,10 +184,26 @@ describe('criterios da tela UC', () => {
 
     renderizarRota('/ucs/UC100123')
 
-    expect(await screen.findByRole('button', { name: 'Tentar novamente' })).toBeInTheDocument()
+    expect((await screen.findAllByRole('button', { name: 'Tentar novamente' })).length).toBeGreaterThan(0)
   })
 })
 describe('rotas do portal', () => {
+  it('redireciona a URL antiga da UC e destaca o menu lateral', async () => {
+    const { router } = renderizarRota('/ucs/UC100123')
+
+    expect(await screen.findByText('Titular de teste')).toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/unidade-consumidora')
+      expect(new URLSearchParams(router.state.location.search).get('uc')).toBe('UC100123')
+    })
+
+    expect(screen.getByRole('link', { name: 'Unidade Consumidora' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+  })
+
 
   it('sincroniza a busca ao voltar e avancar entre unidades consumidoras', async () => {
     const { router } = renderizarRota('/unidade-consumidora')

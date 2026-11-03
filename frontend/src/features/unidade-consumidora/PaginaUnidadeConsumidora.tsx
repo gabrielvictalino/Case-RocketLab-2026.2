@@ -1,25 +1,78 @@
+import { formatarDataPtBr, formatarNumero } from '../../lib/formatacao'
 import { useState, type FormEvent } from 'react'
 import { Search } from 'lucide-react'
-import { useNavigate, useParams, useSearchParams } from 'react-router'
+import { useSearchParams } from 'react-router'
 import { EstadoErro, EstadoVazio, Esqueleto } from '@/components/Estados'
 import { Etiqueta } from '@/components/Etiqueta'
 import { Painel } from '@/components/Painel'
 import { adaptarConsumoUC } from '@/features/unidade-consumidora/adaptarConsumoUC'
-import { mascararDocumento } from '@/features/unidade-consumidora/mascararDocumento'
-import { Chamados, ExplicacaoConta, Faturas, GraficoConsumo, Inspecoes, Interrupcoes } from '@/features/unidade-consumidora/SecoesUnidadeConsumidora'
+import { Atendimentos, ExplicacaoConta, Faturas, GraficoConsumo, Inspecoes, Interrupcoes } from '@/features/unidade-consumidora/SecoesUnidadeConsumidora'
 import { normalizarUc } from '@/features/unidade-consumidora/normalizarUc'
 import { useUnidadeConsumidora } from '@/features/unidade-consumidora/useUnidadeConsumidora'
 
-export function PaginaUnidadeConsumidora() {
-  const { id } = useParams<{ id: string }>()
-  const [searchParams] = useSearchParams()
-  const ucParametro = id ?? searchParams.get('uc') ?? ''
+function EstadoSecaoUC({
+  carregando,
+  erro,
+  naoEncontrada,
+  tentarNovamente,
+}: {
+  carregando: boolean
+  erro: boolean
+  naoEncontrada: boolean
+  tentarNovamente: () => void
+}) {
+  if (carregando) {
+    return <Esqueleto linhas={3} />
+  }
 
-  return <ConteudoUnidadeConsumidora key={ucParametro} ucParametro={ucParametro} rotaComId={id !== undefined} />
+  if (naoEncontrada) {
+    return (
+      <EstadoVazio
+        titulo="Unidade consumidora não encontrada"
+        mensagem="Confira o número informado e tente novamente."
+        compacto
+      />
+    )
+  }
+
+  if (erro) {
+    return (
+      <EstadoErro
+        mensagem="Não foi possível carregar os dados desta seção."
+        compacto
+        aoTentarNovamente={tentarNovamente}
+      />
+    )
+  }
+
+  return (
+    <EstadoVazio
+      titulo="Aguardando consulta"
+      mensagem="Informe uma UC para visualizar esta seção."
+      compacto
+    />
+  )
+}
+export function PaginaUnidadeConsumidora() {
+
+  const [searchParams] = useSearchParams()
+  const ucParametro = searchParams.get('uc') ?? ''
+
+  return <ConteudoUnidadeConsumidora key={ucParametro} ucParametro={ucParametro} />
 }
 
-function ConteudoUnidadeConsumidora({ ucParametro, rotaComId }: { ucParametro: string; rotaComId: boolean }) {
-  const navigate = useNavigate()
+function rotuloStatusOrdem(status: string): string {
+  const rotulos: Record<string, string> = {
+    ABERTA: 'Aberta',
+    EM_CAMPO: 'Em campo',
+    CONCLUIDA: 'Concluída',
+    CANCELADA: 'Cancelada',
+  }
+  return rotulos[status] ?? status
+}
+
+function ConteudoUnidadeConsumidora({ ucParametro }: { ucParametro: string }) {
+
   const [searchParams, setSearchParams] = useSearchParams()
   const ucNormalizadaUrl = normalizarUc(ucParametro)
   const consultaUC = useUnidadeConsumidora(ucNormalizadaUrl)
@@ -40,10 +93,6 @@ function ConteudoUnidadeConsumidora({ ucParametro, rotaComId }: { ucParametro: s
     }
     setErroValidacao(null)
     setEntrada(normalizada)
-    if (rotaComId) {
-      navigate(`/ucs/${normalizada}`)
-      return
-    }
 
     const proximo = new URLSearchParams(searchParams)
     proximo.set('uc', normalizada)
@@ -154,20 +203,20 @@ function ConteudoUnidadeConsumidora({ ucParametro, rotaComId }: { ucParametro: s
               <strong className="text-lg">{consultaUC.data.cabecalho.titular}</strong>
               {consultaUC.data.cabecalho.gd && (
                 <Etiqueta>
-                  GD {Number(consultaUC.data.cabecalho.gd.potencia_kw).toLocaleString('pt-BR')} kWp
+                  GD {formatarNumero(consultaUC.data.cabecalho.gd.potencia_kw, 2)} kWp
                 </Etiqueta>
               )}
             </div>
             <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               {[
-                ['CPF/CNPJ', mascararDocumento(consultaUC.data.cabecalho.documento)],
+                ['CPF/CNPJ', consultaUC.data.cabecalho.documento],
                 ['Classe', consultaUC.data.cabecalho.classe],
                 ['Endereço', consultaUC.data.cabecalho.endereco],
                 ['Município', consultaUC.data.cabecalho.municipio],
                 ['Bairro', consultaUC.data.cabecalho.bairro],
                 ['Alimentador', consultaUC.data.cabecalho.alimentador],
                 ['Medidor atual', consultaUC.data.cabecalho.medidor_atual?.id_medidor],
-                ['Conexão GD', consultaUC.data.cabecalho.gd?.data_conexao?.slice(0, 10).split('-').reverse().join('/')],
+                ['Conexão GD', formatarDataPtBr(consultaUC.data.cabecalho.gd?.data_conexao)],
               ].map(([rotulo, valor]) => (
                 <div key={rotulo}>
                   <dt className="text-xs text-muted-foreground">{rotulo}</dt>
@@ -188,7 +237,7 @@ function ConteudoUnidadeConsumidora({ ucParametro, rotaComId }: { ucParametro: s
           {consultaUC.isSuccess ? (
           <GraficoConsumo dados={adaptarConsumoUC(consultaUC.data.consumo)} />
         ) : (
-          consultaUC.isLoading ? <Esqueleto linhas={3} /> : consultaUC.isError ? <EstadoVazio titulo="Consulta não disponível" mensagem="Os dados desta UC não puderam ser exibidos." compacto /> : <EstadoVazio titulo="Aguardando consulta" mensagem="Informe uma UC para visualizar esta seção." compacto />
+          <EstadoSecaoUC carregando={consultaUC.isLoading} erro={consultaUC.isError && consultaUC.error.status !== 404} naoEncontrada={consultaUC.isError && consultaUC.error.status === 404} tentarNovamente={() => { void consultaUC.refetch() }} />
         )}
         </Painel>
 
@@ -204,7 +253,7 @@ function ConteudoUnidadeConsumidora({ ucParametro, rotaComId }: { ucParametro: s
               semCartao
             />
           ) : (
-            consultaUC.isLoading ? <Esqueleto linhas={3} /> : consultaUC.isError ? <EstadoVazio titulo="Consulta não disponível" mensagem="Os dados desta UC não puderam ser exibidos." compacto /> : <EstadoVazio titulo="Aguardando consulta" mensagem="Informe uma UC para visualizar esta seção." compacto />
+            <EstadoSecaoUC carregando={consultaUC.isLoading} erro={consultaUC.isError && consultaUC.error.status !== 404} naoEncontrada={consultaUC.isError && consultaUC.error.status === 404} tentarNovamente={() => { void consultaUC.refetch() }} />
           )}
         </Painel>
       </div>
@@ -221,13 +270,13 @@ function ConteudoUnidadeConsumidora({ ucParametro, rotaComId }: { ucParametro: s
               dados={consultaUC.data.faturas_abertas.map((fatura) => ({
                 id: fatura.id_fatura,
                 competencia: fatura.competencia.slice(0, 7),
-                vencimento: fatura.data_vencimento.slice(0, 10).split('-').reverse().join('/'),
+                vencimento: formatarDataPtBr(fatura.data_vencimento),
                 valor: Number(fatura.valor_total),
                 diasAtraso: fatura.dias_atraso ?? 0,
               }))}
             />
           ) : (
-            consultaUC.isLoading ? <Esqueleto linhas={3} /> : consultaUC.isError ? <EstadoVazio titulo="Consulta não disponível" mensagem="Os dados desta UC não puderam ser exibidos." compacto /> : <EstadoVazio titulo="Aguardando consulta" mensagem="Informe uma UC para visualizar esta seção." compacto />
+            <EstadoSecaoUC carregando={consultaUC.isLoading} erro={consultaUC.isError && consultaUC.error.status !== 404} naoEncontrada={consultaUC.isError && consultaUC.error.status === 404} tentarNovamente={() => { void consultaUC.refetch() }} />
           )}
         </Painel>
 
@@ -239,15 +288,18 @@ function ConteudoUnidadeConsumidora({ ucParametro, rotaComId }: { ucParametro: s
           {consultaUC.isSuccess ? (
             <Interrupcoes
               semCartao
+              alimentador={{ nome: consultaUC.data.interrupcoes.alimentador.alimentador, interrupcoes: consultaUC.data.interrupcoes.alimentador.interrupcoes, dec: consultaUC.data.interrupcoes.alimentador.dec }}
               dados={consultaUC.data.interrupcoes.ocorrencias.map((ocorrencia) => ({
                 id: ocorrencia.id_ocorrencia,
-                data: new Date(ocorrencia.data_abertura).toLocaleDateString('pt-BR'),
-                duracao: `${Number(ocorrencia.duracao_efetiva_min).toLocaleString('pt-BR')} min`,
+                data: formatarDataPtBr(ocorrencia.data_abertura),
+                duracao: `${formatarNumero(ocorrencia.duracao_efetiva_min, 0)} min`,
+                duracaoBruta: `${formatarNumero(ocorrencia.duracao_min, 0)} min`,
+                sobreposicao: ocorrencia.flag_sobreposicao,
                 causa: ocorrencia.causa,
               }))}
             />
           ) : (
-            consultaUC.isLoading ? <Esqueleto linhas={3} /> : consultaUC.isError ? <EstadoVazio titulo="Consulta não disponível" mensagem="Os dados desta UC não puderam ser exibidos." compacto /> : <EstadoVazio titulo="Aguardando consulta" mensagem="Informe uma UC para visualizar esta seção." compacto />
+            <EstadoSecaoUC carregando={consultaUC.isLoading} erro={consultaUC.isError && consultaUC.error.status !== 404} naoEncontrada={consultaUC.isError && consultaUC.error.status === 404} tentarNovamente={() => { void consultaUC.refetch() }} />
           )}
         </Painel>
       </div>
@@ -259,24 +311,24 @@ function ConteudoUnidadeConsumidora({ ucParametro, rotaComId }: { ucParametro: s
           preencher
         >
           {consultaUC.isSuccess ? (
-            <Chamados
+            <Atendimentos
               semCartao
-              dados={consultaUC.data.chamados.map((chamado) => ({
-                id: chamado.protocolo,
-                titulo: chamado.assunto,
-                protocolo: chamado.protocolo,
-                abertura: new Date(chamado.aberto_em).toLocaleDateString('pt-BR'),
-                status: chamado.status,
-                avaliacao: chamado.nota,
-                historico: chamado.historico.map((evento) => ({
-                  id: `${chamado.protocolo}-${evento.sequencia}`,
-                  data: new Date(evento.data).toLocaleDateString('pt-BR'),
+              dados={consultaUC.data.chamados.map((atendimento) => ({
+                id: atendimento.protocolo,
+                titulo: atendimento.assunto,
+                protocolo: atendimento.protocolo,
+                abertura: formatarDataPtBr(atendimento.aberto_em),
+                status: atendimento.status,
+                avaliacao: atendimento.nota,
+                historico: atendimento.historico.map((evento) => ({
+                  id: `${atendimento.protocolo}-${evento.sequencia}`,
+                  data: formatarDataPtBr(evento.data),
                   descricao: evento.descricao,
                 })),
               }))}
             />
           ) : (
-            consultaUC.isLoading ? <Esqueleto linhas={3} /> : consultaUC.isError ? <EstadoVazio titulo="Consulta não disponível" mensagem="Os dados desta UC não puderam ser exibidos." compacto /> : <EstadoVazio titulo="Aguardando consulta" mensagem="Informe uma UC para visualizar esta seção." compacto />
+            <EstadoSecaoUC carregando={consultaUC.isLoading} erro={consultaUC.isError && consultaUC.error.status !== 404} naoEncontrada={consultaUC.isError && consultaUC.error.status === 404} tentarNovamente={() => { void consultaUC.refetch() }} />
           )}
         </Painel>
 
@@ -290,21 +342,22 @@ function ConteudoUnidadeConsumidora({ ucParametro, rotaComId }: { ucParametro: s
               semCartao
               dados={consultaUC.data.inspecoes.map((inspecao) => ({
                 id: inspecao.id_inspecao,
-                data: inspecao.data.slice(0, 10).split('-').reverse().join('/'),
+                data: formatarDataPtBr(inspecao.data),
                 resultado: inspecao.resultado,
                 observacao: inspecao.tipo_irregularidade ?? inspecao.origem,
               }))}
               ordemAtiva={
                 consultaUC.data.ordem_ativa
-                  ? `${consultaUC.data.ordem_ativa.id} (${consultaUC.data.ordem_ativa.status})`
+                  ? `${consultaUC.data.ordem_ativa.id.slice(0, 8)} (${rotuloStatusOrdem(consultaUC.data.ordem_ativa.status)})`
                   : null
               }
+              idOrdemAtiva={consultaUC.data.ordem_ativa?.id ?? null}
               motivoSuspeita={
                 consultaUC.data.ordem_ativa?.motivos.join(', ') ?? null
               }
             />
           ) : (
-            consultaUC.isLoading ? <Esqueleto linhas={3} /> : consultaUC.isError ? <EstadoVazio titulo="Consulta não disponível" mensagem="Os dados desta UC não puderam ser exibidos." compacto /> : <EstadoVazio titulo="Aguardando consulta" mensagem="Informe uma UC para visualizar esta seção." compacto />
+            <EstadoSecaoUC carregando={consultaUC.isLoading} erro={consultaUC.isError && consultaUC.error.status !== 404} naoEncontrada={consultaUC.isError && consultaUC.error.status === 404} tentarNovamente={() => { void consultaUC.refetch() }} />
           )}
         </Painel>
       </div>

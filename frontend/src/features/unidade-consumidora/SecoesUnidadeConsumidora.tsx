@@ -1,3 +1,5 @@
+import { GraficoBarrasComparativas } from '@/components/Graficos'
+import { formatarKwh, formatarMoeda, formatarNumero } from '@/lib/formatacao'
 
 import { useState } from 'react'
 import {
@@ -28,17 +30,19 @@ export type InterrupcaoUC = {
   id: string
   data: string
   duracao: string
+  duracaoBruta?: string
+  sobreposicao?: boolean
   causa: string
 }
 
-export type EventoChamado = {
+export type EtapaAtendimento = {
   id: string
   data: string
   responsavel?: string
   descricao: string
 }
 
-export type ChamadoUC = {
+export type AtendimentoUC = {
   id: string
   titulo: string
   protocolo: string
@@ -46,7 +50,7 @@ export type ChamadoUC = {
   canal?: string
   status: string
   avaliacao: string | null
-  historico: EventoChamado[]
+  historico: EtapaAtendimento[]
 }
 
 export type InspecaoUC = {
@@ -56,12 +60,6 @@ export type InspecaoUC = {
   observacao: string
 }
 
-function formatarMoeda(valor: number) {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(valor)
-}
 
 function Cartao({
   titulo,
@@ -125,78 +123,68 @@ export function GraficoConsumo({ dados }: { dados: ConsumoMensal[] }) {
     return <SemDados mensagem="Histórico de consumo ainda não disponível." />
   }
 
-  const maiorConsumo = Math.max(
-    1,
-    ...dados.flatMap((item) => [
-      item.consumoKwh ?? 0,
-      item.consumoAnoAnteriorKwh ?? 0,
-    ]),
+  const pontos = dados.map((item) => ({
+    rotulo: item.competencia,
+    atual: item.consumoKwh,
+    comparacao: item.consumoAnoAnteriorKwh,
+  }))
+
+  const observacoes = Object.fromEntries(
+    dados
+      .filter((item) => item.estimado || item.trocaMedidor)
+      .map((item) => [
+        item.competencia,
+        [
+          item.estimado ? 'Leitura estimada' : '',
+          item.trocaMedidor ? 'Troca de medidor: consumo estimado pela mediana da UC' : '',
+        ].filter(Boolean).join(' · '),
+      ]),
   )
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground">
-        <span><span className="mr-2 inline-block size-2 rounded-sm bg-foreground" />Últimos 12 meses</span>
-        <span><span className="mr-2 inline-block size-2 rounded-sm bg-gray-300" />Ano anterior</span>
+        <span><span className="mr-2 inline-block size-2 rounded-sm bg-[var(--data-2)]" />Últimos 12 meses</span>
+        <span><span className="mr-2 inline-block size-2 rounded-sm bg-[var(--data-compare)]" />Ano anterior</span>
         <span>● Leitura estimada</span>
         <span>◆ Troca de medidor</span>
       </div>
 
-      <div
-        className="flex h-56 items-end gap-2 overflow-x-auto border-b pb-2"
-        role="img"
-        aria-label="Gráfico de consumo mensal comparado ao ano anterior"
-      >
-        {dados.map((item) => (
-          <div
-            key={item.competencia}
-            className="flex h-full min-w-12 flex-1 flex-col justify-end gap-1"
-            title={[
-              item.competencia,
-              item.consumoKwh === null ? 'Sem leitura registrada' : `${item.consumoKwh} kWh`,
-              item.estimado ? 'Leitura feita sem acesso ao medidor, com consumo estimado pela distribuidora' : '',
-              item.trocaMedidor ? 'Troca de medidor' : '',
-            ].filter(Boolean).join(' · ')}
-          >
-            <div className="flex h-44 items-end justify-center gap-1">
-              <div
-                className="w-3 rounded-t-sm bg-gray-300"
-                style={{
-                  height: `${((item.consumoAnoAnteriorKwh ?? 0) / maiorConsumo) * 100}%`,
-                }}
-              />
-              <div
-                className="w-3 rounded-t-sm bg-foreground"
-                style={{
-                  height: `${((item.consumoKwh ?? 0) / maiorConsumo) * 100}%`,
-                }}
-              />
-            </div>
-            <span className="min-h-4 text-center text-xs">
-              {item.estimado && '\u25cf'}
-              {item.trocaMedidor && '\u25c6'}
-            </span>
-            <span className="text-center text-[11px] text-muted-foreground">
-              {item.competencia}
-            </span>
-          </div>
-        ))}
+      <div role="img" aria-label="Gráfico de consumo mensal comparado ao ano anterior">
+        <GraficoBarrasComparativas
+          dados={pontos}
+          rotuloAtual="Últimos 12 meses"
+          rotuloComparacao="Ano anterior"
+          altura={260}
+          formatarValor={(valor) => formatarKwh(valor, 1)}
+          observacoes={observacoes}
+        />
       </div>
 
+      <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+        {dados.filter((item) => item.estimado || item.trocaMedidor).map((item) => (
+          <span key={item.competencia}>
+            {item.competencia}: {[
+              item.estimado ? '● Leitura estimada' : '',
+              item.trocaMedidor ? '◆ Troca de medidor: consumo estimado pela mediana da UC' : '',
+            ].filter(Boolean).join(' · ')}
+          </span>
+        ))}
+      </div>
       <Tabela colunas={['Competência', 'Consumo', 'Ano anterior', 'Observação']}>
         {dados.map((item) => (
           <tr key={item.competencia}>
             <td className="px-3 py-3">{item.competencia}</td>
-            <td className="px-3 py-3">{item.consumoKwh === null ? '—' : `${item.consumoKwh} kWh`}</td>
+            <td className="px-3 py-3">{item.consumoKwh === null ? '—' : formatarKwh(item.consumoKwh, 1)}</td>
             <td className="px-3 py-3">
               {item.consumoAnoAnteriorKwh === null
                 ? '—'
-                : `${item.consumoAnoAnteriorKwh} kWh`}
+                : formatarKwh(item.consumoAnoAnteriorKwh, 1)}
             </td>
             <td className="px-3 py-3 text-muted-foreground">
               {[
                 item.estimado ? 'Leitura estimada' : '',
-                item.trocaMedidor ? 'Troca de medidor' : '',
+                item.trocaMedidor ? 'Troca de medidor: consumo estimado pela mediana da UC' : '',
               ].filter(Boolean).join(' · ') || '—'}
             </td>
           </tr>
@@ -249,10 +237,7 @@ export function ExplicacaoConta({
                 <div key={rotulo} className="rounded-md border p-3">
                   <dt className="text-xs text-muted-foreground">{rotulo}</dt>
                   <dd className="mt-1 font-semibold">
-                    {Number(valor).toLocaleString('pt-BR', {
-                      style: 'currency',
-                      currency: 'BRL',
-                    })}
+                    {formatarMoeda(valor)}
                   </dd>
                 </div>
               ))}
@@ -264,7 +249,7 @@ export function ExplicacaoConta({
           </Button>
         </>
       ) : (
-        <SemDados mensagem="A explica\u00e7\u00e3o da conta ainda n\u00e3o est\u00e1 dispon\u00edvel." />
+        <SemDados mensagem="A explicação da conta ainda não está disponível." />
       )}
     </div>
   )
@@ -274,7 +259,7 @@ export function ExplicacaoConta({
   return (
     <Cartao
       titulo="Por que a conta mudou"
-      subtitulo="Explica\u00e7\u00e3o da \u00faltima fatura em compara\u00e7\u00e3o ao ano anterior"
+      subtitulo="Explicação da última fatura em comparação ao ano anterior"
     >
       {conteudo}
     </Cartao>
@@ -325,21 +310,33 @@ export function Faturas({
 
 export function Interrupcoes({
   dados,
+  alimentador,
   semCartao = false,
 }: {
   dados: InterrupcaoUC[]
+  alimentador?: { nome: string; interrupcoes: number; dec: string }
   semCartao?: boolean
 }) {
   const conteudo = (
     <div className="space-y-4">
+      {alimentador && (
+        <div className="rounded-md border bg-muted/30 p-3 text-sm">
+          <p className="font-medium">Resumo do alimentador {alimentador.nome}</p>
+          <p className="mt-1 text-muted-foreground">
+            {alimentador.interrupcoes} interrupção(ões) · DEC: {formatarNumero(alimentador.dec, 2)} h
+          </p>
+        </div>
+      )}
       {dados.length === 0 ? (
         <SemDados mensagem="Nenhuma interrupção registrada." />
       ) : (
-        <Tabela colunas={['Data', 'Duração', 'Causa']}>
+        <Tabela colunas={['Data', 'Duração bruta', 'Duração efetiva', 'Sobreposição', 'Causa']}>
           {dados.map((interrupcao) => (
             <tr key={interrupcao.id}>
               <td className="px-3 py-3">{interrupcao.data}</td>
+              <td className="px-3 py-3">{interrupcao.duracaoBruta ?? interrupcao.duracao}</td>
               <td className="px-3 py-3">{interrupcao.duracao}</td>
+              <td className="px-3 py-3">{interrupcao.sobreposicao ? 'Sim' : 'Não'}</td>
               <td className="px-3 py-3">{interrupcao.causa}</td>
             </tr>
           ))}
@@ -360,7 +357,7 @@ export function Interrupcoes({
   )
 }
 
-export function Chamados({ dados, semCartao = false }: { dados: ChamadoUC[]; semCartao?: boolean }) {
+export function Atendimentos({ dados, semCartao = false }: { dados: AtendimentoUC[]; semCartao?: boolean }) {
   const [expandidos, setExpandidos] = useState<string[]>([])
 
   function alternar(id: string) {
@@ -378,26 +375,26 @@ export function Chamados({ dados, semCartao = false }: { dados: ChamadoUC[]; sem
         <SemDados mensagem="Histórico de atendimentos ainda não disponível." />
       ) : (
         <div className="space-y-3">
-          {dados.map((chamado) => {
-            const aberto = expandidos.includes(chamado.id)
+          {dados.map((atendimento) => {
+            const aberto = expandidos.includes(atendimento.id)
 
             return (
-              <div key={chamado.id} className="rounded-md border">
+              <div key={atendimento.id} className="rounded-md border">
                 <button
                   type="button"
                   aria-expanded={aberto}
-                  onClick={() => alternar(chamado.id)}
+                  onClick={() => alternar(atendimento.id)}
                   className="flex w-full items-start justify-between gap-3 p-4 text-left"
                 >
                   <span className="space-y-1">
-                    <span className="block font-medium">{chamado.titulo}</span>
+                    <span className="block font-medium">{atendimento.titulo}</span>
                     <span className="block text-xs text-muted-foreground">
-                      Protocolo {chamado.protocolo} · {chamado.abertura}{chamado.canal ? ` · ${chamado.canal}` : ''}
+                      Protocolo {atendimento.protocolo} · {atendimento.abertura}{atendimento.canal ? ` · ${atendimento.canal}` : ''}
                     </span>
                     <span className="block text-xs text-muted-foreground">
-                      {chamado.status}
-                      {chamado.avaliacao !== null
-                        ? ` · Avaliação ${Number(chamado.avaliacao).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}/5`
+                      {atendimento.status}
+                      {atendimento.avaliacao !== null
+                        ? ` · Avaliação ${formatarNumero(atendimento.avaliacao, 1)}/5`
                         : ''}
                     </span>
                   </span>
@@ -410,12 +407,12 @@ export function Chamados({ dados, semCartao = false }: { dados: ChamadoUC[]; sem
 
                 {aberto && (
                   <div className="space-y-4 border-t p-4">
-                    {chamado.historico.length === 0 ? (
+                    {atendimento.historico.length === 0 ? (
                       <p className="text-sm text-muted-foreground">
                         Nenhum evento registrado.
                       </p>
                     ) : (
-                      chamado.historico.map((evento) => (
+                      atendimento.historico.map((evento) => (
                         <div key={evento.id} className="border-l-2 pl-3">
                           <p className="text-xs font-medium">
                             {evento.data}{evento.responsavel ? ` · ${evento.responsavel}` : ''}
@@ -452,11 +449,13 @@ export function Inspecoes({
   semCartao = false,
   dados,
   ordemAtiva,
+  idOrdemAtiva,
   motivoSuspeita,
 }: {
   semCartao?: boolean
   dados: InspecaoUC[]
   ordemAtiva: string | null
+  idOrdemAtiva?: string | null
   motivoSuspeita: string | null
 }) {
   const conteudo = (
@@ -465,10 +464,10 @@ export function Inspecoes({
         <div role="status" className="mb-4 rounded-md border p-3 text-sm">
           <p className="flex items-center gap-2 font-medium">
             <AlertCircle className="size-4" />
-            Ordem ativa: {ordemAtiva}
+            <span title={idOrdemAtiva ?? undefined}>Ordem de inspeção ativa: {ordemAtiva}</span>
           </p>
           {motivoSuspeita && (
-            <p className="mt-2 text-muted-foreground">{motivoSuspeita}</p>
+            <p className="mt-2 text-muted-foreground">Motivos da suspeita: {motivoSuspeita}</p>
           )}
         </div>
       )}

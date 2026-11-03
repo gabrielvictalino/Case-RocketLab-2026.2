@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { GraficoConsumo } from './SecoesUnidadeConsumidora'
 
@@ -27,6 +27,9 @@ describe('GraficoConsumo', () => {
       name: 'Gráfico de consumo mensal comparado ao ano anterior',
     })
 
-    expect(within(grafico).getByText('\u25cf\u25c6')).toBeInTheDocument()
+    expect(grafico).toBeInTheDocument()
+    expect(screen.getByText('● Leitura estimada')).toBeInTheDocument()
+    expect(screen.getByText('◆ Troca de medidor')).toBeInTheDocument()
+    expect(screen.getAllByText(/Troca de medidor: consumo estimado pela mediana da UC/)).toHaveLength(2)
   })
 })

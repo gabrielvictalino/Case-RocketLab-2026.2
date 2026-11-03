@@ -2,6 +2,7 @@
 import {
   createBrowserRouter,
   Navigate,
+  useParams,
   type RouteObject,
 } from 'react-router'
 import { PaginaLogin } from '@/app/auth/PaginaLogin'
@@ -13,6 +14,11 @@ import { PaginaPerdas } from '@/features/perdas/PaginaPerdas'
 import { PaginaReceita } from '@/features/receita/PaginaReceita'
 import { PaginaUnidadeConsumidora } from '@/features/unidade-consumidora/PaginaUnidadeConsumidora'
 import { PaginaVisaoGeral } from '@/features/visao-geral/PaginaVisaoGeral'
+
+function RedirecionarRotaUc() {
+  const { id } = useParams<{ id: string }>()
+  return <Navigate to={`/unidade-consumidora?uc=${encodeURIComponent(id ?? "")}`} replace />
+}
 
 export const rotas: RouteObject[] = [
   {
@@ -45,7 +51,7 @@ export const rotas: RouteObject[] = [
       },
       {
         path: 'ucs/:id',
-        element: <PaginaUnidadeConsumidora />,
+        element: <RedirecionarRotaUc />,
       },
       {
         path: 'perdas',

@@ -2,6 +2,7 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  ConteudoTooltipComparativo,
   GraficoBarrasComparativas,
   GraficoCascata,
   GraficoSerieComparativa,
@@ -89,4 +90,31 @@ it('associa cada rótulo à própria barra, inclusive efeitos zero', () => {
   expect(barras.map((barra) => barra.chaveEixo)).toEqual([
     'Receita · P0', 'Volume', 'Reajuste', 'Bandeira', 'Mix', 'Receita · P1',
   ])
+})
+
+it('exibe observacoes no tooltip comparativo', () => {
+  const { rerender } = render(
+    <ConteudoTooltipComparativo
+      active
+      label="jan/26"
+      payload={[{ graphicalItemId: 'consumo-atual', dataKey: 'atual', name: 'Consumo', value: 150 }]}
+      observacoes={{ 'jan/26': 'Troca de medidor: consumo estimado pela mediana da UC' }}
+      formatarValor={(valor) => `${valor} kWh`}
+    />,
+  )
+
+  expect(screen.getByText('jan/26')).toBeInTheDocument()
+  expect(screen.getByText('Consumo: 150 kWh')).toBeInTheDocument()
+  expect(screen.getByText('Troca de medidor: consumo estimado pela mediana da UC')).toBeInTheDocument()
+
+  rerender(
+    <ConteudoTooltipComparativo
+      active
+      label="fev/26"
+      payload={[{ graphicalItemId: 'consumo-atual', dataKey: 'atual', name: 'Consumo', value: 120 }]}
+      observacoes={{ 'fev/26': 'Leitura estimada' }}
+    />,
+  )
+
+  expect(screen.getByText('Leitura estimada')).toBeInTheDocument()
 })
