@@ -75,7 +75,7 @@ métrica e precisa constar no dicionário da Gold.
 | Resíduo (mix) | +R$ 0,1 mi | |
 | Total | +R$ 12,6 mi | |
 
-A separação usa o modelo **tarifa = tarifa base da classe + adicional da
+A separação usa o modelo **tarifa = tarifa base por subgrupo tarifário × competência + adicional da
 bandeira**, que reproduz `valor_energia` com erro médio de 0,2%. O adicional
 é igual para todas as classes: amarela +R$ 0,0189/kWh, vermelha P1
 +R$ 0,0446/kWh e vermelha P2 +R$ 0,0788/kWh (sem tributos).
