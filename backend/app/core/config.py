@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -15,6 +16,12 @@ class Settings(BaseSettings):
     redis_url: str = 'redis://localhost:6379/0'
     jwt_secret: SecretStr = SecretStr('desenvolvimento-local-troque-esta-chave-32')
     jwt_expiration_hours: int = Field(default=8, ge=1, le=24)
+    # Agente: sem a chave do provedor escolhido, o assistente responde 503.
+    ai_provedor: Literal['google', 'openrouter'] = 'google'
+    ai_modelo: str = 'gemini-3.1-flash-lite'
+    gemini_api_key: SecretStr | None = None
+    openrouter_api_key: SecretStr | None = None
+    assistente_timeout_s: float = Field(default=30, gt=0, le=120)
 
     @model_validator(mode='after')
     def validate_secret(self):

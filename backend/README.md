@@ -2,7 +2,8 @@
 
 FastAPI modular, Python 3.12, SQLAlchemy assíncrono e PostgreSQL 17. O workspace
 uv compartilha o lockfile entre `backend`, `importador` e `ai-agent`. O agente
-tem apenas sua interface preparada e não faz chamadas a provedores.
+(`venergy_ai`) roda dentro do backend e chama o provedor configurado em
+`AI_PROVEDOR` e `AI_MODELO`; sem a chave do provedor, o assistente responde 503.
 
 Esta entrega inclui **amostras sintéticas** e contrato
 `0.2.0-provisional`, não aprovado pelo time de dados. O importador também aceita
@@ -71,6 +72,7 @@ também o importador e a suíte completa, use `--all-packages`.
    Sua tabela de versões e todas as migrações ficam em `operations`. A revisão
    `0001` assume `cargas` já existente e cria usuários, ordens, eventos e inspeções.
    `0002` acrescenta a ordem de publicação de cargas e o schema `portal_read`.
+   `0003` cria `agente_auditoria`, gravada e lida só pela role `portal`.
    Alterações futuras de `cargas` devem ser migrações; não reeditar o bootstrap
    esperando que ele rode num volume existente.
 3. O importador depende dessa migração, pois as views unem inspeções novas e
@@ -155,6 +157,8 @@ Rotas implementadas:
 | `POST /ordens-inspecao/{id}/tentativas` | `{observacao: "Imóvel fechado"}` |
 | `POST /ordens-inspecao/{id}/resultado` | `{resultado, tipo_irregularidade, kwh_recuperado, data}` |
 | `POST /ordens-inspecao/{id}/cancelar` | `{motivo: "..."}` |
+| `POST /assistente/perguntas` | `{pergunta, conversa_id?, contexto: {tela, periodo, comparacao, recortes}}`; resposta do agente com `id_resposta` e `conversa_id` |
+| `GET /assistente/respostas/{id}/auditoria` | Pergunta, contexto, SQL gerado e executado, linhas, modelo, tokens e latência; só o autor ou `diretoria` |
 
 `core/periodos.py` valida `AAAA-MM..AAAA-MM`, limites e comparação padrão no ano
 anterior. `/meta/filtros` aceita `periodo` e `comparacao` para exercitar a mesma
@@ -172,6 +176,13 @@ Concluir gera uma inspeção nova. `portal_read.inspecoes` une históricas e nov
 com a coluna `origem`. A IA usa `ai_read.inspecoes`, uma projeção independente e
 explícita: alterações na view do portal não ampliam a allowlist. Ordens não referenciam `analytics`
 por FK: o snapshot precisa sobreviver a uma recarga ou à retirada da UC da Gold.
+
+O assistente roda com um teto de 30 s (`ASSISTENTE_TIMEOUT_S`). Tempo esgotado ou
+falha do provedor respondem 503 e ficam na auditoria com o erro. A pergunta só
+usa conexões do portal antes e depois do agente, para conferir o token, ler a
+carga e gravar a auditoria. Enquanto o modelo responde, nenhuma conexão do portal
+fica presa e as rotas das telas não disputam o pool. O agente recebe só a engine
+`ai_read`.
 
 ## Testes e validações
 
