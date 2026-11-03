@@ -15,10 +15,28 @@ from pydantic_ai import RunUsage
 from venergy_ai.semantica.periodo import Periodo
 
 LINHAS_EXIBIDAS = 50
+# Trocas anteriores que o agente recebe num follow-up.
+TROCAS_NA_CONVERSA = 5
+
+
+class PeriodoUsado(BaseModel):
+    inicio: date
+    fim: date
+    descricao: str
+
+
+class Troca(BaseModel):
+    """Uma pergunta já respondida na conversa: o estado que um follow-up herda."""
+
+    pergunta: str
+    metrica: str | None = None
+    filtros: list[str] = Field(default_factory=list)
+    periodo: PeriodoUsado | None = None
+    sql: str | None = None
 
 
 class Contexto(BaseModel):
-    """O que a tela sabe quando a pergunta é feita."""
+    """O que a tela e a conversa sabem quando a pergunta é feita."""
 
     competencia_mais_recente: date
     tela: str | None = None
@@ -26,12 +44,8 @@ class Contexto(BaseModel):
     periodo: Periodo | None = None
     comparacao: Periodo | None = None
     recortes: dict[str, str] = Field(default_factory=dict)
-
-
-class PeriodoUsado(BaseModel):
-    inicio: date
-    fim: date
-    descricao: str
+    # Últimas trocas da conversa, da mais antiga para a mais recente.
+    historico: list[Troca] = Field(default_factory=list, max_length=TROCAS_NA_CONVERSA)
 
 
 class Consulta(BaseModel):
@@ -53,6 +67,7 @@ class RespostaAgente(BaseModel):
     tipo: Literal['resposta', 'nao_sei']
     texto: str
     metrica: str | None = None
+    filtros: list[str] = Field(default_factory=list)
     periodo: PeriodoUsado | None = None
     # Preenchidos no "não sei": por que não respondeu e o que os dados permitem.
     motivo: str | None = None

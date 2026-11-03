@@ -110,7 +110,7 @@ class AgenteTextoSQL:
 
     async def _responder(self, pergunta: str, contexto: Contexto, andamento: Andamento) -> dict:
         uso = andamento.uso
-        padrao = contexto.periodo or periodo_padrao(contexto.competencia_mais_recente)
+        padrao = _periodo_padrao(contexto)
         instrucoes = instrucoes_do_plano(contexto, padrao)
         execucao = await self.planejador.run(
             pergunta_delimitada(pergunta), instructions=instrucoes, usage=uso
@@ -136,6 +136,7 @@ class AgenteTextoSQL:
         periodo = _periodo(plano, padrao)
         usados = dict(
             metrica=plano.metrica,
+            filtros=plano.filtros,
             periodo=PeriodoUsado(
                 inicio=periodo.inicio, fim=periodo.fim, descricao=periodo.descricao
             ),
@@ -198,6 +199,15 @@ class AgenteTextoSQL:
 def _nao_sei(motivo: str, alternativa: str | None = None, **usados) -> dict:
     texto = f'Não sei. {motivo}'
     return dict(tipo='nao_sei', texto=texto, motivo=motivo, alternativa=alternativa, **usados)
+
+
+def _periodo_padrao(contexto: Contexto) -> Periodo:
+    """Sem período na pergunta, vale o da última troca da conversa, depois o da tela e,
+    por fim, os 12 meses até a competência mais recente."""
+    anterior = next((t.periodo for t in reversed(contexto.historico) if t.periodo), None)
+    if anterior is not None:
+        return Periodo(anterior.inicio, anterior.fim)
+    return contexto.periodo or periodo_padrao(contexto.competencia_mais_recente)
 
 
 def _periodo(plano: Plano, padrao: Periodo) -> Periodo:

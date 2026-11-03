@@ -6,7 +6,14 @@ from pydantic_ai.models.function import FunctionModel
 
 from venergy_ai.agente import AgenteTextoSQL
 from venergy_ai.executor import ConsultaFalhou, ExecutorAiRead, ResultadoSQL
-from venergy_ai.interface import Andamento, BancoIndisponivel, Contexto, ProvedorIndisponivel
+from venergy_ai.interface import (
+    Andamento,
+    BancoIndisponivel,
+    Contexto,
+    PeriodoUsado,
+    ProvedorIndisponivel,
+    Troca,
+)
 from venergy_ai.semantica import Periodo
 
 CONTEXTO = Contexto(competencia_mais_recente=date(2026, 6, 1), tela='Receita')
@@ -326,3 +333,35 @@ async def test_anos_do_periodo_podem_ser_citados(texto, tipo):
         'Qual a receita?', CONTEXTO
     )
     assert resposta.tipo == tipo, resposta.motivo
+
+
+async def test_follow_up_recebe_o_estado_da_conversa():
+    anterior = Troca(
+        pergunta='Qual a receita comercial de Recife?',
+        metrica='Receita faturada (R$)',
+        filtros=['classe = Comercial', 'município = Recife'],
+        periodo=PeriodoUsado(
+            inicio=date(2025, 1, 1), fim=date(2025, 6, 1), descricao='jan/2025 a jun/2025'
+        ),
+        sql='SELECT 1',
+    )
+    contexto = CONTEXTO.model_copy(update={'historico': [anterior]})
+    plano = PLANO | {'periodo_inicio': None, 'periodo_fim': None, 'filtros': ['município = Olinda']}
+    modelo, chamadas = modelo_simulado(plano, 'A receita foi de R$ 1.234.567,89.')
+    resposta = await AgenteTextoSQL(modelo, ExecutorFalso(RESULTADO)).responder(
+        'E em Olinda?', contexto
+    )
+    instrucoes = chamadas[0][1].instructions
+    assert '## Conversa até aqui' in instrucoes
+    assert '"filtros": ["classe = Comercial", "município = Recife"]' in instrucoes
+    # Sem período na pergunta, vale o da troca anterior, e não o padrão de 12 meses.
+    assert 'Sem período na pergunta: jan/2025 a jun/2025' in instrucoes
+    assert resposta.periodo.descricao == 'jan/2025 a jun/2025'
+    assert resposta.filtros == ['município = Olinda']
+
+
+async def test_sem_conversa_nao_ha_bloco_de_conversa():
+    modelo, chamadas = modelo_simulado(PLANO, TEXTO)
+    await AgenteTextoSQL(modelo, ExecutorFalso(RESULTADO)).responder('Receita?', CONTEXTO)
+    assert '<conversa>' not in chamadas[0][1].instructions.split('## Segurança')[1].split('\n')[-1]
+    assert '## Conversa até aqui' not in chamadas[0][1].instructions
