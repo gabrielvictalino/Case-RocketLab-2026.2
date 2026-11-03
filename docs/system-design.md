@@ -357,6 +357,13 @@ lado. O resultado fica em cache por tela, filtros e versão da carga. Se o
 LLM falhar, o endpoint responde `503` e o frontend mostra "insight
 indisponível".
 
+Cada observação aponta o fato principal (a etiqueta mostrada) e passa pela mesma
+validação de números das respostas do agente (`venergy_ai.numeros`): a que cita um
+número fora dos fatos é descartada, e cada número mantido volta com o valor e o campo
+do fato que o sustenta (valor, comparação, variação ou variação %). A chave do cache
+inclui os fatos, então um número que muda sem nova carga (a taxa de acerto, depois de
+uma inspeção) gera outro insight sem invalidação.
+
 ## 7. Frontend
 
 | Item | Escolha |

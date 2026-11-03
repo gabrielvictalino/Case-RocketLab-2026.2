@@ -63,6 +63,15 @@ async def usuario_atual(
     return user
 
 
+async def usuario_em_sessao_curta(
+    request: Request, credentials: HTTPAuthorizationCredentials | None = Depends(bearer)
+):
+    """Para as rotas que esperam o modelo: a sessão de `usuario_atual` duraria a rota
+    inteira, inclusive a espera. Aqui ela fecha logo depois de conferir o token."""
+    async with request.app.state.portal_sessions() as db, db.begin():
+        return await usuario_atual(request, credentials, db)
+
+
 def requer_cargo(*cargos):
     async def check(user=Depends(usuario_atual)):
         if user['cargo'] not in cargos:
