@@ -31,6 +31,10 @@ from app.modules.assistente.schemas import (
 )
 from app.modules.meta import repository as meta
 
+# Reserva da cota diária por pergunta: o plano leva uns 5 mil tokens de prompt, e uma
+# pergunta com a nova tentativa do SQL e a redação chega perto de 15 mil.
+RESERVA_TOKENS = 20_000
+
 
 def modelo_configurado(settings) -> Model | None:
     """O modelo do provedor escolhido. Sem a chave dele, não há modelo e a IA responde 503."""
@@ -52,10 +56,27 @@ async def perguntar(state, body: Pergunta, usuario) -> RespostaPergunta:
     if state.assistente is None:
         raise APIError(503, 'Assistente não configurado neste ambiente', 'ASSISTENTE_INDISPONIVEL')
     settings = state.settings
-    await limites.conferir_cota(state.redis, usuario['id'], settings.assistente_cota_tokens_dia)
-    await limites.consumir(
-        state.redis, usuario['id'], 'assistente', settings.assistente_perguntas_por_minuto
+    reserva = await limites.reservar_cota(
+        state.redis, usuario['id'], settings.assistente_cota_tokens_dia, RESERVA_TOKENS
     )
+    # O agente preenche o andamento enquanto trabalha: numa falha, a auditoria ainda
+    # guarda o SQL que já rodou e os tokens já gastos.
+    andamento = Andamento()
+    try:
+        await limites.consumir(
+            state.redis, usuario['id'], 'assistente', settings.assistente_perguntas_por_minuto
+        )
+        return await _responder(state, body, usuario, andamento)
+    finally:
+        # A cota conta os tokens de toda pergunta, também os de uma que falhou no meio; a
+        # que nem chegou ao LLM devolve a reserva inteira.
+        await limites.acertar_cota(
+            state.redis, reserva, andamento.tokens_entrada + andamento.tokens_saida
+        )
+
+
+async def _responder(state, body: Pergunta, usuario, andamento: Andamento) -> RespostaPergunta:
+    settings = state.settings
     # Sessões curtas do portal antes e depois do agente: nenhuma conexão do portal fica
     # presa enquanto o modelo responde, e as rotas das telas seguem com o pool livre.
     async with state.portal_sessions() as db, db.begin():
@@ -79,9 +100,6 @@ async def perguntar(state, body: Pergunta, usuario) -> RespostaPergunta:
         consultas=[],
         nao_sei=False,
     )
-    # O agente preenche o andamento enquanto trabalha: numa falha, a auditoria ainda
-    # guarda o SQL que já rodou e os tokens já gastos.
-    andamento = Andamento()
     inicio = time.monotonic()
     try:
         async with asyncio.timeout(settings.assistente_timeout_s) as limite:
@@ -108,15 +126,10 @@ async def perguntar(state, body: Pergunta, usuario) -> RespostaPergunta:
     except Exception as erro:
         await _registrar_falha(state, registro, andamento, inicio, _interno(erro))
         raise
-    finally:
-        # A cota conta os tokens de toda pergunta, também os de uma que falhou no meio.
-        await limites.gastar_tokens(
-            state.redis, usuario['id'], andamento.tokens_entrada + andamento.tokens_saida
-        )
     async with state.portal_sessions() as db, db.begin():
         await repository.registrar(db, registro | _da_resposta(resposta))
     await conversas.registrar(
-        state.redis, registro['conversa_id'], usuario['id'], historico, body.pergunta, resposta
+        state.redis, registro['conversa_id'], usuario['id'], body.pergunta, resposta
     )
     return RespostaPergunta(
         **resposta.model_dump(), id_resposta=registro['id'], conversa_id=registro['conversa_id']

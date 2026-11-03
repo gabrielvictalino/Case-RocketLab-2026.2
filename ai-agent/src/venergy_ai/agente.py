@@ -160,13 +160,7 @@ class AgenteTextoSQL:
         texto = redacao.output.strip()
         if not texto:
             return _nao_sei('O modelo não redigiu a resposta.', plano.alternativa, **usados)
-        permitidos = [
-            *numeros_citados(pergunta),
-            consulta.total_linhas,
-            len(consulta.linhas),
-            _meses(periodo),
-            *_anos(periodo, padrao, contexto),
-        ]
+        permitidos = numeros_permitidos(pergunta, consulta, periodo, contexto)
         # Só as linhas que o redator viu: as que passam das exibidas não sustentam o texto.
         if sem_lastro := numeros_sem_lastro(texto, consulta.linhas, permitidos):
             return _nao_sei(
@@ -207,13 +201,29 @@ def _periodo_padrao(contexto: Contexto) -> Periodo:
     anterior = next((t.periodo for t in reversed(contexto.historico) if t.periodo), None)
     if anterior is not None:
         return Periodo(anterior.inicio, anterior.fim)
-    return contexto.periodo or periodo_padrao(contexto.competencia_mais_recente)
+    return contexto.periodo or periodo_padrao(
+        contexto.competencia_mais_recente, contexto.competencia_inicial
+    )
 
 
 def _periodo(plano: Plano, padrao: Periodo) -> Periodo:
     inicio = (plano.periodo_inicio or plano.periodo_fim or padrao.inicio).replace(day=1)
     fim = (plano.periodo_fim or plano.periodo_inicio or padrao.fim).replace(day=1)
     return Periodo(min(inicio, fim), max(inicio, fim))
+
+
+def numeros_permitidos(
+    pergunta: str, consulta: Consulta, periodo: Periodo, contexto: Contexto
+) -> list[int | str]:
+    """Números que o texto pode citar sem estar nas linhas: os da pergunta, as contagens de
+    linhas, o número de meses e os anos do período. A avaliação confere com a mesma lista."""
+    return [
+        *numeros_citados(pergunta),
+        consulta.total_linhas,
+        len(consulta.linhas),
+        _meses(periodo),
+        *_anos(periodo, _periodo_padrao(contexto), contexto),
+    ]
 
 
 def _anos(periodo: Periodo, padrao: Periodo, contexto: Contexto) -> set[int]:
