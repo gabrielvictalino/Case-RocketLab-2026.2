@@ -112,6 +112,18 @@ async def test_sem_periodo_na_tela_usa_os_ultimos_12_meses():
     assert resposta.periodo.descricao == 'jul/2025 a jun/2026'
 
 
+async def test_cobertura_e_data_de_referencia_da_carga_vao_para_as_instrucoes():
+    carga = CONTEXTO.model_copy(
+        update={'competencia_inicial': date(2022, 7, 1), 'data_referencia': date(2026, 7, 1)}
+    )
+    modelo, chamadas = modelo_simulado(PLANO, TEXTO)
+    await AgenteTextoSQL(modelo, ExecutorFalso(RESULTADO)).responder('Qual a receita?', carga)
+    instrucoes = chamadas[0][1].instructions
+    assert 'A base cobre as competências de jul/2022 a jun/2026' in instrucoes
+    assert "data_vencimento < DATE '2026-07-01'" in instrucoes
+    assert 'Comparação padrão: jul/2024 a jun/2025' in instrucoes
+
+
 @pytest.mark.parametrize('linhas', [[], [[None]]], ids=['zero-linhas', 'agregacao-vazia'])
 async def test_nao_sei_por_zero_linhas(linhas):
     modelo, chamadas = modelo_simulado(PLANO | {'alternativa': 'Pergunte por Olinda.'})

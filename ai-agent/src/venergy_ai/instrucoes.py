@@ -69,7 +69,11 @@ def pergunta_delimitada(pergunta: str) -> str:
 
 
 def instrucoes_do_plano(contexto: Contexto, padrao: Periodo) -> str:
-    return '\n\n'.join((INSTRUCOES_PLANO, descrever_semantica(padrao), _contexto(contexto)))
+    base = None
+    if contexto.competencia_inicial is not None:
+        base = Periodo(contexto.competencia_inicial, contexto.competencia_mais_recente)
+    semantica = descrever_semantica(padrao, base, contexto.data_referencia)
+    return '\n\n'.join((INSTRUCOES_PLANO, semantica, _contexto(contexto)))
 
 
 def pedido_de_correcao(erro: str) -> str:
