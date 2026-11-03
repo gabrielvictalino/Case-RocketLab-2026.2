@@ -1430,3 +1430,14 @@
   font-size: 12px;
   color: var(--ink-muted);
 }
+
+.ve-dialog-overlay { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 1rem; background: rgb(0 0 0 / 55%); }
+.ve-dialog { background: var(--surface, white); color: var(--text, #18212c); padding: 1.5rem; width: min(100%, 34rem); max-height: 90vh; overflow: auto; border-radius: 8px; box-shadow: 0 12px 35px rgb(0 0 0 / 25%); }
+.ve-dialog-form { display: grid; gap: 1rem; margin-top: 1rem; }
+.ve-dialog-form label { display: grid; gap: .4rem; }
+.ve-dialog-form input:not([type=radio]), .ve-dialog-form textarea, .ve-dialog-form select { width: 100%; padding: .6rem; border: 1px solid #8995a3; border-radius: 4px; background: white; color: #18212c; }
+.ve-dialog-form fieldset { display: grid; gap: .5rem; }
+.ve-dialog-form fieldset label { display: block; }
+.ve-motivos { display: inline-block; max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
+.ve-acoes-ordem { display: flex; flex-wrap: wrap; gap: .3rem; }
+.ve-lote-resumo { padding: .5rem 1rem; }

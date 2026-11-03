@@ -51,6 +51,11 @@ const FILTROS_FIXTURE = {
   alimentadores: ['AL-RCF-07', 'AL-OLD-03'],
 }
 
+const FILA_FIXTURE = {
+  items: [], total: 0, page: 1, size: 25,
+  totais: { pagina: { itens: 0, energia_recuperar_kwh: '0.00', energia_recuperar_reais: '0.00' }, filtro: { itens: 0, energia_recuperar_kwh: '0.00', energia_recuperar_reais: '0.00' } },
+}
+
 const ORDENS_FIXTURE = {
   items: [
     {
@@ -104,6 +109,9 @@ beforeEach(() => {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         })
+      }
+      if (url.includes('/api/v1/perdas/fila')) {
+        return new Response(JSON.stringify(FILA_FIXTURE), { status: 200, headers: { 'Content-Type': 'application/json' } })
       }
       if (url.includes('/api/v1/ordens-inspecao')) {
         const parsed = new URL(url, 'http://localhost')
@@ -284,7 +292,7 @@ describe('Telas do portal e PainelAgente', () => {
           JSON.stringify(
             url.pathname.endsWith('/meta/filtros')
               ? FILTROS_FIXTURE
-              : CARGA_FIXTURE,
+              : url.pathname.endsWith('/perdas/fila') ? FILA_FIXTURE : CARGA_FIXTURE,
           ),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
         )
