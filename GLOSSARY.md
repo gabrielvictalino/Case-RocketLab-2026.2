@@ -12,6 +12,10 @@ diagnóstico da receita.
 O ponto que recebe energia e tem um medidor; entidade central da plataforma. Um mesmo titular pode ter várias UCs.
 _Evitar_: cliente, consumidor, instalação
 
+**UC ativa**:
+Unidade consumidora com ao menos um registro mensal nas competências do período,
+inclusive quando não há fatura. Cada UC é contada uma vez no período.
+
 **Classe**:
 Categoria tarifária da UC: Residencial, Comercial, Industrial, Rural ou Poder Público.
 _Evitar_: tipo de cliente, segmento
