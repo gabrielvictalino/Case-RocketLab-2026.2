@@ -141,6 +141,8 @@ def _contexto(body: Pergunta, carga, historico: list[Troca]) -> Contexto:
         raise APIError(422, 'Informe periodo junto com comparacao', 'PERIODO_INVALIDO')
     return Contexto(
         competencia_mais_recente=carga['competencia_mais_recente'],
+        competencia_inicial=carga['competencia_inicial'],
+        data_referencia=carga['data_referencia'],
         tela=pedido.tela and TELAS[pedido.tela],
         periodo=periodo,
         comparacao=comparacao,
