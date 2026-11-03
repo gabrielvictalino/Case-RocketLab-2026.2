@@ -48,7 +48,7 @@ export type ChamadoUC = {
   abertura: string
   canal?: string
   status: string
-  avaliacao: number | null
+  avaliacao: string | null
   historico: EventoChamado[]
 }
 

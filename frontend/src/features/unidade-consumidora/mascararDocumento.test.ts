@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { mascararDocumento } from './mascararDocumento'
 
 describe('mascararDocumento', () => {
@@ -20,4 +20,3 @@ describe('mascararDocumento', () => {
     expect(mascararDocumento('123')).toBe('Documento indisponível')
   })
 })
-
