@@ -11,7 +11,7 @@
     "atendimentos": {
       "file": "atendimentos.csv",
       "rows": 2,
-      "sha256": "29bc82d4bcc758de6d2e16a27fd4390d5ca8b3b6f563db673cfb4d2113f0d5d4",
+      "sha256": "e169de3989472fcccd386047d00df4244d4edd2b10ef3af5690480d3822a765f",
       "totals": {}
     },
     "atendimentos_historico": {

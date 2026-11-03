@@ -11,7 +11,7 @@ from typing import Literal
 
 import pydantic_ai
 from pydantic import BaseModel, Field, model_validator
-from pydantic_ai import Agent, ModelAPIError, ModelSettings, RunUsage, UnexpectedModelBehavior
+from pydantic_ai import Agent, ModelAPIError, ModelSettings, UnexpectedModelBehavior
 from pydantic_ai.models import Model
 
 from venergy_ai.executor import ConsultaFalhou, ExecutorSQL
@@ -25,6 +25,7 @@ from venergy_ai.instrucoes import (
 )
 from venergy_ai.interface import (
     LINHAS_EXIBIDAS,
+    Andamento,
     Consulta,
     Contexto,
     PeriodoUsado,
@@ -84,28 +85,31 @@ class AgenteTextoSQL:
             modelo, instructions=INSTRUCOES_REDACAO, model_settings=CONFIGURACAO, retries=1
         )
 
-    async def responder(self, pergunta: str, contexto: Contexto) -> RespostaAgente:
+    async def responder(
+        self, pergunta: str, contexto: Contexto, andamento: Andamento | None = None
+    ) -> RespostaAgente:
+        """`andamento` é preenchido aos poucos: quem chama audita também uma pergunta que
+        falhou (`ProvedorIndisponivel`, `BancoIndisponivel`) ou foi cancelada por tempo."""
         inicio = time.monotonic()
-        uso = RunUsage()
-        consultas: list[Consulta] = []
+        andamento = Andamento() if andamento is None else andamento
+        andamento.modelo = self.modelo.model_name
         try:
-            campos = await self._responder(pergunta, contexto, uso, consultas)
+            campos = await self._responder(pergunta, contexto, andamento)
         except ModelAPIError as erro:
             raise ProvedorIndisponivel(str(erro)) from erro
         except UnexpectedModelBehavior:
             campos = _nao_sei('O modelo não devolveu a resposta no formato esperado.')
         return RespostaAgente(
             **campos,
-            consultas=consultas,
+            consultas=andamento.consultas,
             modelo=self.modelo.model_name,
-            tokens_entrada=uso.input_tokens,
-            tokens_saida=uso.output_tokens,
+            tokens_entrada=andamento.tokens_entrada,
+            tokens_saida=andamento.tokens_saida,
             latencia_ms=round((time.monotonic() - inicio) * 1000),
         )
 
-    async def _responder(
-        self, pergunta: str, contexto: Contexto, uso: RunUsage, consultas: list[Consulta]
-    ) -> dict:
+    async def _responder(self, pergunta: str, contexto: Contexto, andamento: Andamento) -> dict:
+        uso = andamento.uso
         padrao = contexto.periodo or periodo_padrao(contexto.competencia_mais_recente)
         instrucoes = instrucoes_do_plano(contexto, padrao)
         execucao = await self.planejador.run(
@@ -115,8 +119,8 @@ class AgenteTextoSQL:
             plano = execucao.output
             if plano.tipo != 'consulta':
                 return _nao_sei(plano.motivo, plano.alternativa)
-            consulta, linhas = await self._executar(plano.sql)
-            consultas.append(consulta)
+            consulta = await self._executar(plano.sql)
+            andamento.consultas.append(consulta)
             if consulta.erro is None:
                 break
             if tentativa + 1 == TENTATIVAS_SQL:
@@ -137,26 +141,33 @@ class AgenteTextoSQL:
             ),
         )
         # Uma agregação sobre zero linhas devolve uma linha só de nulos: também é "sem dado".
-        if not any(valor is not None for linha in linhas for valor in linha):
+        if not any(valor is not None for linha in consulta.linhas for valor in linha):
             return _nao_sei(
                 f'A consulta não encontrou dados de {plano.metrica} em {periodo.descricao}.',
                 plano.alternativa,
                 **usados,
             )
-        redacao = await self.redator.run(
-            pedido_de_redacao(pergunta, plano.metrica, plano.filtros, periodo, consulta),
-            usage=uso,
-        )
+        try:
+            redacao = await self.redator.run(
+                pedido_de_redacao(pergunta, plano.metrica, plano.filtros, periodo, consulta),
+                usage=uso,
+            )
+        except UnexpectedModelBehavior:
+            return _nao_sei(
+                'O modelo não redigiu a resposta no formato esperado.', plano.alternativa, **usados
+            )
         texto = redacao.output.strip()
         if not texto:
             return _nao_sei('O modelo não redigiu a resposta.', plano.alternativa, **usados)
         permitidos = [
             *numeros_citados(pergunta),
-            len(linhas),
+            consulta.total_linhas,
             len(consulta.linhas),
             _meses(periodo),
+            *_anos(periodo, padrao, contexto),
         ]
-        if sem_lastro := numeros_sem_lastro(texto, linhas, permitidos):
+        # Só as linhas que o redator viu: as que passam das exibidas não sustentam o texto.
+        if sem_lastro := numeros_sem_lastro(texto, consulta.linhas, permitidos):
             return _nao_sei(
                 'A resposta citava números que não estão no resultado da consulta: '
                 f'{", ".join(sem_lastro)}.',
@@ -165,17 +176,16 @@ class AgenteTextoSQL:
             )
         return dict(tipo='resposta', texto=texto, **usados)
 
-    async def _executar(self, sql: str) -> tuple[Consulta, list[list]]:
+    async def _executar(self, sql: str) -> Consulta:
         try:
             seguro = validar_sql(sql, VISOES_POR_NOME)
         except SQLRejeitado as erro:
-            return Consulta(sql_gerado=sql, erro=f'SQL rejeitado pela guarda: {erro}'), []
+            return Consulta(sql_gerado=sql, erro=f'SQL rejeitado pela guarda: {erro}')
         try:
             resultado = await self.executor.executar(seguro)
         except ConsultaFalhou as erro:
-            consulta = Consulta(sql_gerado=sql, sql_executado=seguro, erro=f'Erro do banco: {erro}')
-            return consulta, []
-        consulta = Consulta(
+            return Consulta(sql_gerado=sql, sql_executado=seguro, erro=f'Erro do banco: {erro}')
+        return Consulta(
             sql_gerado=sql,
             sql_executado=seguro,
             colunas=resultado.colunas,
@@ -183,7 +193,6 @@ class AgenteTextoSQL:
             total_linhas=len(resultado.linhas),
             duracao_ms=resultado.duracao_ms,
         )
-        return consulta, resultado.linhas
 
 
 def _nao_sei(motivo: str, alternativa: str | None = None, **usados) -> dict:
@@ -195,6 +204,16 @@ def _periodo(plano: Plano, padrao: Periodo) -> Periodo:
     inicio = (plano.periodo_inicio or plano.periodo_fim or padrao.inicio).replace(day=1)
     fim = (plano.periodo_fim or plano.periodo_inicio or padrao.fim).replace(day=1)
     return Periodo(min(inicio, fim), max(inicio, fim))
+
+
+def _anos(periodo: Periodo, padrao: Periodo, contexto: Contexto) -> set[int]:
+    """Anos que o texto pode citar: os do período e o anterior a ele (comparação ano contra
+    ano), os da comparação da tela e o da competência mais recente."""
+    anos = set(range(periodo.inicio.year - 1, periodo.fim.year + 1))
+    anos |= {padrao.inicio.year, padrao.fim.year, contexto.competencia_mais_recente.year}
+    if contexto.comparacao is not None:
+        anos |= {contexto.comparacao.inicio.year, contexto.comparacao.fim.year}
+    return anos
 
 
 def _meses(periodo: Periodo) -> int:

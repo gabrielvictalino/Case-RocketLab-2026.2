@@ -151,6 +151,8 @@ Rotas implementadas:
 | `POST /auth/login` | Login JSON `{login, senha}`, retorna token |
 | `GET /meta/carga` | Versão, data, limites da base e indicação de dados sintéticos |
 | `GET /meta/filtros` | Municípios, bairros por município, classes e alimentadores |
+| `GET /kpis?periodo=AAAA-MM..AAAA-MM` | Oito cards com valor, comparação e variações |
+| `GET /kpis/serie?periodo=AAAA-MM..AAAA-MM` | Receita e volume por competência, em ordem cronológica |
 | `GET /ordens-inspecao?status=&page=1&size=25` | Listagem com snapshot, máximo 100 por página |
 | `POST /ordens-inspecao` | Lote `{ucs: [...]}`, criadas e rejeitadas; não aborta por UC repetida |
 | `POST /ordens-inspecao/{id}/despachar` | `{inspetor: "INSP-001"}` |
@@ -166,6 +168,60 @@ validação que será usada nos módulos de métricas. Sem um ano anterior compl
 o período atual continua válido e o utilitário devolve comparação `None`. Módulos
 de métricas devem indicar comparação indisponível. Uma comparação explícita fora
 da base continua retornando 422.
+
+### KPIs da Visão Geral (#59)
+
+As duas rotas de KPIs exigem autenticação e `periodo`; aceitam `comparacao`
+opcional e os recortes `municipio`, `bairro`, `classe` e `alimentador` (combinados
+por interseção). A comparação padrão é o mesmo intervalo do ano anterior.
+Respostas incluem `periodo`, `comparacao` efetivamente resolvida e `carga`, com
+versão, data de publicação, limites e proveniência sintética/real.
+
+`/kpis` retorna oito campos de cards: `receita`, `receita_arrecadada`,
+`volume_faturado_kwh`, `tarifa_media`, `inadimplencia`, `ucs` (subindicadores
+`ativas` e `com_gd`), `continuidade` (`dec` e `fec`) e `taxa_acerto`.
+Cada indicador tem `valor`, `comparacao`, `variacao` (atual menos comparação)
+e `variacao_pct` (variação relativa à comparação × 100). Para taxas, `variacao`
+é em pontos percentuais; `variacao_pct` continua sendo a variação relativa.
+Decimais são strings JSON, preservando a precisão financeira. Isso inclui as
+contagens de UC (por exemplo, `"300"`); o frontend deve convertê-las para operações
+numéricas.
+
+- Receita, arrecadação e volume somam `receita_volume_mensal`. Com recorte por
+  alimentador, usam o detalhe por UC, reconciliado com o agregado na importação.
+  KPIs e série usam o repositório `modules/receita/repository.py`.
+- Tarifa média = receita / volume (seis casas); inadimplência =
+  (receita − arrecadação) / receita × 100, conforme o [glossário](../GLOSSARY.md).
+- Como o contrato não expõe status cadastral histórico, UCs ativas são as UCs
+  distintas com registro mensal no período, inclusive competências sem fatura.
+  UCs com GD são as ativas conectadas até a última competência selecionada,
+  usando `gd_uc.data_conexao`, sem aplicar o retrato atual de `dim_uc.flag_gd`
+  a períodos anteriores. Uma UC é contada uma vez no intervalo.
+- DEC/FEC somam CHI/interrupções do período e dividem pelo total fixo de UCs dos
+  alimentadores, contado uma única vez. Não fazem média dos índices nem somam
+  o denominador a cada mês. Eventos atípicos são incluídos. Bairro e classe
+  exigem o detalhe `ocorrencias_uc`: somam duração efetiva / 60 e contam somente
+  ocorrências sem sobreposição, pela competência de abertura, com o cadastro
+  filtrado como denominador. Consulte [a definição Gold](../docs/gold/continuidade.md).
+- Taxa de acerto = inspeções confirmadas / inspeções realizadas × 100, na view
+  `portal_read.inspecoes` (históricas + novas), pela data da inspeção. O último
+  dia da competência final está incluído. Sem recorte, também entram inspeções
+  operacionais de UCs que tenham saído do cadastro da carga atual.
+
+Indicadores sem observação, comparação indisponível e razões com denominador
+zero retornam `null`. Uma observação de valor zero continua sendo zero (por
+exemplo, inspeções realizadas sem nenhuma confirmação). `/kpis/serie` retorna
+`serie: [{competencia, receita, volume_faturado_kwh}]` para todos os meses do
+período; lacunas ficam com valores nulos.
+
+A rota `/receita/decomposicao` e o teste cruzado KPIs × decomposição ficam para
+a #55/P20, junto com locais e grupos. Antes de publicar a rota, essa entrega deve
+resolver a ambiguidade da R5 entre decompor totais filtrados e somar efeitos por
+subgrão. KPIs e série são conferidos diretamente contra os CSVs da amostra nos
+recortes por município e alimentador; o repositório de totais também tem seus
+componentes de tarifa e bandeira conferidos contra o detalhe por UC.
+As métricas usam o contrato vigente `0.3.0-provisional`; esta implementação não
+homologa uma exportação real nem altera a Gold.
 
 Criar uma ordem congela o score, os motivos e os valores sintéticos da fila.
 Transições usam bloqueio da linha e gravam eventos na mesma transação. O índice
@@ -212,5 +268,5 @@ O workflow `Aplicação` detecta alterações em código, contratos, infraestrut
 configuração compartilhada. Só então roda lint, formatação e a suíte do backend;
 o agregador obrigatório `CI` sempre executa e aceita o skip por ausência de mudanças.
 Falha ou cancelamento do detector/backend falha o agregador. `Fluxo Git` permanece independente.
-Frontend, cache de endpoints, planilha de campo, métricas finais e IA completa
+Cache de endpoints, planilha de campo, demais métricas e IA completa
 ficam para próximas entregas.

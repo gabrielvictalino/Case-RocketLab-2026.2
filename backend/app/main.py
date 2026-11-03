@@ -17,6 +17,7 @@ from app.core.database import create_engines
 from app.modules.assistente.router import router as assistente_router
 from app.modules.assistente.service import criar_assistente
 from app.modules.auth.router import router as auth_router
+from app.modules.kpis.router import router as kpis_router
 from app.modules.meta.router import router as meta_router
 from app.modules.perdas.router import router as perdas_router
 from app.modules.ucs.router import router as ucs_router
@@ -120,7 +121,14 @@ def create_app(settings=None):
             )
         return {'status': 'ok', **checks}
 
-    for router in (auth_router, meta_router, perdas_router, ucs_router, assistente_router):
+    for router in (
+        auth_router,
+        meta_router,
+        perdas_router,
+        ucs_router,
+        kpis_router,
+        assistente_router,
+    ):
         app.include_router(router, prefix='/api/v1')
     return app
 
