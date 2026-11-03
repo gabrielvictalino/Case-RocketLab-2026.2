@@ -243,7 +243,8 @@ por FK: o snapshot precisa sobreviver a uma recarga ou à retirada da UC da Gold
 O assistente roda com um teto de 30 s (`ASSISTENTE_TIMEOUT_S`). Tempo esgotado,
 falha do provedor e banco da IA fora do ar respondem 503 (`ASSISTENTE_TEMPO_ESGOTADO`,
 `PROVEDOR_INDISPONIVEL`, `BANCO_INDISPONIVEL`). Toda pergunta fica na auditoria, também
-as que falham: o erro, o SQL que já rodou e os tokens já gastos. Uma consulta lenta da
+as que falham e as que o cliente abandona no meio (`CANCELADA_PELO_CLIENTE`): o erro, o
+SQL que já rodou e os tokens já gastos. Uma consulta lenta da
 `ai_read` é erro da consulta, com nova tentativa e "não sei", e não o 503. A `tela`
 aceita só as telas do portal, e os recortes, nomes e códigos sem aspas, quebras de
 linha, `<` nem `>`: os dois chegam às instruções do modelo. A pergunta só

@@ -4,16 +4,22 @@ O redator recebe as linhas e escreve o texto, mas pode errar uma conta ou invent
 um valor. Aqui cada número do texto é comparado com os valores numéricos do
 resultado, aceitando as formas comuns de escrever o mesmo valor:
 
-- arredondamento ou truncamento para as casas mostradas (16,66 → "16,7" ou "16,6");
+- arredondamento para as casas mostradas (16,66 → "16,7"), e truncamento só quando o
+  texto mostra dois dígitos significativos ou mais (16,66 → "16,6", mas "1 milhão" não
+  vale para 1.999.999);
 - percentual de uma razão, quando o texto usa % ou pp (0,167 → "16,7%");
-- escala por extenso ou em MWh/GWh (1.234.567 → "1,2 milhão"; 351.234 kWh → "351 MWh");
-- sinal implícito ("queda de 351" para −351). Com sinal explícito, o sinal precisa bater,
-  e uma alta ("alta de 5,3%") não vale para um valor negativo.
+- escala por extenso ou em MWh/GWh (1.234.567 → "1,2 milhão"; 351.234 kWh → "351 MWh"),
+  ou o número sem a escala, quando o SQL já devolveu o valor nela (351,2 → "351,2 MWh");
+- sinal implícito ("queda de 351" para −351). Com sinal explícito, o sinal precisa bater.
+  Uma alta ("alta de 5,3%") não vale para um valor negativo, e uma queda não vale para
+  um positivo, a não ser que a coluna seja o tamanho da queda (queda_pct, reducao_kwh).
+  Em "caiu de X para Y", X e Y são níveis e não têm direção.
 
 Todo número é conferido, mesmo colado à unidade ("351kWh", "R$1,2mi", "3,2h"). Não são
 conferidos só os códigos (UC000123, ALM-REC-001), as datas e competências (jun/2026,
-2025-07), os ordinais (1º) e os números que o chamador permite, como os da pergunta,
-os anos do período, o número de linhas e o número de meses.
+2025-07), os ordinais (1º) e os números que o chamador permite, como os anos do período,
+o número de linhas e o número de meses. Os números da pergunta só valem como limiar
+("acima de 30%"): repetidos como resultado, eles não têm lastro.
 """
 
 import re
@@ -60,9 +66,29 @@ ESCALAS = {
     'mwh': Decimal(1000),
     'gwh': Decimal(10) ** 6,
 }
-# Palavras de alta logo antes do número: "alta de 5,3%", "cresceu 12", "aumento de 3 pp".
+# O fim do trecho antes do número: no máximo uma palavra e o "R$" depois da palavra-chave.
+ANTES_DO_NUMERO = r'(?:\s+\w+)?\s+(?:R\$\s*)?$'
+# "alta de 5,3%", "cresceu 12", "aumento de R$ 1.234", "aumento de 3 pp".
 ALTA = re.compile(
-    r'\b(?:alta|aument\w*|cresc\w*|subi\w*|subida|elev\w*|ganho|avan[cç]\w*)(?:\s+\w+)?\s+$',
+    r'\b(?:alta|aument\w*|cresc\w*|subi\w*|subida|elev\w*|ganho|avan[cç]\w*)' + ANTES_DO_NUMERO,
+    re.IGNORECASE,
+)
+# "queda de 5,3%", "caiu 12", "redução de R$ 1.234". Fica de fora o que também é nível:
+# "perdas de 351 kWh", "o mais baixo, 3,2 h", "energia recuperada de 125 kWh".
+BAIXA = re.compile(
+    r'\b(?:quedas?|ca[ií](?:u|ram|ndo|r)|redu[cçz]\w*|recu(?:o|ou|aram)|diminu\w*|retra\w*'
+    r'|encolh\w*)' + ANTES_DO_NUMERO,
+    re.IGNORECASE,
+)
+# A coluna que já é o tamanho da queda vem positiva.
+COLUNA_DE_QUEDA = re.compile(r'qued|redu|dimin|perd|recuo|retra', re.IGNORECASE)
+# "de X para Y": dois níveis, sem direção.
+PARA = re.compile(r'\s*para\s', re.IGNORECASE)
+# Limiares que a pergunta pode trazer e a resposta repetir: "acima de 30%", "pelo menos 3".
+LIMIAR = re.compile(
+    r'\b(?:acima|abaixo|mais|menos|maior(?:es)?|menor(?:es)?|superior(?:es)?|inferior(?:es)?'
+    r'|at[eé]|m[ií]nimo|m[aá]ximo|pelo\s+menos|a\s+partir)(?:\s+(?:de|do|da|que|a))?\s+'
+    r'(?:R\$\s*)?$',
     re.IGNORECASE,
 )
 DATA = re.compile(r'(\d{4})-\d{2}(?:-\d{2})?')
@@ -77,62 +103,151 @@ class Leitura(NamedTuple):
     percentual: bool
     # O texto fala em alta logo antes do número: um valor negativo não serve.
     alta: bool = False
+    # O texto fala em queda: um valor positivo só serve se a coluna for a da queda.
+    baixa: bool = False
+    # Dígitos significativos mostrados: com menos de dois, só vale o arredondamento.
+    significativos: int = 2
+
+
+class Valor(NamedTuple):
+    valor: Decimal
+    # A coluna é o tamanho de uma queda (queda_pct): positiva, ela sustenta "queda de".
+    de_queda: bool = False
+
+
+class Citado(NamedTuple):
+    """Um número do texto, com onde ele está e o que vem em volta."""
+
+    trecho: str
+    leituras: list[Leitura]
+    # Posição do trecho no texto original: o frontend destaca por ela, sem procurar.
+    inicio: int
+    fim: int
+    # Logo depois de "acima de", "pelo menos" e afins.
+    limiar: bool
+    # A unidade escrita junto do número: %, pp, R$, kWh ou h. None quando não há.
+    unidade: str | None
+    # O texto logo depois do número, para reconhecer "12 meses".
+    depois: str
 
 
 class Citacao(NamedTuple):
-    # Como o número está escrito no texto.
     trecho: str
     # Posições, em `valores`, dos valores que sustentam o número. Vazia: sem lastro.
     lastros: list[int]
+    inicio: int
+    fim: int
+    unidade: str | None
 
 
 def numeros_sem_lastro(
-    texto: str, linhas: Iterable[Iterable[object]], permitidos: Iterable[object] = ()
+    texto: str,
+    linhas: Iterable[Iterable[object]],
+    permitidos: Iterable[object] = (),
+    limiares: Iterable[object] = (),
+    colunas: Iterable[str] = (),
 ) -> list[str]:
-    """Devolve os números do texto que não aparecem nas linhas, na ordem em que aparecem."""
-    valores = [v for linha in linhas for item in linha for v in _decimais(item)]
-    valores += [v for item in permitidos for v in _decimais(item)]
-    return [
-        trecho
-        for trecho, leituras in _citados(texto)
-        if not any(_tem_lastro(leitura, valores) for leitura in leituras)
+    """Devolve os números do texto que não aparecem nas linhas, na ordem em que aparecem.
+
+    `permitidos` valem em qualquer lugar do texto; `limiares` (os números da pergunta) só
+    logo depois de "acima de", "pelo menos" e afins. `colunas` são os nomes das colunas
+    das linhas, para reconhecer a que já traz o tamanho de uma queda."""
+    nomes = list(colunas)
+    valores = [
+        Valor(v, bool(COLUNA_DE_QUEDA.search(nomes[i])) if i < len(nomes) else False)
+        for linha in linhas
+        for i, item in enumerate(linha)
+        for v in _decimais(item)
     ]
+    # Um número permitido não é variação: sustenta a queda e a alta.
+    valores += [Valor(v, True) for item in permitidos for v in _decimais(item)]
+    dos_limiares = [Valor(v, True) for item in limiares for v in _decimais(item)]
+    sem_lastro = []
+    for citado in _citados(texto):
+        if not citado.leituras or _algum_lastro(citado, valores):
+            continue
+        if citado.limiar and _algum_lastro(citado, dos_limiares):
+            continue
+        sem_lastro.append(citado.trecho)
+    return sem_lastro
+
+
+def _algum_lastro(citado: Citado, valores: list[Valor]) -> bool:
+    return any(_tem_lastro(leitura, valores) for leitura in citado.leituras)
 
 
 def citacoes(
-    texto: str, valores: Sequence[object], permitidos: Iterable[object] = ()
+    texto: str,
+    valores: Sequence[object],
+    anos: Iterable[int] = (),
+    meses: Iterable[int] = (),
+    nomes: Iterable[str] = (),
 ) -> list[Citacao]:
     """Cada número do texto com os valores que o sustentam, para mostrar ao lado do texto.
 
-    Um número igual a um dos `permitidos` (um ano, o número de meses) fica de fora:
-    "12 meses" fala do período, mesmo que um valor arredonde para 12. Os permitidos não
-    valem por arredondamento: "R$ 0,00 milhões" não é o ano de 2024. Um número que
-    nenhum valor sustenta vem com `lastros` vazia.
+    Um ano do período ("em 2025") e o número de meses ("12 meses") ficam de fora só
+    quando é isso que são: sem unidade e, no caso dos meses, seguidos de "meses". Os
+    `nomes` (de locais e recortes) saem do texto antes, para o "2" de "Setor 2" não ser
+    conferido. Um número que nenhum valor sustenta vem com `lastros` vazia.
     """
-    por_valor = [_decimais(valor) for valor in valores]
-    livres = {v for item in permitidos for v in _decimais(item)}
+    por_valor = [[Valor(v, True) for v in _decimais(valor)] for valor in valores]
+    anos, meses = set(anos), set(meses)
     resultado = []
-    for trecho, leituras in _citados(texto):
-        if any(leitura.valor in livres for leitura in leituras):
-            continue
+    for citado in _citados(texto, nomes):
+        inteiro = re.fullmatch(r'\d+', citado.trecho) and int(citado.trecho)
+        if inteiro and citado.unidade is None:
+            if inteiro in anos and len(citado.trecho) == 4:
+                continue
+            if inteiro in meses and re.match(r'\s+m[eê]s(?:es)?\b', citado.depois, re.I):
+                continue
         lastros = [
             i
             for i, decimais in enumerate(por_valor)
-            if any(_tem_lastro(leitura, decimais) for leitura in leituras)
+            if any(_tem_lastro(leitura, decimais) for leitura in citado.leituras)
         ]
-        resultado.append(Citacao(trecho, lastros))
+        resultado.append(Citacao(citado.trecho, lastros, citado.inicio, citado.fim, citado.unidade))
     return resultado
 
 
-def _citados(texto: str) -> Iterator[tuple[str, list[Leitura]]]:
-    limpo = IGNORADOS.sub(' ', texto)
+def _citados(texto: str, nomes: Iterable[str] = ()) -> Iterator[Citado]:
+    # Trocar por espaços do mesmo tamanho mantém as posições do texto original.
+    limpo = IGNORADOS.sub(lambda m: ' ' * len(m.group(0)), texto)
+    for nome in sorted({n for n in nomes if n}, key=len, reverse=True):
+        limpo = re.sub(re.escape(nome), lambda m: ' ' * len(m.group(0)), limpo, flags=re.I)
     for citado in NUMERO.finditer(limpo):
-        alta = ALTA.search(limpo, 0, citado.start()) is not None
-        yield citado.group(0).strip().rstrip('.'), _leituras(citado, alta)
+        antes = limpo[: citado.start()]
+        nivel = PARA.match(limpo, citado.end()) is not None
+        alta = not nivel and ALTA.search(antes) is not None
+        baixa = not nivel and BAIXA.search(antes) is not None
+        trecho = citado.group(0).strip().rstrip('.')
+        yield Citado(
+            trecho,
+            _leituras(citado, alta, baixa),
+            citado.start(),
+            citado.start() + len(trecho),
+            LIMIAR.search(antes) is not None,
+            _unidade(citado, antes, limpo[citado.end() :]),
+            limpo[citado.end() : citado.end() + 12],
+        )
+
+
+def _unidade(citado: re.Match, antes: str, depois: str) -> str | None:
+    escala = (citado['escala'] or '').lower()
+    if escala == '%':
+        return '%'
+    if escala.startswith('p'):
+        return 'pp'
+    if re.search(r'R\$\s*$', antes):
+        return 'R$'
+    if escala in ('mwh', 'gwh') or re.match(r'\s*kWh', depois, re.I):
+        return 'kWh'
+    if re.match(r'\s*(?:h\b|horas?\b)', depois, re.I):
+        return 'h'
+    return None
 
 
 def numeros_citados(texto: str) -> list[Decimal]:
-    """Os números de um texto, em todas as leituras. Os da pergunta viram `permitidos`."""
+    """Os números de um texto, em todas as leituras. Os da pergunta viram `limiares`."""
     return [leitura.valor for citado in NUMERO.finditer(texto) for leitura in _leituras(citado)]
 
 
@@ -149,7 +264,7 @@ def _decimais(valor: object) -> list[Decimal]:
     return [decimal] if decimal.is_finite() else []
 
 
-def _leituras(citado: re.Match, alta: bool = False) -> list[Leitura]:
+def _leituras(citado: re.Match, alta: bool = False, baixa: bool = False) -> list[Leitura]:
     numero, escala = citado['numero'], (citado['escala'] or '').lower()
     sinal = {'-': -1, '−': -1, '+': 1}.get(citado['sinal'] or '', 0)
     percentual = escala == '%' or escala.startswith('p')
@@ -159,23 +274,37 @@ def _leituras(citado: re.Match, alta: bool = False) -> list[Leitura]:
     if re.fullmatch(r'\d+\.\d+', numero):
         textos.append(numero)
     multiplicador = next((m for p, m in ESCALAS.items() if escala.startswith(p)), Decimal(1))
+    # Com escala, vale também o número como está: o SQL pode já ter devolvido em MWh.
+    multiplicadores = (multiplicador, Decimal(1)) if multiplicador != 1 else (multiplicador,)
     leituras = []
     for texto in textos:
         valor = Decimal(texto)
-        unidade = Decimal(1).scaleb(valor.as_tuple().exponent) * multiplicador
-        leituras.append(
-            Leitura(valor * multiplicador, unidade.normalize(), sinal, percentual, alta)
-        )
+        significativos = len(valor.normalize().as_tuple().digits) if valor else 0
+        for fator in multiplicadores:
+            unidade = Decimal(1).scaleb(valor.as_tuple().exponent) * fator
+            leituras.append(
+                Leitura(
+                    valor * fator,
+                    unidade.normalize(),
+                    sinal,
+                    percentual,
+                    alta,
+                    baixa,
+                    significativos,
+                )
+            )
     return leituras
 
 
-def _tem_lastro(leitura: Leitura, valores: list[Decimal]) -> bool:
+def _tem_lastro(leitura: Leitura, valores: list[Valor]) -> bool:
     # Com % ou pp, o resultado pode trazer o percentual pronto (16,7) ou a razão (0,167).
     fatores = (Decimal(1), Decimal(100)) if leitura.percentual else (Decimal(1),)
-    for valor in valores:
+    for valor, de_queda in valores:
         if leitura.sinal and valor and (valor > 0) != (leitura.sinal > 0):
             continue
         if leitura.alta and valor < 0:
+            continue
+        if leitura.baixa and valor > 0 and not de_queda:
             continue
         for fator in fatores:
             if _arredonda_para(leitura, abs(valor * fator)):
@@ -188,9 +317,11 @@ def _arredonda_para(leitura: Leitura, alvo: Decimal) -> bool:
     with localcontext() as contexto:
         contexto.prec = 60
         try:
-            return leitura.valor in (
-                alvo.quantize(leitura.unidade, ROUND_HALF_UP),
-                alvo.quantize(leitura.unidade, ROUND_DOWN),
+            if leitura.valor == alvo.quantize(leitura.unidade, ROUND_HALF_UP):
+                return True
+            # Truncar "1.999.999" para "1 milhão" muda o valor pela metade; "16,6" não.
+            return leitura.significativos >= 2 and leitura.valor == alvo.quantize(
+                leitura.unidade, ROUND_DOWN
             )
         except InvalidOperation:
             return False
