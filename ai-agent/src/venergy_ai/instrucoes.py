@@ -4,7 +4,7 @@ import json
 import re
 
 from venergy_ai.interface import Consulta, Contexto, PedidoInsight, Troca
-from venergy_ai.semantica import Periodo, descrever_semantica
+from venergy_ai.semantica import Periodo, descrever_periodo_padrao, descrever_semantica
 from venergy_ai.semantica.periodo import rotulo
 
 INSTRUCOES_PLANO = """\
@@ -101,8 +101,11 @@ def instrucoes_do_plano(contexto: Contexto, padrao: Periodo) -> str:
     base = None
     if contexto.competencia_inicial is not None:
         base = Periodo(contexto.competencia_inicial, contexto.competencia_mais_recente)
-    semantica = descrever_semantica(padrao, base, contexto.data_referencia)
-    partes = [INSTRUCOES_PLANO, semantica, _contexto(contexto)]
+    semantica = descrever_semantica(base, contexto.data_referencia)
+    # Quando o padrão é o período da tela, a comparação também é a dela.
+    comparacao = contexto.comparacao if padrao == contexto.periodo else None
+    periodo = descrever_periodo_padrao(padrao, contexto.competencia_inicial, comparacao)
+    partes = [INSTRUCOES_PLANO, semantica, periodo, _contexto(contexto)]
     if contexto.historico:
         partes.append(_conversa(contexto.historico))
     return '\n\n'.join(partes)

@@ -407,5 +407,5 @@ async def test_cobertura_e_data_de_referencia_da_carga_chegam_ao_agente(portal):
     )
     assert resposta.status_code == 200, resposta.text
     # A amostra cobre jul/2022 a jun/2026, e o manifesto traz reference_date 2026-07-01.
-    assert 'A base cobre as competências de jul/2022 a jun/2026' in instrucoes[0]
+    assert 'Os dados da carga cobrem as competências de jul/2022 a jun/2026' in instrucoes[0]
     assert "data_vencimento < DATE '2026-07-01'" in instrucoes[0]

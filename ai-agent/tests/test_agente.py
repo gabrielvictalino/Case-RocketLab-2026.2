@@ -126,7 +126,7 @@ async def test_cobertura_e_data_de_referencia_da_carga_vao_para_as_instrucoes():
     modelo, chamadas = modelo_simulado(PLANO, TEXTO)
     await AgenteTextoSQL(modelo, ExecutorFalso(RESULTADO)).responder('Qual a receita?', carga)
     instrucoes = chamadas[0][1].instructions
-    assert 'A base cobre as competências de jul/2022 a jun/2026' in instrucoes
+    assert 'Os dados da carga cobrem as competências de jul/2022 a jun/2026' in instrucoes
     assert "data_vencimento < DATE '2026-07-01'" in instrucoes
     assert 'Comparação padrão: jul/2024 a jun/2025' in instrucoes
 
