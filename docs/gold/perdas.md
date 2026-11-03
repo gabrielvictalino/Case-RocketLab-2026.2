@@ -64,6 +64,14 @@ O score ordena as inspeções passadas: quanto mais alto, maior o acerto (UCs se
 
 O notebook para se o score deixar de ordenar (acerto com score ≥ 60 não maior que com score < 60). Hoje: 91,4% contra 13,3%. A tabela mede o acerto nas mesmas inspeções usadas para escolher os pontos, então é uma checagem de coerência, não uma previsão.
 
+**Na reinspeção, só a queda nova pontua.** Para a UC cuja última inspeção não achou irregularidade, a queda que dá pontos (e o desempate) compara o consumo recente com o dos 3 meses antes da inspeção, e não com o P0. A queda contra o P0 continua decidindo quem entra na fila (seção 2.2). O motivo é que o inspetor já foi até a UC com essa queda e não achou nada:
+
+* as 68 reinspeções da fila já tinham queda de 40% ou mais contra o P0 nos 3 meses antes da inspeção (61 delas, de 50% ou mais);
+* a mediana dessa queda era de 63,0% na inspeção e é de 56,5% hoje, então o consumo não caiu mais depois;
+* os 92,5% de acerto da seção 2.2 vêm de primeiras inspeções: nenhuma UC da base foi inspecionada duas vezes, então não há como medir o acerto de uma reinspeção.
+
+Sem queda nova de 40%, uma reinspeção soma no máximo os pontos do medidor, das leituras estimadas e o desempate de uma queda abaixo de 40%: até 34 pontos. Uma UC nunca inspecionada começa em 39 (queda de 40%, sem outros sinais). As reinspeções ficam, então, abaixo de todas as nunca inspecionadas, e o notebook para se alguma reinspeção sem queda nova chegar a 39. Hoje, nenhuma reinspeção tem queda nova de 40% ou mais, e o maior score entre elas é 31,64.
+
 ### 2.4. Bairro e classe não pontuam nem viram motivo
 
 Os 4 bairros mais inspecionados têm 8% das UCs, mas receberam 67% das inspeções e concentram 96% das irregularidades confirmadas:
@@ -76,17 +84,25 @@ Os 4 bairros mais inspecionados têm 8% das UCs, mas receberam 67% das inspeçõ
 | Recife / Macaxeira | 561 | 151 | 134 |
 | Demais 293 bairros | 41.426 | 461 | 36 |
 
-Só se acha fraude onde se procura. Se o bairro desse pontos, a fila mandaria as equipes de volta aos mesmos 4 bairros e repetiria a escolha de quem fez as inspeções. A queda de consumo vale igual em qualquer bairro. Município, bairro e classe continuam visíveis na tela da fila, que filtra por eles, então também não entram nos motivos. O `GLOSSARY.md` cita a localização entre os sinais do motivo da suspeita; nesta Gold ela fica de fora por esse viés.
+Só se acha fraude onde se procura. Se o bairro desse pontos, a fila mandaria as equipes de volta aos mesmos 4 bairros e repetiria a escolha de quem fez as inspeções. A queda de consumo vale igual em qualquer bairro. Município, bairro e classe continuam visíveis na tela da fila, que filtra por eles, então também não entram nos motivos. Pelo mesmo viés, o "Motivo da suspeita" do `GLOSSARY.md` não lista a localização entre os sinais.
 
 ### 2.5. Motivos: uma lista de textos
 
 O importador aceita o `jsonb` de `motivos` só como lista de textos não vazios, e o backend tipa `list[str]`. Cada texto traz o sinal e o valor. A Gold guarda a lista como `array<string>`, e a exportação consolidada (#96) a escreve em JSON. A UC mais bem colocada hoje:
 
 ```
-Consumo 66% abaixo do primeiro ano da própria UC: 133 kWh/mês de 04/2026 a 06/2026, contra 394 kWh/mês de 07/2022 a 06/2023
+Consumo 51% abaixo do primeiro ano da própria UC: 92 kWh/mês de 04/2026 a 06/2026, contra 190 kWh/mês de 07/2022 a 06/2023
 50% das leituras estimadas de 07/2025 a 06/2026
 Medidor eletromecânico
-Inspecionada em 21/08/2025 sem irregularidade constatada
+```
+
+Numa reinspeção, o último motivo diz quando foi a inspeção e como o consumo mudou desde então (seção 2.3):
+
+```
+Consumo 61% abaixo do primeiro ano da própria UC: 84 kWh/mês de 04/2026 a 06/2026, contra 214 kWh/mês de 07/2022 a 06/2023
+42% das leituras estimadas de 07/2025 a 06/2026
+Medidor eletromecânico
+Inspecionada em 17/10/2025 sem irregularidade constatada; consumo recente 63% maior que nos 3 meses antes da inspeção (52 kWh/mês)
 ```
 
 O primeiro motivo existe em toda linha; os outros aparecem quando o sinal está presente.
@@ -94,7 +110,7 @@ O primeiro motivo existe em toda linha; os outros aparecem quando o sinal está 
 ### 2.6. Energia a recuperar, em kWh e em R$
 
 * **`energia_recuperar_kwh`** = queda mensal (kWh do P0 − kWh recentes) × **fator de energia**. O fator é a mediana de `kwh_recuperado ÷ queda mensal` nas inspeções confirmadas de UCs sem GD com queda de 40% ou mais, calculado a cada execução: hoje, 5,6132 em 833 confirmadas, com correlação de 0,918 entre a queda e a energia recuperada. Ou seja, uma irregularidade que derruba 100 kWh por mês recupera cerca de 561 kWh. O notebook para se o fator sair de 1 a 12.
-* **`energia_recuperar_reais`** = kWh × tarifa média da UC: valor da energia ÷ consumo utilizável nos meses com fatura e leitura dos 12 meses antes da referência. Sem esses meses, vale a mediana do subgrupo tarifário. Hoje as 141 UCs da fila têm tarifa própria; as medianas são R$ 0,6056/kWh no B1 (120 UCs), R$ 0,6715 no B3 (20) e R$ 0,6738 no B2 (1). As faturas são lidas pelo marcador `tb_faturas_publicacao`, como pede `docs/auditoria_dados/operacao_faturas.md`.
+* **`energia_recuperar_reais`** = kWh × tarifa média da UC: valor da energia ÷ consumo utilizável nos meses com fatura e leitura dos 12 meses antes da referência. A tarifa usa o `valor_energia` das faturas, sem os `tributos`, que nesta base são 1/3 desse valor (o `valor_total` é a soma dos dois). Por isso, o R$ da fila não se compara com o `valor_total` das faturas. Sem esses meses, vale a mediana do subgrupo tarifário. Hoje as 141 UCs da fila têm tarifa própria; as medianas são R$ 0,6056/kWh no B1 (120 UCs), R$ 0,6715 no B3 (20) e R$ 0,6738 no B2 (1). As faturas são lidas pelo marcador `tb_faturas_publicacao`, como pede `docs/auditoria_dados/operacao_faturas.md`.
 
 ### 2.7. UCs com fraude já confirmada saem da fila
 
@@ -109,7 +125,7 @@ Na base, o consumo das UCs com irregularidade confirmada não volta ao nível an
 | até 5 meses depois | 270 | 392 |
 | 6 meses ou mais depois | 232 | 293 |
 
-Com essas UCs, a fila teria 828 casos já resolvidos entre 969 candidatas. Elas ficam de fora: a irregularidade já foi tratada, e a energia dela já está em `inspecoes_historicas`. As UCs inspecionadas sem irregularidade que continuam com consumo baixo ficam na fila como reinspeção, com o motivo que diz quando foi a inspeção.
+Com essas UCs, a fila teria 828 casos já resolvidos entre 969 candidatas. Elas ficam de fora: a irregularidade já foi tratada, e a energia dela já está em `inspecoes_historicas`. As UCs inspecionadas sem irregularidade que continuam com consumo baixo ficam na fila como reinspeção, abaixo das nunca inspecionadas (seção 2.3), com o motivo que diz quando foi a inspeção e quanto o consumo mudou desde então.
 
 ### 2.8. O "92% de acerto" dos docs de overview
 
@@ -147,7 +163,7 @@ Todas param o notebook antes de gravar e se repetem sobre as tabelas gravadas, c
 
 * **Fontes:** padrões de `id_inspecao` e `id_uc`, data e resultado das inspeções; mês e tipo das leituras; chaves únicas (inspeção, UC × mês, UC do cadastro); toda UC inspecionada no cadastro. As faturas só são lidas se o marcador tiver as duas linhas da mesma execução.
 * **Calibração:** pelo menos 100 confirmadas com queda de 40% ou mais; fator de energia de 1 a 12; score ≥ 60 acertando mais que score < 60.
-* **Candidatas:** toda UC da fila com tarifa média e com no máximo um medidor na data de referência.
+* **Candidatas:** toda UC da fila com tarifa média e com no máximo um medidor na data de referência; nenhuma reinspeção sem queda nova de 40% com score de 39 ou mais (o piso das nunca inspecionadas).
 * **`inspecoes_historicas`:** colunas, tipos e ordem do contrato; obrigatórias não nulas; padrões de `id_inspecao`, `id_uc` e `inspetor`; resultado no domínio; `kwh_recuperado` ≥ 0; confirmada com tipo; sem irregularidade sem tipo e com 0 kWh; linhas e soma de `kwh_recuperado` iguais às da Silver; chave única; UC no cadastro. Aviso (não para): tipo fora dos 5 da planilha.
 * **`fila_inspecao`:** colunas, tipos e ordem do contrato; nada nulo; padrão de `id_uc`; chave única; score de 0 a 100; `motivos` com pelo menos um texto e nenhum vazio; energia ≥ 0; tarifa média implícita (R$ ÷ kWh) de R$ 0,10 a R$ 2,00; UC no cadastro; nenhuma UC de `gd_uc` (R4); nenhuma UC cuja última inspeção confirmou fraude.
 
@@ -160,10 +176,10 @@ Todas param o notebook antes de gravar e se repetem sobre as tabelas gravadas, c
 | `fila_inspecao` | 141 UCs: 73 nunca inspecionadas e 68 de reinspeção |
 | Energia a recuperar (totais de controle) | 127.437,79 kWh e R$ 80.750,17 |
 | Nunca inspecionadas | 44.751,96 kWh, R$ 28.034,39, score médio 50,3 |
-| Reinspeção | 82.685,83 kWh, R$ 52.715,78, score médio 86,1 |
+| Reinspeção | 82.685,83 kWh, R$ 52.715,78, score médio 25,8 (máximo 31,64) |
 | Fora da fila com queda ≥ 40% | 828 com fraude confirmada e 3.394 com GD |
 
-As primeiras da fila são UCs inspecionadas sem irregularidade que seguem com consumo cerca de 65% abaixo do P0, medidor eletromecânico e muitas leituras estimadas: candidatas a uma segunda inspeção.
+As primeiras da fila são UCs nunca inspecionadas, com medidor eletromecânico e muitas leituras estimadas. As 68 reinspeções vêm depois, e a energia delas (65% do total em R$) depende de a inspeção anterior ter deixado passar uma irregularidade.
 
 ## 6. Decisões e alternativas
 
@@ -174,6 +190,8 @@ As primeiras da fila são UCs inspecionadas sem irregularidade que seguem com co
 | Soma de pontos com degrau | Modelo estatístico | A soma se explica em uma tabela e reproduz a ordem do acerto; com 1.389 inspeções, um modelo não acrescenta separação |
 | Bairro e classe fora | Pontuar os bairros com mais fraude | Repetiria a concentração das inspeções (seção 2.4) |
 | Fraude confirmada fora da fila | Manter como reinspeção | A fila teria 828 casos já tratados, e a energia seria contada duas vezes |
+| Na reinspeção, só a queda nova pontua | Pontuar a queda contra o P0, como na primeira inspeção | A inspeção já usou essa queda e não achou nada; o acerto medido vale só para primeiras inspeções |
+| Reinspeção sem queda nova continua na fila, no fim | Tirar da fila | O Gerente de Perdas vê as UCs que seguem com consumo baixo depois de uma inspeção sem irregularidade, sem que elas passem à frente das nunca inspecionadas |
 | Fator de energia calculado a cada execução | Valor fixo no código | Acompanha os dados e para se sair do esperado |
 | `motivos` como `array<string>` | Texto JSON na Gold | O tipo nativo permite checar cada texto; a exportação escreve o JSON |
 

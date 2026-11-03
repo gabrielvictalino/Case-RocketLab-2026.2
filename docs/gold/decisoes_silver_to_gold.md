@@ -120,7 +120,7 @@ Documento vivo e compartilhado pela equipe de Engenharia de Dados para consolida
 - **Perguntas de negócio respondidas:**
   - *Quais UCs inspecionar, da mais para a menos promissora, com o motivo da suspeita e a energia a recuperar (Rafael Coutinho, seção 4.2 do case).*
   - *O histórico e o acerto das inspeções já feitas.*
-- **Decisões que afetam os números:** entra na fila a UC sem GD com consumo pelo menos 40% abaixo do P0, medido nos 3 meses antes da referência; as UCs cuja última inspeção confirmou fraude ficam de fora; o score soma pontos pela queda (degrau em 50%), pelo medidor eletromecânico e pelas leituras estimadas, sem bairro nem classe; a energia usa um fator calculado nas inspeções confirmadas e a tarifa média da UC.
+- **Decisões que afetam os números:** entra na fila a UC sem GD com consumo pelo menos 40% abaixo do P0, medido nos 3 meses antes da referência; as UCs cuja última inspeção confirmou fraude ficam de fora; na reinspeção, só a queda desde a inspeção pontua, e ela fica abaixo das UCs nunca inspecionadas; o score soma pontos pela queda (degrau em 50%), pelo medidor eletromecânico e pelas leituras estimadas, sem bairro nem classe; a energia usa um fator calculado nas inspeções confirmadas e a tarifa média da UC.
 
 ---
 
