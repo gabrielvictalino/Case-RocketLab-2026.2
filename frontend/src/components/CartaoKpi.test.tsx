@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
+import { MemoryRouter } from 'react-router'
 import { CartaoKpi } from '@/components/CartaoKpi'
 
 afterEach(() => {
@@ -63,5 +64,31 @@ describe('CartaoKpi', () => {
     expect(
       screen.getByText('Dados ainda não disponíveis nesta versão do portal.'),
     ).toBeInTheDocument()
+  })
+
+  it('mostra neutralidade, carregamento, ausência em par e link acessível', () => {
+    const { rerender } = render(
+      <CartaoKpi rotulo="Teste" valor="10" variacao={0.1} sentidoFavoravel="neutro" />,
+    )
+    expect(screen.getByText(/10,0%/).closest('.ve-delta')).toHaveClass('ve-delta-neutral')
+    rerender(<CartaoKpi rotulo="Teste" carregando />)
+    expect(screen.getByLabelText('Carregando dados')).toBeInTheDocument()
+    rerender(
+      <MemoryRouter>
+        <CartaoKpi
+          rotulo="Teste"
+          destino="/receita"
+          semPeriodoComparacao
+          pares={[{ subrotulo: 'A', semDados: true }, { subrotulo: 'B', valor: '0' }]}
+        />
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('link', { name: 'Teste · ver detalhe' }))
+      .toHaveAttribute('href', '/receita')
+    expect(screen.getByRole('link', { name: 'Teste · ver detalhe' }))
+      .toHaveAccessibleDescription(/0/)
+    expect(screen.getByText('Sem dados no período')).toBeInTheDocument()
+    expect(screen.getByText('Sem período de comparação')).toBeInTheDocument()
+    expect(screen.getByText('0')).toBeInTheDocument()
   })
 })

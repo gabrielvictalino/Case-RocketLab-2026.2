@@ -26,6 +26,7 @@ export interface GraficoSerieComparativaProps {
   corAtual?: 'data-1' | 'data-2'
   altura?: number
   indisponivel?: boolean
+  formatarValor?: (valor: number) => string
 }
 
 export function GraficoSerieComparativa({
@@ -35,6 +36,7 @@ export function GraficoSerieComparativa({
   corAtual = 'data-1',
   altura = 220,
   indisponivel = false,
+  formatarValor,
 }: GraficoSerieComparativaProps) {
   if (indisponivel) {
     return <EstadoIndisponivel compacto />
@@ -49,8 +51,8 @@ export function GraficoSerieComparativa({
         <LineChart data={dados}>
           <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
           <XAxis dataKey="rotulo" stroke="var(--ink-muted)" fontSize={11} />
-          <YAxis stroke="var(--ink-muted)" fontSize={11} />
-          <Tooltip />
+          <YAxis stroke="var(--ink-muted)" fontSize={11} tickFormatter={formatarValor} />
+          <Tooltip formatter={formatarValor ? (valor) => formatarValor(Number(valor)) : undefined} />
           {rotuloComparacao && (
             <Line
               type="monotone"
@@ -58,7 +60,7 @@ export function GraficoSerieComparativa({
               name={rotuloComparacao}
               stroke="var(--data-compare)"
               strokeWidth={1.75}
-              dot={false}
+              dot={{ r: 2 }}
             />
           )}
           <Line
@@ -82,6 +84,7 @@ export interface GraficoBarrasComparativasProps {
   corAtual?: 'data-1' | 'data-2'
   altura?: number
   indisponivel?: boolean
+  formatarValor?: (valor: number) => string
 }
 
 export function GraficoBarrasComparativas({
@@ -91,6 +94,7 @@ export function GraficoBarrasComparativas({
   corAtual = 'data-2',
   altura = 200,
   indisponivel = false,
+  formatarValor,
 }: GraficoBarrasComparativasProps) {
   if (indisponivel) {
     return <EstadoIndisponivel compacto />
@@ -104,8 +108,8 @@ export function GraficoBarrasComparativas({
         <BarChart data={dados}>
           <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
           <XAxis dataKey="rotulo" stroke="var(--ink-muted)" fontSize={11} />
-          <YAxis stroke="var(--ink-muted)" fontSize={11} />
-          <Tooltip />
+          <YAxis stroke="var(--ink-muted)" fontSize={11} tickFormatter={formatarValor} />
+          <Tooltip formatter={formatarValor ? (valor) => formatarValor(Number(valor)) : undefined} />
           <Bar dataKey="atual" name={rotuloAtual} fill={fillAtual} />
           {rotuloComparacao && (
             <Bar
