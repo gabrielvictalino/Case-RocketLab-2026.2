@@ -158,6 +158,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/perdas/fila": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Fila */
+        get: operations["fila_api_v1_perdas_fila_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ucs/{id_uc}": {
         parameters: {
             query?: never;
@@ -167,6 +184,91 @@ export interface paths {
         };
         /** Obter Visao Uc */
         get: operations["obter_visao_uc_api_v1_ucs__id_uc__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kpis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Kpis */
+        get: operations["kpis_api_v1_kpis_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kpis/serie": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Serie */
+        get: operations["serie_api_v1_kpis_serie_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/receita/decomposicao": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Decomposicao */
+        get: operations["decomposicao_api_v1_receita_decomposicao_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/receita/locais": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Locais */
+        get: operations["locais_api_v1_receita_locais_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/receita/grupos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Grupos */
+        get: operations["grupos_api_v1_receita_grupos_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -277,15 +379,56 @@ export interface components {
             /** Meses */
             meses: components["schemas"]["MesConsumo"][];
         };
+        /** Continuidade */
+        Continuidade: {
+            dec: components["schemas"]["Indicador"];
+            fec: components["schemas"]["Indicador"];
+        };
         /** CriarOrdens */
         CriarOrdens: {
             /** Ucs */
             ucs: string[];
         };
+        /** Decomposicao */
+        Decomposicao: {
+            /** Receita Base */
+            receita_base: string;
+            /** Receita Atual */
+            receita_atual: string;
+            /** Variacao */
+            variacao: string;
+            /** Variacao Pct */
+            variacao_pct: string | null;
+            /** Volume Base Kwh */
+            volume_base_kwh: string;
+            /** Volume Atual Kwh */
+            volume_atual_kwh: string;
+            /** Variacao Volume Kwh */
+            variacao_volume_kwh: string;
+            /** Variacao Volume Pct */
+            variacao_volume_pct: string | null;
+            /** Periodo */
+            periodo: string;
+            /** Comparacao */
+            comparacao: string | null;
+            carga: components["schemas"]["Carga"];
+            efeitos: components["schemas"]["Efeitos"];
+        };
         /** Despacho */
         Despacho: {
             /** Inspetor */
             inspetor: string;
+        };
+        /** Efeitos */
+        Efeitos: {
+            /** Volume */
+            volume: string;
+            /** Reajuste */
+            reajuste: string;
+            /** Bandeira */
+            bandeira: string;
+            /** Mix */
+            mix: string;
         };
         /** EfeitosConta */
         EfeitosConta: {
@@ -385,10 +528,55 @@ export interface components {
              */
             data_conexao: string;
         };
+        /** Grupo */
+        Grupo: {
+            /** Receita Base */
+            receita_base: string;
+            /** Receita Atual */
+            receita_atual: string;
+            /** Variacao */
+            variacao: string;
+            /** Variacao Pct */
+            variacao_pct: string | null;
+            /** Volume Base Kwh */
+            volume_base_kwh: string;
+            /** Volume Atual Kwh */
+            volume_atual_kwh: string;
+            /** Variacao Volume Kwh */
+            variacao_volume_kwh: string;
+            /** Variacao Volume Pct */
+            variacao_volume_pct: string | null;
+            /**
+             * Grupo Uc
+             * @enum {string}
+             */
+            grupo_uc: "GD" | "IRREGULARIDADE_CONFIRMADA" | "DEMAIS";
+        };
+        /** Grupos */
+        Grupos: {
+            /** Periodo */
+            periodo: string;
+            /** Comparacao */
+            comparacao: string | null;
+            carga: components["schemas"]["Carga"];
+            /** Itens */
+            itens: components["schemas"]["Grupo"][];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** Indicador */
+        Indicador: {
+            /** Valor */
+            valor: string | null;
+            /** Comparacao */
+            comparacao: string | null;
+            /** Variacao */
+            variacao: string | null;
+            /** Variacao Pct */
+            variacao_pct: string | null;
         };
         /** Inspecao */
         Inspecao: {
@@ -415,6 +603,77 @@ export interface components {
             /** Ocorrencias */
             ocorrencias: components["schemas"]["OcorrenciaUC"][];
             alimentador: components["schemas"]["ResumoAlimentador"];
+        };
+        /** ItemFila */
+        ItemFila: {
+            /** Id Uc */
+            id_uc: string;
+            /** Municipio */
+            municipio: string;
+            /** Bairro */
+            bairro: string;
+            /** Classe */
+            classe: string;
+            /** Score */
+            score: string;
+            /** Motivos */
+            motivos: string[];
+            /** Energia Recuperar Kwh */
+            energia_recuperar_kwh: string;
+            /** Energia Recuperar Reais */
+            energia_recuperar_reais: string;
+            inspecao_anterior: components["schemas"]["Inspecao"] | null;
+        };
+        /** KPIs */
+        KPIs: {
+            /** Periodo */
+            periodo: string;
+            /** Comparacao */
+            comparacao: string | null;
+            carga: components["schemas"]["Carga"];
+            receita: components["schemas"]["Indicador"];
+            receita_arrecadada: components["schemas"]["Indicador"];
+            volume_faturado_kwh: components["schemas"]["Indicador"];
+            tarifa_media: components["schemas"]["Indicador"];
+            inadimplencia: components["schemas"]["Indicador"];
+            ucs: components["schemas"]["UCs"];
+            continuidade: components["schemas"]["Continuidade"];
+            taxa_acerto: components["schemas"]["Indicador"];
+        };
+        /** Locais */
+        Locais: {
+            /** Periodo */
+            periodo: string;
+            /** Comparacao */
+            comparacao: string | null;
+            carga: components["schemas"]["Carga"];
+            /** Itens */
+            itens: components["schemas"]["Local"][];
+            total: components["schemas"]["Decomposicao"];
+        };
+        /** Local */
+        Local: {
+            /** Receita Base */
+            receita_base: string;
+            /** Receita Atual */
+            receita_atual: string;
+            /** Variacao */
+            variacao: string;
+            /** Variacao Pct */
+            variacao_pct: string | null;
+            /** Volume Base Kwh */
+            volume_base_kwh: string;
+            /** Volume Atual Kwh */
+            volume_atual_kwh: string;
+            /** Variacao Volume Kwh */
+            variacao_volume_kwh: string;
+            /** Variacao Volume Pct */
+            variacao_volume_pct: string | null;
+            /** Municipio */
+            municipio: string;
+            /** Bairro */
+            bairro: string | null;
+            efeitos: components["schemas"]["Efeitos"];
         };
         /** Login */
         Login: {
@@ -524,6 +783,18 @@ export interface components {
              */
             atualizado_em: string;
         };
+        /** PaginaFila */
+        PaginaFila: {
+            /** Items */
+            items: components["schemas"]["ItemFila"][];
+            /** Total */
+            total: number;
+            /** Page */
+            page: number;
+            /** Size */
+            size: number;
+            totais: components["schemas"]["TotaisFila"];
+        };
         /** PaginaOrdens */
         PaginaOrdens: {
             /** Items */
@@ -550,6 +821,18 @@ export interface components {
             troca_medidor: boolean;
             /** Consumo Ajustado */
             consumo_ajustado: boolean;
+        };
+        /** PontoSerie */
+        PontoSerie: {
+            /**
+             * Competencia
+             * Format: date
+             */
+            competencia: string;
+            /** Receita */
+            receita: string | null;
+            /** Volume Faturado Kwh */
+            volume_faturado_kwh: string | null;
         };
         /** Rejeitada */
         Rejeitada: {
@@ -584,6 +867,16 @@ export interface components {
             /** Dec */
             dec: string;
         };
+        /** Serie */
+        Serie: {
+            /** Periodo */
+            periodo: string;
+            /** Comparacao */
+            comparacao: string | null;
+            carga: components["schemas"]["Carga"];
+            /** Serie */
+            serie: components["schemas"]["PontoSerie"][];
+        };
         /**
          * Status
          * @enum {string}
@@ -605,6 +898,25 @@ export interface components {
             token_type: string;
             /** Expires In */
             expires_in: number;
+        };
+        /** TotaisEnergia */
+        TotaisEnergia: {
+            /** Itens */
+            itens: number;
+            /** Energia Recuperar Kwh */
+            energia_recuperar_kwh: string;
+            /** Energia Recuperar Reais */
+            energia_recuperar_reais: string;
+        };
+        /** TotaisFila */
+        TotaisFila: {
+            pagina: components["schemas"]["TotaisEnergia"];
+            filtro: components["schemas"]["TotaisEnergia"];
+        };
+        /** UCs */
+        UCs: {
+            ativas: components["schemas"]["Indicador"];
+            com_gd: components["schemas"]["Indicador"];
         };
         /** ValidationError */
         ValidationError: {
@@ -957,6 +1269,41 @@ export interface operations {
             };
         };
     };
+    fila_api_v1_perdas_fila_get: {
+        parameters: {
+            query?: {
+                municipio?: string | null;
+                bairro?: string | null;
+                classe?: string | null;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaFila"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     obter_visao_uc_api_v1_ucs__id_uc__get: {
         parameters: {
             query?: never;
@@ -975,6 +1322,187 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["VisaoUC"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    kpis_api_v1_kpis_get: {
+        parameters: {
+            query: {
+                periodo: string;
+                municipio?: string | null;
+                bairro?: string | null;
+                classe?: string | null;
+                alimentador?: string | null;
+                comparacao?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KPIs"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    serie_api_v1_kpis_serie_get: {
+        parameters: {
+            query: {
+                periodo: string;
+                municipio?: string | null;
+                bairro?: string | null;
+                classe?: string | null;
+                alimentador?: string | null;
+                comparacao?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Serie"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decomposicao_api_v1_receita_decomposicao_get: {
+        parameters: {
+            query: {
+                periodo: string;
+                municipio?: string | null;
+                bairro?: string | null;
+                classe?: string | null;
+                alimentador?: string | null;
+                comparacao?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Decomposicao"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    locais_api_v1_receita_locais_get: {
+        parameters: {
+            query: {
+                periodo: string;
+                nivel: "municipio" | "bairro";
+                municipio?: string | null;
+                bairro?: string | null;
+                classe?: string | null;
+                alimentador?: string | null;
+                comparacao?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Locais"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    grupos_api_v1_receita_grupos_get: {
+        parameters: {
+            query: {
+                periodo: string;
+                municipio?: string | null;
+                bairro?: string | null;
+                classe?: string | null;
+                alimentador?: string | null;
+                comparacao?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Grupos"];
                 };
             };
             /** @description Validation Error */
