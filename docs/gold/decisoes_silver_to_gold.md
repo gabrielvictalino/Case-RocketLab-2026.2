@@ -17,7 +17,7 @@ Documento vivo e compartilhado pela equipe de Engenharia de Dados para consolida
 | **1. Geração Distribuída (GD)** | `silver-to-gold-geracao-distribuida.ipynb` | • `tb_geracao_distribuida`<br>• `tb_unidades_consumidoras`<br>• `tb_leituras` | • `gd_uc`<br>• `tb_gd_uc`<br>• `tb_gd_consumo_mensal`<br>• `tb_gd_resumo_mensal` | • **Henrique Duarte** (Comercial)<br>• **Camila Barreto** (Atendimento)<br>• **Rafael Coutinho** (Perdas)<br>• **Patrícia Lins** (TI / Agente IA) | [`docs/gold/geracao_distribuida.md`](geracao_distribuida.md) |
 | **2. Faturamento e Receita** | `silver-to-gold-faturas.ipynb`<br>`gold_faturas.py` *(PR #67)* | • `tb_faturas`<br>• `tb_faturas_pendentes_cadastro`<br>• `tb_unidades_consumidoras`<br>• `tb_leituras` | • `tb_faturas`<br>• `tb_faturas_excluidas`<br>• `tb_faturamento_mensal`<br>• `tb_variacao_receita` | • **Henrique Duarte** (Comercial)<br>• **Camila Barreto** (Atendimento)<br>• **Diretoria** (Visão Geral) | `docs/gold/faturas.md` *(em revisão no PR #67)* |
 | **3. Continuidade da Rede (DEC/FEC)** | `silver-to-gold-continuidade.ipynb` | • `tb_ocorrencias_rede`<br>• `tb_unidades_consumidoras` | • `continuidade_alimentador_mensal`<br>• `ocorrencias_uc`<br>• `dim_alimentador` | • **Beatriz Farias** (Operação)<br>• **Camila Barreto** (Atendimento) | [`docs/gold/continuidade.md`](continuidade.md) |
-| **4. Perdas e Fila de Inspeção** | *(a integrar pela equipe)* | • `tb_inspecoes`<br>• `tb_leituras`<br>• `tb_unidades_consumidoras`<br>• `tb_medidores`<br>• `tb_geracao_distribuida` | • `inspecoes_historicas`<br>• `fila_inspecao` | • **Rafael Coutinho** (Perdas)<br>• **Henrique Duarte** (Comercial) | *(a adicionar)* |
+| **4. Perdas e Fila de Inspeção** | `silver-to-gold-perdas.ipynb` | • `tb_inspecoes`<br>• `tb_leituras`<br>• `tb_unidades_consumidoras`<br>• `tb_medidores`<br>• `tb_faturas`<br>• `gd_uc` (Gold de GD) | • `inspecoes_historicas`<br>• `fila_inspecao` | • **Rafael Coutinho** (Perdas)<br>• **Henrique Duarte** (Comercial) | [`docs/gold/perdas.md`](perdas.md) |
 | **5. Cadastro 360, Medidores e Atendimentos** | `silver-to-gold-atendimentos.ipynb` (atendimentos)<br>*(`dim_uc` e medidores a integrar pela equipe)* | • `tb_unidades_consumidoras`<br>• `tb_medidores`<br>• `tb_atendimentos`<br>• `tb_geracao_distribuida`<br>• `tb_inspecoes` | • `dim_uc`<br>• `medidores_historico`<br>• `atendimentos`<br>• `atendimentos_historico` | • **Camila Barreto** (Atendimento)<br>• **Patrícia Lins** (TI / Agente IA) | [`docs/gold/atendimentos.md`](atendimentos.md) (atendimentos)<br>*(demais a adicionar)* |
 
 **Nomes das tabelas Gold:** cada tabela do contrato do portal leva o nome do contrato, sem prefixo (`gd_uc`, `continuidade_alimentador_mensal`), o mesmo do `<tabela>.csv` que o importador espera (`contracts/tabelas/<tabela>.yaml`). As tabelas analíticas fora do contrato levam o prefixo `tb_` (`tb_gd_uc`, `tb_gd_consumo_mensal`).
@@ -111,11 +111,16 @@ Documento vivo e compartilhado pela equipe de Engenharia de Dados para consolida
 
 ---
 
-## 5. Domínio 4 — Perdas Não Técnicas e Fila de Inspeção *(Espaço para a equipe)*
+## 5. Domínio 4 — Perdas Não Técnicas e Fila de Inspeção
 
-- **Notebook / Módulo:** *(preencher ao integrar)*
-- **Fontes Silver:** `tb_inspecoes`, `tb_leituras`, `tb_unidades_consumidoras`, `tb_medidores`, `tb_geracao_distribuida`
-- **Tabelas Gold e perguntas respondidas:** *(preencher com `inspecoes_historicas` e `fila_inspecao`, detalhando o score de suspeita, a exclusão/desconto das UCs com GD e a estimativa de `energia_recuperar_kwh`)*.
+- **Arquivo:** `data-engineering/silver_to_gold/silver-to-gold-perdas.ipynb`
+- **Dicionário completo:** [`docs/gold/perdas.md`](perdas.md), com as regras e a calibração (seção 2), o dicionário das colunas (seção 3) e os números da base (seção 5)
+- **Fontes:** `` `v-energy`.silver.tb_leituras ``, `tb_unidades_consumidoras`, `tb_medidores`, `tb_inspecoes` e `tb_faturas` (pela revisão do marcador `tb_faturas_publicacao`), e `` `v-energy`.gold.gd_uc `` para tirar as UCs com GD (R4)
+- **Tabelas publicadas:** `inspecoes_historicas` (inspeção) e `fila_inspecao` (UC candidata).
+- **Perguntas de negócio respondidas:**
+  - *Quais UCs inspecionar, da mais para a menos promissora, com o motivo da suspeita e a energia a recuperar (Rafael Coutinho, seção 4.2 do case).*
+  - *O histórico e o acerto das inspeções já feitas.*
+- **Decisões que afetam os números:** entra na fila a UC sem GD com consumo pelo menos 40% abaixo do P0, medido nos 3 meses antes da referência; as UCs cuja última inspeção confirmou fraude ficam de fora; o score soma pontos pela queda (degrau em 50%), pelo medidor eletromecânico e pelas leituras estimadas, sem bairro nem classe; a energia usa um fator calculado nas inspeções confirmadas e a tarifa média da UC.
 
 ---
 
