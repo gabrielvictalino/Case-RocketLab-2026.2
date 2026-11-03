@@ -2,6 +2,7 @@ import asyncio
 import time
 from uuid import uuid4
 
+from pydantic_ai.models import Model
 from venergy_ai.agente import AgenteTextoSQL
 from venergy_ai.executor import ExecutorAiRead
 from venergy_ai.interface import (
@@ -35,15 +36,20 @@ from app.modules.meta import repository as meta
 RESERVA_TOKENS = 20_000
 
 
-def criar_assistente(settings, ai_engine) -> Assistente | None:
-    """O agente recebe só a engine da role ai_read; a do portal fica com a auditoria."""
+def modelo_configurado(settings) -> Model | None:
+    """O modelo do provedor escolhido. Sem a chave dele, não há modelo e a IA responde 503."""
     chave = {'google': settings.gemini_api_key, 'openrouter': settings.openrouter_api_key}[
         settings.ai_provedor
     ]
     if chave is None or not chave.get_secret_value():
         return None
-    modelo = criar_modelo(settings.ai_provedor, settings.ai_modelo, chave.get_secret_value())
-    return AgenteTextoSQL(modelo, ExecutorAiRead(ai_engine))
+    return criar_modelo(settings.ai_provedor, settings.ai_modelo, chave.get_secret_value())
+
+
+def criar_assistente(settings, ai_engine) -> Assistente | None:
+    """O agente recebe só a engine da role ai_read; a do portal fica com a auditoria."""
+    modelo = modelo_configurado(settings)
+    return None if modelo is None else AgenteTextoSQL(modelo, ExecutorAiRead(ai_engine))
 
 
 async def perguntar(state, body: Pergunta, usuario) -> RespostaPergunta:

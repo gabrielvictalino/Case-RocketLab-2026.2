@@ -16,3 +16,4 @@ frontend/dist/
 .pytest_cache/
 .ruff_cache/
 .coverage
+ai-agent/evals/relatorio.md

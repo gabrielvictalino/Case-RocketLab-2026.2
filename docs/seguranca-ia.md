@@ -26,6 +26,15 @@ usuário → Nginx → POST /api/v1/assistente/perguntas → plano do LLM → gu
 | 7 | Validação de saída | `ai-agent/src/venergy_ai/numeros.py` | Todo número do texto precisa estar nas linhas que o redator recebeu. Um número inventado, ou ditado por um texto dentro dos dados, vira "não sei" |
 | 8 | Auditoria | `backend/migrations/versions/0003_agente_auditoria.py` | Toda pergunta fica registrada pela role `portal`, também as que falham: pergunta, contexto, SQL gerado e executado, linhas, resposta, modelo, tokens e erro. A `ai_read` não lê nem escreve a auditoria |
 
+## Insights
+
+Os insights da Visão Geral e da Receita não geram SQL: o backend calcula os fatos com os
+serviços da tela e o modelo só redige. Valem as camadas 1 (limite por usuário, que conta
+só o que vai ao modelo, e a cota diária de tokens), 2 (os fatos e os recortes vão como
+JSON escapado num bloco `<fatos>`, tratado como dado) e 7 (cada número da observação
+precisa estar nos fatos; a observação com número de fora é descartada). Testes:
+`ai-agent/tests/test_redator_insights.py` e `backend/tests/test_insights.py`.
+
 ## Testes
 
 `backend/tests/test_seguranca_ia.py` roda cada ataque pela rota real, com o LLM simulado

@@ -17,6 +17,8 @@ from app.core.database import create_engines
 from app.modules.assistente.router import router as assistente_router
 from app.modules.assistente.service import criar_assistente
 from app.modules.auth.router import router as auth_router
+from app.modules.insights.router import router as insights_router
+from app.modules.insights.service import criar_redator
 from app.modules.kpis.router import router as kpis_router
 from app.modules.meta.router import router as meta_router
 from app.modules.perdas.router import router as perdas_router
@@ -42,6 +44,7 @@ def create_app(settings=None):
         )
         app.state.ai_sessions = async_sessionmaker(app.state.ai_engine, expire_on_commit=False)
         app.state.assistente = criar_assistente(settings, app.state.ai_engine)
+        app.state.redator = criar_redator(settings)
         app.state.redis = Redis.from_url(
             settings.redis_url, socket_connect_timeout=2, socket_timeout=2
         )
@@ -132,6 +135,7 @@ def create_app(settings=None):
         kpis_router,
         receita_router,
         assistente_router,
+        insights_router,
     ):
         app.include_router(router, prefix='/api/v1')
     return app
