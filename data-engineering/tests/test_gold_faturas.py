@@ -17,7 +17,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'silver_to_gold'))
 from gold_faturas import (  # noqa: E402
     FLAGS_LEITURAS,
     construir_faturas,
-    comparar_periodos,
     validar_reconciliacao,
     exportar_csv,
 )
@@ -42,7 +41,7 @@ class GoldFaturasTest(unittest.TestCase):
         cls.spark.stop()
 
     def fontes(self):
-        # R0=120, Q0=100; R1=216, Q1=150 -> volume=60, preço=36.
+        # Receita 120/216 e volume observado 100/150 em duas competências.
         linhas = [
             ('FT1', 'UC100001', '2024-01', '100.00', '20.00', 'PAGA', '2024-02-10', False),
             ('FT2', 'UC100001', '2025-01', '180.00', '36.00', 'EM ABERTO', None, False),
@@ -97,9 +96,6 @@ class GoldFaturasTest(unittest.TestCase):
             '2025-02-15',
         )
 
-    def comparar(self, mensal):
-        return comparar_periodos(mensal, '2024-01-01', '2024-01-01', '2025-01-01', '2025-01-01')
-
     def test_flags_ausentes_e_tipos_invalidos_bloqueiam(self):
         _, _, leituras = self.fontes()
         for flag in FLAGS_LEITURAS:
@@ -144,11 +140,7 @@ class GoldFaturasTest(unittest.TestCase):
         excluida = tabelas['faturas_excluidas'].first()
         self.assertEqual(excluida.id_fatura, 'FTX1')
         self.assertEqual(excluida.motivo_exclusao, 'PENDENTE_CADASTRO_SILVER')
-        comparacao = self.comparar(tabelas['faturamento_mensal']).first()
-        self.assertEqual(comparacao.variacao_receita, Decimal('96.00'))
-        self.assertEqual(comparacao.efeito_volume, Decimal('60.00'))
-        self.assertEqual(comparacao.efeito_preco_efetivo, Decimal('36.00'))
-        self.assertEqual(comparacao.efeito_receita_sem_volume, Decimal('0.00'))
+        self.assertEqual(set(tabelas), {'faturas', 'faturas_excluidas', 'faturamento_mensal'})
 
     def test_negativo_nao_vira_abs_e_receita_permanece(self):
         _, _, leituras = self.fontes()
@@ -165,10 +157,11 @@ class GoldFaturasTest(unittest.TestCase):
         self.assertIsNone(atual.preco_efetivo_total_rs_kwh)
         self.assertEqual(atual.consumo_kwh_silver, -9000)
         self.assertEqual(atual.situacao_volume, 'LEITURA_NAO_UTILIZAVEL')
-        comparacao = self.comparar(tabelas['faturamento_mensal']).first()
-        self.assertEqual(comparacao.efeito_volume, Decimal('-120.00'))
-        self.assertEqual(comparacao.efeito_receita_sem_volume, Decimal('216.00'))
-        self.assertEqual(comparacao.variacao_receita, Decimal('96.00'))
+        mensal = tabelas['faturamento_mensal'].filter("competencia = '2025-01-01'").first()
+        self.assertEqual(mensal.volume_analise_kwh, Decimal('0.00'))
+        self.assertEqual(mensal.valor_total, Decimal('216.00'))
+        self.assertEqual(mensal.quantidade_sem_volume, 1)
+        self.assertEqual(mensal.cobertura_volume_pct, Decimal('0.00'))
 
     def test_ausencia_e_zero_nao_fabricam_preco(self):
         _, _, leituras = self.fontes()
@@ -181,11 +174,9 @@ class GoldFaturasTest(unittest.TestCase):
                 atual = tabelas['faturas'].filter("id_fatura = 'FT2'").first()
                 self.assertEqual(atual.situacao_volume, situacao)
                 self.assertIsNone(atual.preco_efetivo_total_rs_kwh)
-                comp = self.comparar(tabelas['faturamento_mensal']).first()
-                self.assertEqual(
-                    comp.variacao_receita,
-                    comp.efeito_volume + comp.efeito_preco_efetivo + comp.efeito_receita_sem_volume,
-                )
+                mensal = tabelas['faturamento_mensal'].filter("competencia = '2025-01-01'").first()
+                self.assertEqual(mensal.volume_analise_kwh, Decimal('0.00'))
+                self.assertEqual(mensal.receita_sem_volume_positivo, Decimal('216.00'))
 
     def test_entrada_e_saida_de_segmento_preservam_receita(self):
         faturas, cadastro, leituras = self.fontes()
@@ -206,11 +197,11 @@ class GoldFaturasTest(unittest.TestCase):
             )
         )
         tabelas = self.construir(faturas, cadastro, leituras)
-        comps = {r.municipio: r for r in self.comparar(tabelas['faturamento_mensal']).collect()}
-        self.assertEqual(comps['Olinda'].efeito_volume, Decimal('216.00'))
-        self.assertIsNone(comps['Olinda'].variacao_receita_pct)
-        self.assertEqual(comps['Recife'].efeito_volume, Decimal('-120.00'))
-        self.assertEqual(sum(r.variacao_receita for r in comps.values()), Decimal('96.00'))
+        resumos = {r.municipio: r for r in tabelas['faturamento_mensal'].collect()}
+        self.assertEqual(resumos['Olinda'].valor_total, Decimal('216.00'))
+        self.assertEqual(resumos['Recife'].valor_total, Decimal('120.00'))
+        self.assertEqual(sum(r.valor_total for r in resumos.values()), Decimal('336.00'))
+        validar_reconciliacao(faturas, tabelas)
 
     def test_join_nao_pode_multiplicar_faturas(self):
         _, cadastro, leituras = self.fontes()
@@ -239,7 +230,7 @@ class GoldFaturasTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'faturas: chave duplicada'):
             self.construir(faturas=faturas.unionByName(faturas.limit(1)))
 
-    def test_inconsistencia_financeira_pagamento_e_periodo_bloqueiam(self):
+    def test_inconsistencia_financeira_e_pagamento_bloqueiam(self):
         faturas, _, _ = self.fontes()
         with self.assertRaisesRegex(ValueError, 'total_divergente'):
             self.construir(
@@ -250,14 +241,12 @@ class GoldFaturasTest(unittest.TestCase):
             )
         with self.assertRaisesRegex(ValueError, 'paga_sem_pagamento'):
             self.construir(faturas=faturas.withColumn('data_pagamento', F.lit(None).cast('date')))
-        mensal = self.construir()['faturamento_mensal']
-        with self.assertRaisesRegex(ValueError, 'mesma duração'):
-            comparar_periodos(mensal, '2024-01-01', '2024-02-01', '2025-01-01', '2025-01-01')
-        with self.assertRaisesRegex(ValueError, 'Competência ausente'):
-            comparar_periodos(mensal, '2024-02-01', '2024-02-01', '2025-02-01', '2025-02-01')
 
     def test_exportacao_csv_preserva_centavos_nulos_e_hashes(self):
         faturas, _, _ = self.fontes()
+        texto = '  Bairro "Centro", rua\\nova\nRecife  '
+        cadastro = self.fontes()[1].withColumn('bairro', F.lit(texto))
+        faturas = faturas.withColumn('source_file', F.lit('  pasta/faturas.csv  '))
         for coluna in ['valor_energia', 'valor_total']:
             faturas = faturas.withColumn(
                 coluna,
@@ -268,12 +257,7 @@ class GoldFaturasTest(unittest.TestCase):
                     .otherwise(F.lit(0))
                 ).cast('decimal(18,2)'),
             )
-        tabelas = self.construir(faturas=faturas)
-        tabelas['variacao_receita'] = self.comparar(tabelas['faturamento_mensal'])
-        comparacao = tabelas['variacao_receita'].first()
-        # P0=1,2001; delta Q=50 -> 60,005, arredondado para 60,01.
-        self.assertEqual(comparacao.efeito_volume, Decimal('60.01'))
-        self.assertEqual(comparacao.efeito_preco_efetivo, Decimal('36.00'))
+        tabelas = self.construir(faturas=faturas, cadastro=cadastro)
         with tempfile.TemporaryDirectory() as pasta:
             lote = exportar_csv(
                 tabelas,
@@ -305,6 +289,8 @@ class GoldFaturasTest(unittest.TestCase):
                     aberta = next(r for r in linhas if r['id_fatura'] == 'FT2')
                     self.assertEqual(aberta['data_pagamento'], '')
                     self.assertEqual(aberta['valor_total'], '216.02')
+                    self.assertEqual(aberta['bairro'], texto)
+                    self.assertEqual(aberta['source_file'], '  pasta/faturas.csv  ')
             with self.assertRaises(FileExistsError):
                 exportar_csv(tabelas, str(lote), {'batch_id': 'lote'})
 

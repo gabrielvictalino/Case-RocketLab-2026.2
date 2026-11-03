@@ -153,12 +153,18 @@ class ProtocoloGoldTest(unittest.TestCase):
                 quadros, _ = gold.ler_publicacao_gold(spark, 'v-energy.gold', ['faturas'])
             self.assertEqual(quadros, {'faturas': 'publicada'})
 
-    def test_cache_liberado_em_falha_sem_remover_cache_do_chamador(self):
-        novo, existente = MagicMock(is_cached=False), MagicMock(is_cached=True)
-        with self.assertRaises(RuntimeError), gold.persistir_quadros([novo, existente]):
-            raise RuntimeError('falha')
-        novo.unpersist.assert_called_once()
-        existente.unpersist.assert_not_called()
+    def test_snapshot_fixa_versao_antes_de_republicacao_sem_cache(self):
+        spark = MagicMock()
+        spark.sql.return_value.first.side_effect = [
+            {'format': 'delta', 'id': 'fonte-id'},
+            {'version': 12},
+        ]
+        df, meta = gold.ler_snapshot_delta(spark, 'v-energy.silver.tb_leituras')
+        spark.read.option.assert_called_once_with('versionAsOf', 12)
+        self.assertEqual(meta['versao_delta'], 12)
+        self.assertEqual(meta['id_delta'], 'fonte-id')
+        df.persist.assert_not_called()
+        df.cache.assert_not_called()
 
     def test_data_referencia_e_deslocamento_mensal(self):
         from datetime import date
@@ -217,7 +223,7 @@ class ProtocoloGoldTest(unittest.TestCase):
         from types import ModuleType
 
         agora = datetime.now()
-        schema = '`v-energy`.`gold`'
+        schema = '`V-Energy`.`GOLD`'
         nomes = ['faturas', 'mensal']
         antiga = 'tb_gold_faturas_faturas_revisao_' + 'a' * 32
         recente = 'tb_gold_faturas_mensal_revisao_' + 'b' * 32
@@ -227,6 +233,8 @@ class ProtocoloGoldTest(unittest.TestCase):
             dict(nome=f'{schema}.`{n}`', aposentada_em=agora - timedelta(days=d))
             for n, d in [(antiga, 8), (recente, 1), (protegida, 100)]
         ]
+        # Entradas antigas com/sem aspas e caixa diferente são a mesma revisão.
+        registros.append({**registros[0], 'nome': f'v-energy.gold.{antiga}'})
         spark = MagicMock()
         spark.sql.return_value.collect.return_value = [dict(tableName=n) for n in tabelas]
         spark.table.return_value.collect.return_value = registros
@@ -242,7 +250,7 @@ class ProtocoloGoldTest(unittest.TestCase):
         ):
             gold.limpar_revisoes_gold(spark, 'v-energy.gold', nomes)
         drops = [c.args[0] for c in spark.sql.call_args_list if c.args[0].startswith('DROP')]
-        self.assertEqual(drops, [f'DROP TABLE {schema}.`{antiga}`'])
+        self.assertEqual(drops, [f'DROP TABLE `v-energy`.`gold`.`{antiga}`'])
         # MERGE só insere: publicações próximas/reinício não renovam o prazo.
         merge = delta.DeltaTable.forName.return_value.alias.return_value.merge.return_value
         merge.whenNotMatchedInsertAll.assert_called_once()

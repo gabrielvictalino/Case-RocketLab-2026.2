@@ -24,11 +24,13 @@ web estão em [frontend/README.md](frontend/README.md).
 O [guia de execução](data-engineering/README.md) descreve o notebook PySpark,
 a publicação Delta, a exportação CSV e o Job Databricks da Gold de faturas.
 As regras, os grãos e as limitações das métricas estão no
-[dicionário de dados](docs/gold/faturas.md). O volume usado nas análises é um
-proxy de leituras utilizáveis; as fontes não comprovam kWh faturado nem parcelas
-isoladas de tarifa/bandeira. A referência do status de pagamento é um parâmetro
-explícito da carga. A integração com `0.3.0-provisional` fornece consumo estimado com método e
-proveniência e grupos temporais; as tabelas comerciais usam volume analítico associado às faturas e tarifa
-derivada por subgrupo/competência, conforme decisão 6587742059 da #67.
+[dicionário de dados](docs/gold/faturas.md). O resumo auxiliar usa o volume das
+leituras utilizáveis; as tabelas comerciais usam o consumo analítico associado
+às faturas, incluindo estimativas com método e proveniência e grupos temporais.
+A integração com `0.3.0-provisional` deriva tarifa base por subgrupo tarifário ×
+competência e usa adicionais de bandeira fixos do case, conforme decisão
+6587742059 da #67. Esses valores não comprovam kWh do sistema comercial nem
+tarifa homologada. A decomposição da receita segue a R5 do contrato no consumidor.
+A referência do status de pagamento é um parâmetro explícito da carga.
 A [matriz de aderência](docs/gold/aderencia-faturas-0.3.md) identifica os bloqueios.
 Os testes locais e o job Gold no agregador `CI` usam Spark com dados sintéticos.

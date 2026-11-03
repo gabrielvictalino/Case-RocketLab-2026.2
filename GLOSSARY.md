@@ -23,7 +23,7 @@ _Evitar_: rede, linha, circuito
 ### Medição
 
 **Consumo analítico**:
-Consumo (kWh) de uma competência usado nas análises e telas; igual ao original quando a leitura é utilizável. Leituras bloqueadas, incluindo trocas, são estimadas pela mediana da UC na mesma fase da GD, com fallback ao histórico utilizável da UC. Sem doador, a exportação é bloqueada.
+Consumo (kWh) de uma competência usado nas análises e telas; igual ao original quando a leitura é utilizável. Leituras bloqueadas, incluindo trocas, são estimadas pela mediana da UC na mesma fase da GD, com fallback ao histórico utilizável da UC.
 _Evitar_: consumo corrigido, consumo tratado
 
 **Consumo original**:
@@ -76,7 +76,7 @@ Parte da receita cujas faturas foram pagas.
 _Evitar_: receita recebida, caixa
 
 **Volume faturado**:
-Volume analítico (kWh) associado às faturas elegíveis nas competências do período, incluindo estimativas identificadas por metodo_consumo. Não comprova volume do sistema comercial; sem fatura é zero e faturas sem leitura são segregadas.
+Volume analítico (kWh) associado às faturas elegíveis nas competências do período, incluindo estimativas de consumo. Não comprova o volume registrado pelo sistema comercial.
 _Evitar_: consumo total, energia vendida
 
 **Efeito-volume**:
@@ -91,7 +91,7 @@ Recorte temporal que classifica cada UC na competência: UCs com GD (a partir do
 _Evitar_: tipo de UC, cluster de cliente
 
 **Tarifa base**:
-Mediana de valor_energia dividido pelo consumo utilizável positivo, descontado o adicional da bandeira, por subgrupo tarifário × competência. Derivada das faturas do case, sem homologação regulatória. Os adicionais fixos do case não representam o histórico da ANEEL.
+Valor de referência por kWh de cada subgrupo tarifário e competência, calculado pela mediana da parcela de energia das faturas por consumo utilizável positivo, descontado o adicional da bandeira. Derivada das faturas do case, sem homologação regulatória. Os adicionais fixos do case não representam o histórico da ANEEL.
 
 **Tarifa média**:
 Receita dividida pelo volume faturado, em R$/kWh. É derivada; a base não tem tabela de tarifas.

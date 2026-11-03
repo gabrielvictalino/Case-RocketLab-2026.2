@@ -164,7 +164,12 @@ def construir_consumo_contratual(
             'grupo_uc',
             F.when(ativa, 'GD').when(irregular, 'IRREGULARIDADE_CONFIRMADA').otherwise('DEMAIS'),
         )
-        .withColumn('fase_gd', F.when(ativa, 'APOS_CONEXAO').otherwise('ANTES_CONEXAO'))
+        .withColumn(
+            'fase_gd',
+            F.when(F.col('data_conexao').isNull(), 'SEM_GD')
+            .when(ativa, 'APOS_CONEXAO')
+            .otherwise('ANTES_CONEXAO'),
+        )
         .withColumn('consumo_kwh_original', F.col('consumo_kwh').cast('decimal(18,2)'))
         .withColumn(
             '_utilizavel',
@@ -258,10 +263,12 @@ def derivar_complemento(consumo, detalhe, cadastro):
         '_tarifa',
         F.col('valor_energia') / F.col('consumo_kwh_analitico') - F.col('adicional_bandeira'),
     )
-    _validar_regras(doadores, {'tarifa_negativa': F.col('_tarifa') < 0}, 'doadores de tarifa')
     tarifas = doadores.groupBy('subgrupo_tarifario', 'competencia').agg(
-        F.percentile('_tarifa', F.lit(0.5)).cast('decimal(18,6)').alias('tarifa_base'),
-        F.count('*').alias('doadores_tarifa'),
+        F.percentile(F.when(F.col('_tarifa') >= 0, F.col('_tarifa')), F.lit(0.5))
+        .cast('decimal(18,6)')
+        .alias('tarifa_base'),
+        F.count(F.when(F.col('_tarifa') >= 0, 1)).alias('doadores_tarifa'),
+        F.count(F.when(F.col('_tarifa') < 0, 1)).alias('doadores_tarifa_negativa_excluidos'),
     )
     base = base.join(tarifas, ['subgrupo_tarifario', 'competencia'], 'left')
     _validar_regras(
@@ -269,10 +276,12 @@ def derivar_complemento(consumo, detalhe, cadastro):
     )
     return base.select(
         'id_fatura',
+        'competencia',
         'tarifa_base',
         'adicional_bandeira',
         'subgrupo_tarifario',
         'doadores_tarifa',
+        'doadores_tarifa_negativa_excluidos',
         F.lit('case:#67:6587742059;volume=analitico;tarifa=mediana_liquida_bandeira').alias(
             'proveniencia'
         ),
@@ -454,6 +463,8 @@ def exportar_comerciais(tabelas, diretorio, metadados, raiz=CONTRATOS):
             df.write.mode('errorifexists')
             .option('header', 'true')
             .option('escape', '"')
+            .option('ignoreLeadingWhiteSpace', 'false')
+            .option('ignoreTrailingWhiteSpace', 'false')
             .option('nullValue', '')
             .option('dateFormat', 'yyyy-MM-dd')
             .csv(str(temporaria))

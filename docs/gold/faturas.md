@@ -129,7 +129,7 @@ Grão/chave: **competência × município × bairro × classe × data de referê
 | `valor_vencido` | decimal(28,2), R$ | Soma somente de contas vencidas e abertas |
 | `quantidade_com_volume_positivo` | long | Contas com consumo utilizável > 0 |
 | `quantidade_sem_volume` | long | Contas com consumo desconhecido/inutilizável; zero medido não entra aqui |
-| `volume_analise_kwh` | decimal(28,2), kWh, anulável | Soma da parcela utilizável; NULL se nenhuma leitura utilizável |
+| `volume_analise_kwh` | decimal(28,2), kWh | Soma da parcela utilizável; zero se nenhuma leitura utilizável |
 | `receita_com_volume_positivo` | decimal(28,2), R$ | Total das contas com volume positivo utilizável |
 | `receita_sem_volume_positivo` | decimal(28,2), R$ | Total das demais, inclusive zero medido; fecha com a receita pareada |
 | `cobertura_volume_pct` | decimal(5,2), % | 100 × contas com volume positivo / contas elegíveis, duas casas |
@@ -139,44 +139,14 @@ Para recortes de bandeira ou status, consulte `tb_faturas`. Para vários meses,
 some valores/contagens; recalcule percentuais a partir das somas. Não some UCs
 mensais para obter UCs distintas do período nem tire média simples de tarifas.
 
-## `tb_variacao_receita`
+## Decomposição da receita
 
-Grão/chave: **município × bairro × classe × quatro limites dos períodos**.
-O notebook compara os primeiros 12 meses com os últimos 12; a função
-`comparar_periodos` aceita quaisquer dois intervalos de igual duração mensal,
-inclusive comparação com o mesmo mês do ano anterior. Os limites são inclusivos,
-datas do primeiro dia do mês, e todos os meses precisam existir globalmente.
-Um segmento pode entrar ou sair; o FULL JOIN preserva esses casos.
-
-| Coluna(s) | Tipo / unidade | Definição |
-| --- | --- | --- |
-| `municipio`, `bairro`, `classe` | string | Recorte cadastral |
-| `inicio_base`, `fim_base`, `inicio_atual`, `fim_atual` | date | Limites dos períodos comparados |
-| `receita_base`, `receita_atual` | decimal(28,2), R$ | Soma de todo faturamento elegível em cada período |
-| `receita_pareada_base`, `receita_pareada_atual` | decimal(28,2), R$ | Receita com volume positivo utilizável |
-| `receita_sem_volume_base`, `receita_sem_volume_atual` | decimal(28,2), R$ | Receita sem volume positivo utilizável |
-| `volume_base_kwh`, `volume_atual_kwh` | decimal(28,2), kWh | Soma somente da parcela utilizável; zero é a soma vazia para a álgebra |
-| `quantidade_faturas_base`, `quantidade_faturas_atual` | long | Contas por período |
-| `quantidade_com_volume_base`, `quantidade_com_volume_atual` | long | Cobertura da receita pareada por período |
-| `variacao_receita` | decimal, R$ | Receita atual − base |
-| `variacao_receita_pct` | decimal, %, anulável | 100 × variação / receita base; NULL se base zero |
-| `efeito_volume` | decimal(28,2), R$ | (Q1 − Q0) × P0, arredondado para centavos |
-| `efeito_preco_efetivo` | decimal(28,2), R$ | Variação da receita pareada − efeito volume |
-| `efeito_receita_sem_volume` | decimal, R$ | Receita sem volume atual − base |
-| `versao_regras_gold` | string | GOLD_FATURAS_V2 |
-
-Q é o volume utilizável e P é a receita pareada / Q. Na entrada de um segmento sem
-preço base, usa-se P1 para atribuir a receita pareada de entrada ao volume. Na saída,
-usa-se P0. Sem volume em ambos os períodos, os efeitos pareados são zero e toda a
-variação fica na parcela sem volume. A cobertura acompanha os resultados, para não
-confundir ausência de leitura com queda real de consumo.
-
-A interação preço × quantidade fica no efeito preço. O cálculo do efeito volume
-usa decimal e arredonda uma vez por segmento; o preço recebe o resíduo de centavos.
-Sempre vale `variação = volume + preço efetivo + receita sem volume`.
-O preço efetivo agrega tarifa, bandeira, tributos e mix interno do segmento.
-Não identifica isoladamente reajuste homologado, efeito bandeira, GD ou fraude.
-Comparações com cobertura diferente exigem investigação antes de atribuir causas.
+A Gold não publica `tb_variacao_receita` nem uma decomposição auxiliar baseada
+apenas no volume observado. A decomposição canônica segue a R5 de
+[`contracts/README.md`](../../contracts/README.md), com quatro efeitos sobre o
+consumo analítico associado às faturas, calculados pelo consumidor a partir de
+`receita_volume_mensal`. O notebook exibe resumos de faturamento e exclusões;
+a validação da carga não exige dois anos de histórico para uma comparação anual.
 
 ## Integração comercial — contrato 0.3.0-provisional (#101)
 
@@ -209,7 +179,8 @@ segregadas e reconciliadas nas auxiliares.
   (`MEDIANA_HISTORICA_UC`). Esta é a convenção implementada na Gold GD, não o
   algoritmo do gerador sintético. Sem doadores em toda a UC, a carga é recusada:
   o contrato não admite `INDISPONIVEL` nem analítico nulo.
-- A fase muda no mês de conexão. Uma UC sem conexão tem uma única fase. A mediana
+- A fase muda no mês de conexão. Uma UC sem GD tem a fase `SEM_GD`; UCs com GD usam `ANTES_CONEXAO` e
+  `APOS_CONEXAO`. A mediana
   usa o histórico do snapshot inteiro, inclusive meses posteriores à competência:
   é uma estimativa retrospectiva para este estudo, não previsão disponível naquele mês.
 - `consumo_proveniencia` é uma auxiliar por UC × competência: guarda método,
@@ -284,12 +255,11 @@ uma extração global atômica: a coordenação do lote precisa comprovar sua co
 
 ### R5: quatro efeitos e P20
 
-A decomposição de `tb_variacao_receita` permanece auxiliar: volume utilizável,
-preço efetivo e receita sem volume. Não equivale a volume, reajuste, bandeira e
-mix do contrato. `contracts/README.md` e `docs/backend-pendencias.md` atribuem a
-fórmula canônica à P20; os consumidores atuais usam `receita_volume_mensal`
-(importador, views e portal). Esta PR fornece nessa tabela volume faturado,
-receita, arrecadação convencional e componentes de tarifa/bandeira com o complemento derivado ou explícito validado, sem duplicar o cálculo dos quatro efeitos.
+A R5 de `contracts/README.md` define a única decomposição da receita: volume,
+reajuste, bandeira e mix sobre o consumo analítico. O consumidor aplica essa regra
+sobre `receita_volume_mensal`; a Gold fornece volume faturado, receita,
+arrecadação convencional e componentes de tarifa/bandeira com complemento
+derivado ou explícito validado, sem duplicar o cálculo dos quatro efeitos.
 Os componentes somam produtos Decimal antes de arredondar uma vez por grão a
 duas casas (`round` Spark, empate afastando de zero); validam-se os resultados
 com `exceptAll` nos dois sentidos. A P20 permanece responsável pelo cálculo dos quatro efeitos no consumidor.
@@ -430,11 +400,12 @@ comprova os gates para **aquele lote**; não comprova fontes de negócio nem Dat
 
 ## Desempenho, CI e evidências
 
-A execução persiste seletivamente a união Silver, saídas reutilizadas e consumo
-contratual em `MEMORY_AND_DISK`; reaproveita-os em validação, display, publicação
-e exportação, com liberação em `finally` via context managers. Não remove
-`exceptAll`. A redução de recomputações é esperada; não há benchmark de tempo,
-memória ou ganho medido em 2,2 milhões de linhas nesta revisão.
+As fontes Delta são lidas com `versionAsOf`, incluindo as revisões financeiras
+fixadas pelo marcador Silver. Os planos derivados usam esses mesmos snapshots
+na validação, exibição, publicação e exportação. O fluxo não acessa `is_cached`
+nem usa `cache()`/`persist()`, incompatíveis com Serverless. A validação comum é
+reutilizada para o mesmo par de DataFrames, mantendo as conferências `exceptAll`.
+Não há benchmark de tempo ou ganho medido em 2,2 milhões de linhas.
 
 `.github/workflows/ci.yml` detecta alterações de dados, contratos, importador e
 configuração compartilhada para o job `gold`. Executa Ruff 0.17.3 (`check` e
@@ -477,9 +448,8 @@ O Job não tem agendamento: data_referencia continua sendo a data explícita do
 retrato, não o relógio da execução. Uma futura recorrência requer política própria.
 As duas saídas usam a mesma leitura enriquecida com trocas de medidor; as
 auxiliares continuam usando apenas volume observado utilizável e as comerciais
-incluem imputação, com método e cobertura explícitos. Leituras e cadastro são
-persistidos no escopo da execução; a validação comum é reaproveitada pelo par de
-DataFrames, e as APIs isoladas continuam validando suas entradas.
+incluem imputação, com método e cobertura explícitos. As fontes são fixadas por versão Delta, sem cache; a validação comum é
+reaproveitada pelo par de DataFrames, e as APIs isoladas continuam validando suas entradas.
 
 O complemento exige id_fatura, tarifa_base, adicional_bandeira e proveniencia.
 volume_faturado_kwh recebido em um complemento legado é ignorado: o volume
@@ -496,3 +466,23 @@ evidências dos produtores e devem vir de fonte confiável; não são assinatura
 digitais. Produtores dos outros dez domínios precisam fornecer seus recibos.
 Os escritores e a releitura Spark usam escape com aspas duplicadas, compatível
 com o parser CSV da stdlib e o importador, inclusive aspas, barras e quebras.
+
+## Correções dos reviews 5753211198 e 5754871341
+
+O fluxo usa snapshots Delta sem cache para funcionar em Serverless. Os writers
+auxiliar e comercial preservam espaços nas pontas, além de aspas e quebras de
+linha. O agregado auxiliar usa zero quando não há volume utilizável, preservando
+a contagem de faturas sem volume e a receita. A decomposição auxiliar foi retirada;
+a R5 contratual permanece a única fórmula de decomposição.
+
+Uma tarifa líquida negativa não doa para a mediana. A fatura continua elegível e
+recebe a tarifa do grupo/mês; a ausência de qualquer doador válido ainda bloqueia
+a carga. `complemento_proveniencia` inclui `competencia`, `doadores_tarifa` e
+`doadores_tarifa_negativa_excluidos`. Essas contagens se repetem por fatura: o
+relatório do notebook as exibe uma vez por subgrupo × competência, sem somar as
+repetições. Leituras imputadas não doam tarifa; tarifa zero continua válida.
+
+Na retenção, nomes de tabelas são normalizados na inserção, na comparação do
+MERGE e na seleção para remoção, inclusive registros legados com caixa ou aspas
+diferentes. Revisões protegidas pelo marcador e pela janela de sete dias continuam
+preservadas; duplicatas legadas geram uma única remoção.

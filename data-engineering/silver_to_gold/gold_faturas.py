@@ -5,7 +5,6 @@ from datetime import date
 import hashlib
 import json
 import re
-from contextlib import contextmanager
 from datetime import datetime, timezone
 from uuid import uuid4
 from pathlib import Path
@@ -304,7 +303,7 @@ def agregar_faturamento(detalhe: DataFrame) -> DataFrame:
             ),
             F.count(F.when(positivo, 1)).alias('quantidade_com_volume_positivo'),
             F.count(F.when(F.col('volume_analise_kwh').isNull(), 1)).alias('quantidade_sem_volume'),
-            F.sum('volume_analise_kwh').cast('decimal(28,2)').alias('volume_analise_kwh'),
+            _soma('volume_analise_kwh').alias('volume_analise_kwh'),
             _soma(F.when(positivo, F.col('valor_total'))).alias('receita_com_volume_positivo'),
             _soma(F.when(~F.coalesce(positivo, F.lit(False)), F.col('valor_total'))).alias(
                 'receita_sem_volume_positivo'
@@ -317,96 +316,6 @@ def agregar_faturamento(detalhe: DataFrame) -> DataFrame:
                 2,
             ).cast('decimal(5,2)'),
         )
-        .withColumn('versao_regras_gold', F.lit(VERSAO_REGRAS))
-    )
-
-
-def comparar_periodos(
-    mensal: DataFrame,
-    inicio_base: str,
-    fim_base: str,
-    inicio_atual: str,
-    fim_atual: str,
-) -> DataFrame:
-    """Compara intervalos mensais fechados e de mesma duração, por local/classe.
-
-    Efeito volume = (Q1-Q0)*P0; preço = delta pareado - efeito volume.
-    Sem preço na base, usa o preço atual para entradas. Saídas usam o preço base.
-    A receita sem volume positivo gera um efeito separado, preservando o delta total.
-    """
-    datas = [date.fromisoformat(s) for s in [inicio_base, fim_base, inicio_atual, fim_atual]]
-    if any(d.day != 1 for d in datas):
-        raise ValueError('Limites dos períodos devem ser o primeiro dia do mês')
-    b0, b1, a0, a1 = datas
-
-    def meses(x, y):
-        return (y.year - x.year) * 12 + y.month - x.month + 1
-
-    if b1 < b0 or a1 < a0 or meses(b0, b1) != meses(a0, a1):
-        raise ValueError('Períodos precisam ter a mesma duração positiva')
-    disponiveis = {r[0] for r in mensal.select('competencia').distinct().collect()}
-    for inicio, fim in [(b0, b1), (a0, a1)]:
-        for deslocamento in range(meses(inicio, fim)):
-            esperado = deslocar_mes(inicio, deslocamento)
-            if esperado not in disponiveis:
-                raise ValueError(f'Competência ausente no período: {esperado}')
-
-    def resumir(inicio, fim, sufixo):
-        return (
-            mensal.filter(F.col('competencia').between(inicio, fim))
-            .groupBy(*DIMENSOES)
-            .agg(
-                _soma('valor_total').alias(f'receita_{sufixo}'),
-                _soma('receita_com_volume_positivo').alias(f'receita_pareada_{sufixo}'),
-                _soma('receita_sem_volume_positivo').alias(f'receita_sem_volume_{sufixo}'),
-                _soma('volume_analise_kwh').alias(f'volume_{sufixo}_kwh'),
-                F.sum('quantidade_faturas').alias(f'quantidade_faturas_{sufixo}'),
-                F.sum('quantidade_com_volume_positivo').alias(f'quantidade_com_volume_{sufixo}'),
-            )
-        )
-
-    comparacao = resumir(b0, b1, 'base').join(resumir(a0, a1, 'atual'), DIMENSOES, 'full')
-    medidas = [c for c in comparacao.columns if c not in DIMENSOES]
-    comparacao = comparacao.fillna(0, subset=medidas)
-    p_base = F.when(
-        F.col('volume_base_kwh') > 0, F.col('receita_pareada_base') / F.col('volume_base_kwh')
-    )
-    p_atual = F.when(
-        F.col('volume_atual_kwh') > 0, F.col('receita_pareada_atual') / F.col('volume_atual_kwh')
-    )
-    preco_referencia = F.coalesce(p_base, p_atual, F.lit(0)).cast('decimal(28,10)')
-    return (
-        comparacao.withColumn('variacao_receita', F.col('receita_atual') - F.col('receita_base'))
-        .withColumn(
-            'variacao_receita_pct',
-            F.when(
-                F.col('receita_base') != 0,
-                F.round(F.col('variacao_receita') * 100 / F.col('receita_base'), 2),
-            ),
-        )
-        .withColumn(
-            'efeito_volume',
-            F.round(
-                (F.col('volume_atual_kwh') - F.col('volume_base_kwh')) * preco_referencia,
-                2,
-            ).cast('decimal(28,2)'),
-        )
-        .withColumn(
-            'efeito_preco_efetivo',
-            (
-                F.col('receita_pareada_atual')
-                - F.col('receita_pareada_base')
-                - F.col('efeito_volume')
-            ).cast('decimal(28,2)'),
-        )
-        .withColumn(
-            'efeito_receita_sem_volume',
-            F.col('receita_sem_volume_atual') - F.col('receita_sem_volume_base'),
-        )
-        .withColumn('inicio_base', F.lit(b0))
-        .withColumn('fim_base', F.lit(b1))
-        .withColumn('inicio_atual', F.lit(a0))
-        .withColumn('fim_atual', F.lit(a1))
         .withColumn('versao_regras_gold', F.lit(VERSAO_REGRAS))
     )
 
@@ -462,20 +371,16 @@ def exportar_csv(tabelas: dict[str, DataFrame], diretorio: str, metadados: dict)
         'volume_analise_kwh',
         'receita_com_volume_positivo',
         'receita_sem_volume_positivo',
-        'receita_base',
-        'receita_atual',
-        'variacao_receita',
-        'efeito_volume',
-        'efeito_preco_efetivo',
-        'efeito_receita_sem_volume',
     ]
     for nome, df in tabelas.items():
         if not nome.isidentifier():
             raise ValueError(f'Nome de tabela inválido: {nome}')
         pasta_tabela = pasta_lote / nome
         df.write.mode('errorifexists').option('header', 'true').option('escape', '"').option(
-            'dateFormat', 'yyyy-MM-dd'
-        ).option('nullValue', '').option('encoding', 'UTF-8').option(
+            'ignoreLeadingWhiteSpace', 'false'
+        ).option('ignoreTrailingWhiteSpace', 'false').option('dateFormat', 'yyyy-MM-dd').option(
+            'nullValue', ''
+        ).option('encoding', 'UTF-8').option(
             'timestampFormat', "yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXX"
         ).csv(str(pasta_tabela))
         partes = sorted(pasta_tabela.glob('part-*.csv'))
@@ -689,23 +594,6 @@ def ler_publicacao_silver(spark, marcador, principal, pendentes):
     )
 
 
-@contextmanager
-def persistir_quadros(quadros):
-    """Persistência seletiva MEMORY_AND_DISK, sempre liberada inclusive na falha."""
-    from pyspark import StorageLevel
-
-    persistidos = []
-    try:
-        for df in quadros:
-            if not df.is_cached:
-                df.persist(StorageLevel.MEMORY_AND_DISK)
-                persistidos.append(df)
-        yield
-    finally:
-        for df in reversed(persistidos):
-            df.unpersist()
-
-
 def publicar_revisoes(spark, tabelas, schema, validar, metadados, antes_confirmar=lambda: None):
     """Revisões exclusivas; só o overwrite do marcador promove o conjunto.
 
@@ -794,11 +682,11 @@ def limpar_revisoes_gold(spark, schema, nomes):
     padrao = (
         r'tb_gold_faturas_(' + '|'.join(re.escape(n) for n in nomes) + r')_revisao_[0-9a-f]{32}'
     )
-    candidatas = [
-        f'{schema}.`{r["tableName"]}`'
+    candidatas = {
+        normalizar_identificador(f'{schema}.`{r["tableName"]}`')
         for r in spark.sql(f'SHOW TABLES IN {schema}').collect()
-        if re.fullmatch(padrao, r['tableName'])
-    ]
+        if re.fullmatch(padrao, r['tableName'], re.IGNORECASE)
+    }
     agora = datetime.now(timezone.utc)
     retiradas = [(t, agora) for t in candidatas if normalizar_identificador(t) not in protegidas]
     registro = f'{schema}.`tb_gold_faturas_retencao`'
@@ -810,21 +698,27 @@ def limpar_revisoes_gold(spark, schema, nomes):
         (
             DeltaTable.forName(spark, registro)
             .alias('r')
-            .merge(novas.alias('n'), 'r.nome = n.nome')
+            .merge(
+                novas.alias('n'),
+                "lower(regexp_replace(r.nome, '`', '')) = lower(regexp_replace(n.nome, '`', ''))",
+            )
             .whenNotMatchedInsertAll()
             .execute()
         )
+    removidas = set()
     for r in spark.table(registro).collect():
+        nome = normalizar_identificador(r['nome'])
         aposentada_em = r['aposentada_em']
         if aposentada_em is not None and aposentada_em.tzinfo is None:
             aposentada_em = aposentada_em.replace(tzinfo=timezone.utc)
         if (
-            r['nome'] in candidatas
-            and normalizar_identificador(r['nome']) not in protegidas
+            nome in candidatas
+            and nome not in protegidas | removidas
             and aposentada_em is not None
             and aposentada_em < agora - timedelta(days=7)
         ):
-            spark.sql(f'DROP TABLE {qualificar(r["nome"])}')
+            spark.sql(f'DROP TABLE {nome}')
+            removidas.add(nome)
 
 
 def hash_arquivo(arquivo):
