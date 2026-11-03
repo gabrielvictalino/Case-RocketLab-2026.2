@@ -1,4 +1,4 @@
-version: 0.2.0-provisional
+version: 0.3.0-provisional
 status: provisorio-nao-aprovado
 table: fila_inspecao
 grain: UC candidata
@@ -8,32 +8,36 @@ columns:
   id_uc:
     type: text
     nullable: false
-    unit: identificador/texto
+    unit: —
     pattern: ^UC\d{6}$
     references:
     - dim_uc
     - id_uc
+    description: Identificador da unidade consumidora selecionada para inspeção.
   score:
-    type: numeric(12,4)
+    type: numeric(18,2)
     nullable: false
-    unit: score sintético
+    unit: —
     minimum: 0
+    description: Pontuação de propensão à fraude estimada pelos modelos analíticos da Gold.
   motivos:
     type: jsonb
     nullable: false
-    unit: lista de sinais sintéticos
+    unit: —
+    description: Lista de motivos e anomalias estatísticas que justificaram a inclusão na fila.
   energia_recuperar_kwh:
     type: numeric(18,2)
     nullable: false
     unit: kWh
     minimum: 0
+    description: Volume de energia estimado a recuperar caso a irregularidade seja confirmada.
   energia_recuperar_reais:
     type: numeric(18,2)
     nullable: false
     unit: R$
     minimum: 0
-description: Contrato local sintético derivado do system design; sujeito à validação
-  do time de dados.
+    description: Valor financeiro estimado a recuperar em reais.
+description: UCs candidatas a inspeção, com score, motivos da suspeita e energia estimada a recuperar.
 control_totals:
 - energia_recuperar_kwh
 - energia_recuperar_reais

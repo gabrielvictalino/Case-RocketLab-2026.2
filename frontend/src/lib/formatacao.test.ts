@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   formatarCompetencia,
+  formatarDataHoraPtBr,
+  formatarDataPtBr,
   formatarKwh,
   formatarMoeda,
   formatarPercentual,
@@ -97,6 +99,22 @@ describe('formatacao pt-BR', () => {
       expect(() => formatarCompetencia('2025-00')).toThrow(RangeError)
       expect(() => formatarCompetencia('07/2025')).toThrow(RangeError)
       expect(() => formatarCompetencia('')).toThrow(RangeError)
+    })
+  })
+
+  describe('formatarDataPtBr e formatarDataHoraPtBr (America/Recife)', () => {
+    it('formata timestamps UTC no fuso America/Recife e preserva data pura AAAA-MM-DD', () => {
+      expect(formatarDataHoraPtBr('2026-06-15T14:30:00Z')).toBe(
+        '15/06/2026 11:30',
+      )
+      expect(formatarDataPtBr('2026-10-31T02:53:42Z')).toBe('30/10/2026')
+      expect(formatarDataHoraPtBr('2026-10-31T03:53:42Z')).toBe(
+        '31/10/2026 00:53',
+      )
+      expect(formatarDataPtBr('2026-07-01T00:00:00Z')).toBe('30/06/2026')
+      expect(formatarDataPtBr('2026-07-01')).toBe('01/07/2026')
+      expect(formatarDataPtBr(null)).toBe('—')
+      expect(formatarDataHoraPtBr(null)).toBe('—')
     })
   })
 })

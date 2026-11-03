@@ -1,308 +1,195 @@
-
-import { Info, RotateCcw, SlidersHorizontal } from 'lucide-react'
 import { useSearchParams } from 'react-router'
+import { usePeriodo } from '@/app/periodo/usePeriodo'
+import { BarraRecorte } from '@/components/BarraRecorte'
+import { CabecalhoPagina } from '@/components/CabecalhoPagina'
+import { CartaoKpi } from '@/components/CartaoKpi'
+import { EstadoIndisponivel } from '@/components/Estados'
+import { Painel } from '@/components/Painel'
+import { Selecao } from '@/components/Selecao'
+import { formatarIntervaloPeriodo } from '@/lib/formatacao'
+import {
+  atualizarRecorteUrl,
+  lerRecortesUrl,
+  limparRecortesUrl,
+} from '@/lib/recortes'
+import { useFiltrosMeta } from '@/lib/useFiltrosMeta'
 
-type Ordenacao = 'chi' | 'dec' | 'fec'
-
-const colunasRanking = [
-  'Alimentador',
-  'Município',
-  'CHI',
-  'DEC',
-  'FEC',
-  'UCs',
-  'Causa principal',
-]
-
-function CartaoIndicador({
-  titulo,
-  unidade,
-}: {
-  titulo: string
-  unidade: string
-}) {
-  return (
-    <article className="rounded-lg border bg-card p-5">
-      <p className="text-sm font-medium text-muted-foreground">
-        {titulo}
-      </p>
-
-      <div className="mt-3 flex items-baseline gap-2">
-        <span className="text-3xl font-semibold tabular-nums">—</span>
-        <span className="text-sm text-muted-foreground">{unidade}</span>
-      </div>
-
-      <p className="mt-3 text-xs text-muted-foreground">
-        Dados indisponíveis
-      </p>
-    </article>
-  )
-}
-
-function CartaoGrafico({
-  titulo,
-  unidade,
-}: {
-  titulo: string
-  unidade: string
-}) {
-  return (
-    <article className="rounded-lg border bg-card p-5">
-      <h3 className="font-semibold">{titulo}</h3>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Evolução por competência · {unidade}
-      </p>
-
-      <div className="mt-5 flex min-h-56 items-center justify-center rounded-md border border-dashed bg-muted/20 px-5 text-center">
-        <div className="max-w-xs space-y-2">
-          <p className="text-sm font-medium">Série indisponível</p>
-          <p className="text-sm text-muted-foreground">
-            A evolução mensal será apresentada após a integração
-            com a API de continuidade.
-          </p>
-        </div>
-      </div>
-    </article>
-  )
-}
+import type { OrdenacaoOperacao } from './logicaOperacao'
 
 export function PaginaOperacao() {
   const [searchParams, setSearchParams] = useSearchParams()
-
-  const incluirAtipicos = searchParams.get('atipicos') !== 'false'
-
+  const { periodo, comparacao } = usePeriodo()
+  const filtros = useFiltrosMeta()
   const parametroOrdenacao = searchParams.get('ordenar')
+  const ordenacao: OrdenacaoOperacao = parametroOrdenacao === 'dec' || parametroOrdenacao === 'fec' ? parametroOrdenacao : 'chi'
+  const recortes = lerRecortesUrl(searchParams)
 
-  const ordenacao: Ordenacao =
-    parametroOrdenacao === 'dec' || parametroOrdenacao === 'fec'
-      ? parametroOrdenacao
-      : 'chi'
+  const rotuloPeriodo = periodo ? formatarIntervaloPeriodo(periodo) : null
+  const rotuloComparacao = comparacao
+    ? formatarIntervaloPeriodo(comparacao)
+    : null
 
-  function atualizarParametro(chave: string, valor: string) {
-    setSearchParams((anteriores) => {
-      const proximos = new URLSearchParams(anteriores)
-      proximos.set(chave, valor)
-      return proximos
-    })
-  }
+  const resumoPeriodo = rotuloPeriodo
+    ? rotuloComparacao
+      ? `${rotuloPeriodo} × ${rotuloComparacao}`
+      : rotuloPeriodo
+    : 'período atual'
 
-  function limparFiltros() {
-    setSearchParams((anteriores) => {
-      const proximos = new URLSearchParams(anteriores)
-
-      proximos.delete('atipicos')
-      proximos.delete('ordenar')
-      proximos.delete('municipio')
-      proximos.delete('alimentador')
-
-      return proximos
-    })
-  }
+  const municipios = filtros.data?.municipios ?? []
+  const alimentadores = filtros.data?.alimentadores ?? []
+  const escopoAlimentador = recortes.alimentador || 'geral'
+  const escopoAtipico = recortes.atipico
+    ? 'com evento atípico'
+    : 'sem evento atípico'
 
   return (
-    <section className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Operação
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Continuidade do fornecimento e desempenho dos alimentadores
-        </p>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <CabecalhoPagina
+        titulo="Operação"
+        subtitulo={`Continuidade · ${resumoPeriodo} · ${escopoAlimentador} · ${escopoAtipico}`}
+      />
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold">
-            Indicadores de continuidade
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Acompanhamento de DEC e FEC por competência
-          </p>
-        </div>
-
-        <span className="rounded-md border px-3 py-1.5 text-xs text-muted-foreground">
-          Aguardando dados de continuidade
-        </span>
-      </div>
-
-      <div className="rounded-lg border bg-card p-5">
-        <div className="mb-4 flex items-center gap-2">
-          <SlidersHorizontal
-            className="h-4 w-4 text-muted-foreground"
-            aria-hidden="true"
-          />
-          <h3 className="text-sm font-semibold">Filtros</h3>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="space-y-2">
-            <label
-              htmlFor="operacao-municipio"
-              className="block text-sm font-medium"
-            >
-              Município
-            </label>
-            <select
-              id="operacao-municipio"
-              disabled
-              defaultValue=""
-              className="h-10 w-full rounded-md border bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <option value="">Aguardando municípios</option>
-            </select>
-          </div>
-
-          <div className="space-y-2">
-            <label
-              htmlFor="operacao-alimentador"
-              className="block text-sm font-medium"
-            >
-              Alimentador
-            </label>
-            <select
-              id="operacao-alimentador"
-              disabled
-              defaultValue=""
-              className="h-10 w-full rounded-md border bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <option value="">Aguardando alimentadores</option>
-            </select>
-          </div>
-
-          <div className="flex items-end">
-            <label className="flex min-h-10 w-full cursor-pointer items-center justify-between gap-3 rounded-md border px-3">
-              <span className="text-sm font-medium">
-                Incluir eventos atípicos
-              </span>
-              <input
-                type="checkbox"
-                checked={incluirAtipicos}
-                onChange={(evento) =>
-                  atualizarParametro(
-                    'atipicos',
-                    String(evento.target.checked),
-                  )
-                }
-                className="h-4 w-4 accent-foreground"
-              />
-            </label>
-          </div>
-
-          <div className="flex items-end">
-            <button
-              type="button"
-              onClick={limparFiltros}
-              className="flex h-10 w-full items-center justify-center gap-2 rounded-md border bg-background px-3 text-sm font-medium transition-colors hover:bg-muted"
-            >
-              <RotateCcw className="h-4 w-4" aria-hidden="true" />
-              Limpar filtros
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <CartaoIndicador titulo="DEC" unidade="horas" />
-        <CartaoIndicador titulo="FEC" unidade="interrupções" />
-        <CartaoIndicador
-          titulo="Eventos atípicos"
-          unidade="eventos"
+      <BarraRecorte
+        erro={filtros.error?.message ?? null}
+        aoTentarNovamente={() => {
+          void filtros.refetch()
+        }}
+        aoLimpar={() => {
+          const proximos = limparRecortesUrl(searchParams, ['municipio', 'bairro', 'alimentador', 'atipico'])
+          proximos.delete('ordenar')
+          setSearchParams(proximos)
+        }}
+      >
+        <Selecao
+          rotulo="Município"
+          valor={recortes.municipio}
+          opcoes={municipios}
+          placeholder="Todos"
+          carregando={filtros.isLoading}
+          aoMudar={(municipio) => {
+            setSearchParams(atualizarRecorteUrl(searchParams, { municipio }))
+          }}
         />
-      </div>
+        <Selecao
+          rotulo="Alimentador"
+          valor={recortes.alimentador}
+          opcoes={alimentadores}
+          placeholder="Geral"
+          carregando={filtros.isLoading}
+          aoMudar={(alimentador) => {
+            setSearchParams(
+              atualizarRecorteUrl(searchParams, { alimentador }),
+            )
+          }}
+        />
+        <label className="ve-switch">
+          <input
+            type="checkbox"
+            checked={recortes.atipico}
+            onChange={(e) => {
+              setSearchParams(
+                atualizarRecorteUrl(searchParams, {
+                  atipico: e.target.checked,
+                }),
+              )
+            }}
+          />
+          <span className="ve-switch-track" aria-hidden="true" />
+          <span className="ve-switch-text">
+            Com evento atípico
+            <small>Vale para a série e o ranking</small>
+          </span>
+        </label>
+      </BarraRecorte>
 
       <div
-        role="note"
-        className="flex items-start gap-3 rounded-lg border bg-muted/40 p-4 text-sm"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+          gap: '16px',
+        }}
+        aria-label="Indicadores de continuidade"
       >
-        <Info
-          className="mt-0.5 h-4 w-4 shrink-0"
-          aria-hidden="true"
+        <CartaoKpi
+          rotulo="DEC"
+          unidade="h"
+          sentidoFavoravel="baixa"
+          dica="Duração Equivalente de Interrupção por Unidade Consumidora para comparar alimentadores e períodos."
+          indisponivel
         />
-        <p>
-          Os valores apresentados são comparativos entre períodos e
-          não devem ser comparados aos limites regulatórios da ANEEL.
-        </p>
+        <CartaoKpi
+          rotulo="FEC"
+          unidade="vezes"
+          sentidoFavoravel="baixa"
+          dica="Frequência Equivalente de Interrupção por Unidade Consumidora para comparar alimentadores e períodos."
+          indisponivel
+        />
+        <CartaoKpi
+          rotulo="Eventos atípicos no período"
+          sentidoFavoravel="baixa"
+          indisponivel
+        />
+      </div>
+      <div role="note" className="rounded-lg border bg-muted/40 p-4 text-sm">
+        Os indicadores DEC e FEC apresentados são comparativos entre períodos e alimentadores e não devem ser comparados aos limites regulatórios da ANEEL.
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
-        <CartaoGrafico
-          titulo="DEC por competência"
-          unidade="horas"
-        />
-        <CartaoGrafico
-          titulo="FEC por competência"
-          unidade="interrupções"
-        />
-      </div>
 
-      <div className="overflow-hidden rounded-lg border bg-card">
-        <div className="flex flex-wrap items-end justify-between gap-4 border-b p-5">
-          <div>
-            <h2 className="font-semibold">
-              Ranking de alimentadores
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Alimentadores com maior impacto na continuidade
-            </p>
-          </div>
+      <Painel
+        titulo="DEC e FEC por competência"
+        subtitulo={`${recortes.alimentador || 'Geral'} · eixo de tempo: competência · ${escopoAtipico}`}
+      >
+        <EstadoIndisponivel />
+      </Painel>
 
-          <div className="space-y-2">
-            <label
-              htmlFor="operacao-ordenacao"
-              className="block text-xs font-medium text-muted-foreground"
-            >
-              Ordenar por
-            </label>
+      <Painel
+        titulo="Ranking de alimentadores"
+        acoes={
+          <label htmlFor="operacao-ordenacao" className="flex items-center gap-2 text-sm">
+            Ordenar por
             <select
               id="operacao-ordenacao"
+              aria-label="Ordenar por"
+              className="rounded-md border bg-background px-3 py-2"
               value={ordenacao}
-              onChange={(evento) =>
-                atualizarParametro('ordenar', evento.target.value)
-              }
-              className="h-10 min-w-36 rounded-md border bg-background px-3 text-sm"
+              onChange={(e) => {
+                const proximos = new URLSearchParams(searchParams)
+                proximos.set('ordenar', e.target.value)
+                setSearchParams(proximos)
+              }}
             >
-              <option value="chi">CHI (padrão)</option>
+              <option value="chi">CHI</option>
               <option value="dec">DEC</option>
               <option value="fec">FEC</option>
             </select>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
+          </label>
+        }
+        subtitulo={`Ordenado por ${ordenacao.toUpperCase()} · selecione um alimentador para acompanhar sua série de continuidade`}
+      >
+                <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="bg-muted/50 text-muted-foreground">
               <tr>
-                {colunasRanking.map((coluna) => (
-                  <th
-                    key={coluna}
-                    scope="col"
-                    className="whitespace-nowrap px-5 py-3 font-medium"
-                  >
+                {['Alimentador', 'Município', 'CHI', 'DEC', 'FEC', 'UCs', 'Causa principal'].map((coluna) => (
+                  <th key={coluna} scope="col" className="whitespace-nowrap px-5 py-3 font-medium">
                     {coluna}
                   </th>
                 ))}
               </tr>
             </thead>
-
             <tbody>
               <tr>
-                <td
-                  colSpan={colunasRanking.length}
-                  className="px-5 py-12 text-center"
-                >
-                  <p className="font-medium">
-                    Nenhum dado disponível
-                  </p>
+                <td colSpan={7} className="px-5 py-12 text-center">
+                  <p className="font-medium">Nenhum dado disponível</p>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    O ranking será exibido após a integração
-                    dos dados de continuidade.
+                    O ranking será exibido após a integração dos dados de continuidade.
                   </p>
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
-      </div>
-    </section>
+      </Painel>
+    </div>
   )
 }

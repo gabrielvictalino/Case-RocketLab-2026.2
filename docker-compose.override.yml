@@ -1,4 +1,4 @@
-# Apenas desenvolvimento; o Compose base não publica portas.
+# Apenas desenvolvimento; no Compose base só o nginx publica porta.
 services:
   postgres:
     ports: ['127.0.0.1:5432:5432']

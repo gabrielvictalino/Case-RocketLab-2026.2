@@ -105,15 +105,16 @@ Princípios:
 
 ## 3. Contrato Gold
 
-O portal consome o contrato proposto na análise de arquiteturas, versionado
-em `contracts/`, com um arquivo por tabela (colunas, tipos, grão, chaves) e
-um `manifest.json` por carga.
+O portal consome o contrato formalizado em `0.3.0-provisional`, versionado
+em `contracts/`, com um arquivo YAML por tabela (metadados completos R1:
+descrição em português, grão, chave primária, unidades e totais de controle) e
+um `manifest.json` por carga contendo `reference_date` (R6).
 
 | Tabela | Grão | Uso no portal |
 |---|---|---|
 | `dim_uc` | UC | Cadastro, classe, localização, alimentador, flags (GD, irregularidade confirmada) |
 | `dim_alimentador` | Alimentador | Município, nº de UCs |
-| `uc_consumo_faturamento_mensal` | UC × competência | Consumo original e analítico, tipo de leitura, troca de medidor, fatura, bandeira, status de pagamento |
+| `uc_consumo_faturamento_mensal` | UC × competência | Consumo original e analítico, tipo de leitura, troca de medidor, fatura, bandeira, status de pagamento, data de vencimento (R2) |
 | `medidores_historico` | Instalação de medidor | Medidor atual e trocas |
 | `gd_uc` | UC com GD | Potência, data de conexão |
 | `receita_volume_mensal` | Competência × município × bairro × classe × grupo de UC | Visão Geral, Receita, agente |
@@ -121,9 +122,12 @@ um `manifest.json` por carga.
 | `atendimentos`, `atendimentos_historico` | Protocolo; protocolo × sequência | Chamados na Visão 360 |
 | `ocorrencias_uc` | Ocorrência | Interrupções da UC |
 | `inspecoes_historicas` | Inspeção | Histórico e taxa de acerto |
-| `fila_inspecao` | UC candidata | Score, motivos, energia a recuperar |
+| `fila_inspecao` | UC candidata | Score, motivos, energia a recuperar (sem UCs com GD, R4) |
 
-As pendências para o time de dados estão na seção 13.
+As regras do contrato definem a temporalidade estrita de grupo de UC (R3), a
+coerência com GD (R4), a fórmula canônica de decomposição da receita (R5) e o
+procedimento de validação e homologação via `manifesto.py` (R7) e `--verificar` (R8).
+O status das pendências com o time de dados está detalhado na seção 13.
 
 ## 4. Telas
 
@@ -170,18 +174,30 @@ agente, e vem do contrato.
   endereço, alimentador, medidor atual, GD (potência e data de conexão).
 - **Consumo analítico** dos últimos 12 meses ao lado dos mesmos meses do ano
   anterior, com marcação de leitura estimada e de troca de medidor. O tooltip
-  da troca diz "consumo estimado pela média da UC". O consumo original não
+  da troca diz "consumo estimado pela mediana da UC". O consumo original não
   aparece para o atendente.
 - **Explicação da conta** (determinística, sem LLM): compara a última fatura
   com a do mesmo mês do ano anterior e separa a variação em consumo, bandeira
-  e tarifa numa frase pronta.
+  e tarifa numa frase pronta. A troca de medidor e a leitura estimada são
+  citadas como fato, sem dizer que a fatura foi estimada.
 - Faturas em aberto, com dias de atraso.
-- **Interrupções da UC** nos últimos 12 meses (data, duração, causa) e o
-  resumo do alimentador no mesmo período (nº de ocorrências, DEC).
+- **Interrupções da UC** nos últimos 12 meses (data, duração, duração
+  efetiva, causa, sobreposição) e o resumo do alimentador no mesmo período
+  (nº de interrupções, DEC).
 - Chamados com histórico de tratativas e nota de satisfação.
 - Inspeções da UC (históricas e novas) e ordem ativa, se houver.
 
 A tela ignora o período global e usa sempre os últimos 12 meses da UC.
+
+Decisões de backend da Visão 360:
+- (D1) Data de referência obtida de `manifesto->>'reference_date'` da carga mais recente.
+- (D2) Janela de 12 meses pela maior competência da UC (ou fallback da carga), sem período global.
+- (D3) Resumo do alimentador agrega `Σ chi_horas ÷ numero_ucs` e arredonda uma única vez com HALF_UP.
+- (D4) Explicação da conta determinística por R5. O motivo principal é o efeito (consumo, tarifa,
+  bandeira ou outros) de maior módulo com o sinal da variação. Com base zero, a frase omite o
+  percentual e usa a variação absoluta. Os avisos de medição seguem a ordem cronológica.
+- (D5) Normalização devolve 422 `UC_INVALIDA` para formato inválido e 404 `UC_NAO_ENCONTRADA` se ausente.
+- (D6) Sessão do portal acessa `analytics.*`, `portal_read.inspecoes` e `operations.*` sem passar por `ai_read`.
 
 ### 4.4 Perdas (F4, F5, D1)
 
@@ -378,11 +394,14 @@ separados.
 |---|---|---|---|
 | `analytics` | Tabelas do contrato Gold | importador | role `portal` |
 | `operations` | `usuarios`, `ordens_inspecao`, `ordem_eventos`, `inspecoes`, `importacoes`, `agente_auditoria`, `cargas` | role `portal`; `cargas` pelo importador | role `portal` |
-| `ai_read` | Views sobre `analytics`, sem nome, CPF e endereço | importador, a cada carga | role `ai_read` |
+| `ai_read` | Views sobre `analytics` e `operations.inspecoes`, sem nome, CPF e endereço | importador, a cada carga | role `ai_read` |
 
 Role `ai_read`: só `SELECT` em `ai_read`, `default_transaction_read_only = on`,
-`statement_timeout = 5s` e sem `EXECUTE` em `set_config` e na família
-`pg_sleep`. Como a própria sessão pode mudar o timeout e o modo só leitura com
+`statement_timeout = 5s` e sem `EXECUTE` em `set_config`, na família
+`pg_sleep` e nos advisory locks de sessão (`pg_advisory_lock`,
+`pg_try_advisory_lock` e as variantes `_shared`). O `ROLLBACK` não solta um
+advisory lock de sessão, e o lock das cargas na mão da IA travaria o
+importador. Como a própria sessão pode mudar o timeout e o modo só leitura com
 `SET`, o agente roda cada consulta numa transação encerrada com `ROLLBACK`, e a
 mudança não sobrevive na conexão do pool. A auditoria do agente é gravada pela
 conexão do portal, nunca pela do agente.
@@ -407,13 +426,26 @@ ativa em `operations.ordens_inspecao`.
 
 O Databricks não alcança um Postgres local, então a carga é **pull**:
 
-1. O Job do Databricks exporta as tabelas Gold em CSV para um Volume, com o
-   `manifest.json`: `batch_id`, versão do contrato, período, contagens,
-   hashes e totais de controle.
+1. O Job do Databricks exporta as tabelas Gold em CSV para um Volume e gera o
+   `manifest.json` com `contracts/manifesto.py` (R7): `batch_id`, versão do contrato
+   `0.3.0-provisional`, período coberto, `reference_date` (R6), contagens, hashes e
+   totais de controle.
 2. O importador (`docker compose run importador`) lê de um diretório local
-   (CSVs baixados do Volume ou `contracts/samples/`).
+   (CSVs baixados do Volume ou `contracts/samples/`). O comando suporta o modo
+   `--verificar` (R8) para homologação prévia (executa todos os passos até `validate`
+   em transação e faz rollback sem alterar banco ou Redis).
 3. Carrega em `analytics_staging` com `COPY`, valida tipos, unicidade,
-   integridade e contagens contra o manifesto, e cria os índices.
+   integridade referencial, contagens contra o manifesto, reconciliação comercial por
+   grão com `receita_volume_mensal` e os gates de negócio:
+   - R2: competências sem fatura com nulos síncronos e zeramento de volume/valores;
+     status de pagamento coerente com valor arrecadado; flag de troca de medidor exige
+     consumo estimado (método diferente de `LEITURA_UTILIZAVEL`); `LEITURA_UTILIZAVEL` exige
+     consumo analítico igual ao original; `metodo_consumo` é um enum fechado.
+   - R3: regra temporal estrita de grupo de UC (GD > irregularidade confirmada > demais).
+   - R4: equivalência de `dim_uc.flag_gd` com `gd_uc`, exclusão de UCs com GD da fila e
+     `numero_ucs` da continuidade igual ao da `dim_alimentador`.
+   - R6: `reference_date` maior ou igual ao primeiro dia do mês de encerramento do período.
+   Em seguida, cria os índices de busca por UC e competência.
 4. Numa transação, renomeia o `analytics` antigo, promove
    `analytics_staging` a `analytics`, recria com `CREATE OR REPLACE VIEW` as
    views de `importador/views.sql` sobre o schema novo, remove com
@@ -503,9 +535,9 @@ das roles) ficam só no `.env`.
 
 | Job | Roda quando o PR toca | Conteúdo |
 |---|---|---|
-| backend | `backend/**`, `ai-agent/**`, `importador/**`, `contracts/**`, `uv.lock` | `ruff`; pytest com Postgres via Testcontainers, carregando `contracts/samples/` |
-| frontend | `frontend/**` | `eslint`, `tsc --noEmit`, Vitest, `vite build` |
-| `CI` (agregador) | sempre | Falha se o job de backend ou de frontend falhou; obrigatório junto com o `Fluxo Git` |
+| backend | `backend/**`, `ai-agent/**`, `importador/**`, `contracts/**`, `infra/postgres/**`, `tests/**`, `scripts/**` e arquivos compartilhados da raiz (`pyproject.toml`, `uv.lock`, `.python-version`, `conftest.py`, `docker-compose*.yml`, `.dockerignore`, `.env.example`, `.github/workflows/ci.yml`) | `ruff`; pytest com Postgres e Redis via Testcontainers, carregando `contracts/samples/` |
+| frontend | `frontend/**`, `.github/workflows/ci.yml` | `npm ci`, `eslint`, `tsc --noEmit`, Vitest, `vite build` |
+| `CI` (agregador) | sempre | Falha se `changes`, `backend` ou `frontend` falhar/cancelar ou pular indevidamente; obrigatório junto com o `Fluxo Git` |
 | e2e | PR para `main` | Compose completo + um teste de fumaça com Playwright (login → abrir UC → gerar ordem) |
 
 Os jobs de módulo pulam o trabalho quando o PR não toca o módulo, mas o
@@ -537,19 +569,19 @@ percentual. O CI usa Python 3.12, a mesma versão da imagem Docker.
 
 ## 13. Pendências do contrato com o time de dados
 
-O portal depende destes pontos para sair da amostra e usar a Gold real:
+O portal depende destes pontos para sair da amostra e usar a Gold real (regras formalizadas no contrato `0.3.0-provisional`):
 
-| # | Pendência | Bloqueia |
-|---|---|---|
-| 1 | **Consumo original e analítico** em colunas separadas em `uc_consumo_faturamento_mensal`, com a marcação de leitura estimada e de troca de medidor e o método de estimativa | Visão 360, volume faturado |
-| 2 | **Fórmula da decomposição da receita** (volume, reajuste, bandeira, mix), aplicável a qualquer par de períodos sobre `receita_volume_mensal`, incluindo como obter a tarifa base da classe por competência | Receita, insights, agente |
-| 3 | **Grupo de UC** em `receita_volume_mensal` (com GD, irregularidade confirmada, demais), respeitando a data de conexão da GD | Receita |
-| 4 | **Regra de DEC/FEC**: sobreposição de interrupções (fórmula simples ou `duracao_efetiva_min`), denominador por alimentador e marcação de evento atípico | Operação, Visão Geral |
-| 5 | **Fila de inspeção** com score, motivos em formato legível (lista de sinais com valor) e energia a recuperar em kWh e R$, sem UCs com GD | Perdas |
-| 6 | **Atendimentos** em duas tabelas (protocolo; protocolo × sequência) | Visão 360 |
-| 7 | **Faturas órfãs** fora de toda tabela de receita do contrato | Receita, KPIs |
-| 8 | **Manifesto** da exportação com `batch_id`, versão do contrato, contagens e totais de controle | Importador |
-| 9 | Nomes físicos de catálogo e schema unificados no Databricks, para a exportação ser um passo só do Job | Exportação |
+| # | Pendência | Bloqueia | Status no Contrato 0.3.0-provisional |
+|---|---|---|---|
+| 1 | **Consumo original e analítico** em colunas separadas em `uc_consumo_faturamento_mensal`, com a marcação de leitura estimada e de troca de medidor e o método de estimativa | Visão 360, volume faturado | **Formalizado (R2)**: colunas separadas, `metodo_consumo` e gate de troca de medidor. |
+| 2 | **Fórmula da decomposição da receita** (volume, reajuste, bandeira, mix), aplicável a qualquer par de períodos sobre `receita_volume_mensal`, incluindo como obter a tarifa base da classe por competência | Receita, insights, agente | **Formalizado (R5)**: fórmula canônica com fator $k_0$, quatro efeitos e fechamento exato em Decimal no README. |
+| 3 | **Grupo de UC** em `receita_volume_mensal` (com GD, irregularidade confirmada, demais), respeitando a data de conexão da GD | Receita | **Formalizado (R3)**: regra temporal GD > IRREGULARIDADE_CONFIRMADA > DEMAIS com `date_trunc` e gate SQL. |
+| 4 | **Regra de DEC/FEC**: sobreposição de interrupções (fórmula simples ou `duracao_efetiva_min`), denominador por alimentador e marcação de evento atípico | Operação, Visão Geral | **Proposta no #98** (`docs/gold/continuidade.md`): CHI com `duracao_efetiva_min`, interrupções com `flag_sobreposicao = false`, denominador fixo com as UCs do alimentador no cadastro e evento atípico marcado pela Silver, sem remoção. Falta o aceite do backend (#57) para a causa principal por linha e o valor `SEM OCORRENCIA`. |
+| 5 | **Fila de inspeção** com score, motivos em formato legível (lista de sinais com valor) e energia a recuperar em kWh e R$, sem UCs com GD | Perdas | **Formalizado (R4)**: gate estrito excluindo UCs de `gd_uc` da fila; `dim_uc.flag_gd` auditado contra `gd_uc`. |
+| 6 | **Atendimentos** em duas tabelas (protocolo; protocolo × sequência) | Visão 360 | **Formalizado**: tabelas `atendimentos` e `atendimentos_historico` com metadados R1. |
+| 7 | **Faturas órfãs** fora de toda tabela de receita do contrato | Receita, KPIs | **Formalizado (R2)**: faturas órfãs excluídas de toda tabela analítica; competência sem fatura modelada com nulos síncronos e zeros; nova coluna `data_vencimento`. Faturas múltiplas da mesma UC na competência (`MULTIPLAS_FATURAS_UC_MES`, #67) também são segregadas, e a competência entra como sem fatura. |
+| 8 | **Manifesto** da exportação com `batch_id`, versão do contrato, contagens e totais de controle | Importador | **Formalizado (R6, R7)**: `reference_date` obrigatória, validação estrita e gerador autônomo `contracts/manifesto.py`. |
+| 9 | Nomes físicos de catálogo e schema unificados no Databricks, para a exportação ser um passo só do Job | Exportação | **Pendente**: depende da unificação de catálogo/schema no Databricks pelo time de dados (fora do escopo do portal). |
 
 ## 14. O que revisitar se o sistema crescer
 
