@@ -151,6 +151,8 @@ Rotas implementadas:
 | `GET /meta/filtros` | Municípios, bairros por município, classes e alimentadores |
 | `GET /kpis?periodo=AAAA-MM..AAAA-MM` | Oito cards com valor, comparação e variações |
 | `GET /kpis/serie?periodo=AAAA-MM..AAAA-MM` | Receita e volume por competência, em ordem cronológica |
+| `GET /continuidade/serie?periodo=AAAA-MM..AAAA-MM` | CHI, DEC e FEC por competência e totais reagregados do período |
+| `GET /continuidade/ranking?periodo=AAAA-MM..AAAA-MM&ordem=chi` | Alimentadores por CHI (padrão), DEC ou FEC, com UCs e ocorrências por causa |
 | `GET /ordens-inspecao?status=&page=1&size=25` | Listagem com snapshot, máximo 100 por página |
 | `POST /ordens-inspecao` | Lote `{ucs: [...]}`, criadas e rejeitadas; não aborta por UC repetida |
 | `POST /ordens-inspecao/{id}/despachar` | `{inspetor: "INSP-001"}` |
@@ -218,6 +220,47 @@ recortes por município e alimentador; o repositório de totais também tem seus
 componentes de tarifa e bandeira conferidos contra o detalhe por UC.
 As métricas usam o contrato vigente `0.3.0-provisional`; esta implementação não
 homologa uma exportação real nem altera a Gold.
+
+### Continuidade (#57)
+
+As rotas `/continuidade/serie` e `/continuidade/ranking` exigem autenticação e
+`periodo=AAAA-MM..AAAA-MM`. Aceitam `municipio` e `alimentador`, combinados por
+interseção, e `sem_evento_atipico=true` (padrão `false`). `comparacao` é opcional
+e segue a validação compartilhada; informa o período de referência nos metadados,
+sem acrescentar uma segunda série. As respostas incluem `periodo`, `comparacao`,
+`carga` e `sem_evento_atipico`.
+
+A série retorna `serie: [{competencia, chi, interrupcoes, numero_ucs, dec, fec}]`
+em ordem cronológica e `totais` com os mesmos indicadores reagregados para todo o
+período. O ranking retorna `ordem` e `ranking`, com `alimentador`, `municipio`,
+os indicadores e `causas: [{causa, ocorrencias, interrupcoes}]`. `ordem` aceita
+`chi`, `dec` e `fec`, sempre decrescente, com código do alimentador como desempate.
+A ordenação usa as razões antes do arredondamento. CHI, DEC e FEC são strings
+decimais; contagens são inteiros. DEC/FEC usam duas casas e arredondamento meio
+para cima.
+
+CHI e interrupções somam os numeradores mensais; o denominador conta as UCs de
+cada alimentador uma única vez no período. A exclusão remove apenas as linhas
+alimentador × competência marcadas, antes da agregação. Não remove outros
+alimentadores da mesma competência. Se restar alguma competência do alimentador,
+suas UCs continuam contadas uma vez nos totais. Um mês inteiramente excluído ou
+sem cobertura fica com indicadores `null`; uma linha Gold sem ocorrências mantém
+os indicadores zerados. Um recorte inteiramente vazio retorna ranking vazio e
+totais nulos.
+
+As causas são contadas em `ocorrencias_uc`, pela competência de abertura e com
+a mesma cobertura e exclusão do agregado. `ocorrencias` conta todos os registros;
+`interrupcoes` conta apenas os sem sobreposição, como no FEC. A causa principal
+mensal e o valor `SEM OCORRENCIA` são aceitos como atributos da Gold, sem usá-los
+para inferir as contagens de causas. Essa decisão não altera o status provisório
+do contrato nem homologa uma exportação real.
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  'http://localhost:8000/api/v1/continuidade/serie?periodo=2025-07..2026-06&alimentador=ALM-REC-001&sem_evento_atipico=true'
+curl -H "Authorization: Bearer $TOKEN" \
+  'http://localhost:8000/api/v1/continuidade/ranking?periodo=2025-07..2026-06&ordem=dec'
+```
 
 Criar uma ordem congela o score, os motivos e os valores sintéticos da fila.
 Transições usam bloqueio da linha e gravam eventos na mesma transação. O índice

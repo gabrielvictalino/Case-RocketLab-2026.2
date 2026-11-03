@@ -15,6 +15,7 @@ from starlette.exceptions import HTTPException
 from app.core.config import get_settings
 from app.core.database import create_engines
 from app.modules.auth.router import router as auth_router
+from app.modules.continuidade.router import router as continuidade_router
 from app.modules.kpis.router import router as kpis_router
 from app.modules.meta.router import router as meta_router
 from app.modules.perdas.router import router as perdas_router
@@ -124,6 +125,7 @@ def create_app(settings=None):
         perdas_router,
         ucs_router,
         kpis_router,
+        continuidade_router,
     ):
         app.include_router(router, prefix='/api/v1')
     return app

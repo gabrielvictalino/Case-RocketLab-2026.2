@@ -204,7 +204,7 @@ Se uma validação falhar, a mensagem lista cada regra violada com a quantidade 
 
 ## 9. Pendências
 
-* **Contrato provisório:** os três YAMLs estão como `provisorio-nao-aprovado`. A causa principal por linha (seção 3.4) e o valor `SEM OCORRENCIA` precisam do aceite de quem consome a tabela (#57).
+* **Contrato provisório:** os três YAMLs continuam como `provisorio-nao-aprovado`. O backend (#57) aceita a causa principal por linha (seção 3.4) e o valor `SEM OCORRENCIA` como atributos mensais; o ranking conta ocorrências por causa no detalhe `ocorrencias_uc`. O aceite desse consumo não homologa a exportação real nem aprova o contrato inteiro.
 * **Evento atípico pela duração:** a Silver marca a competência pelo número de ocorrências do alimentador. Em 2025-07, os 119 alimentadores não marcados ficaram abaixo do limite em número, mas com interrupções quase três vezes mais longas (seção 6). Se o portal precisar excluir o evento inteiro, a regra da Silver (PR #23) precisa considerar também o CHI do mês, decisão a combinar com o dono da Silver.
 * **Exportação para o banco local:** fica no passo único de exportação do Job (system design, seção 13, pendência 9).
 * **Recorte "sem esta causa":** se o portal precisar, dá para acrescentar a união dos intervalos por UC, competência e causa (Silver, seção 2.4).
