@@ -394,7 +394,7 @@ separados.
 |---|---|---|---|
 | `analytics` | Tabelas do contrato Gold | importador | role `portal` |
 | `operations` | `usuarios`, `ordens_inspecao`, `ordem_eventos`, `inspecoes`, `importacoes`, `agente_auditoria`, `cargas` | role `portal`; `cargas` pelo importador | role `portal` |
-| `ai_read` | Views sobre `analytics` e `operations.inspecoes`, sem nome, CPF e endereço | importador, a cada carga | role `ai_read` |
+| `ai_read` | Views sobre `analytics`, `operations.inspecoes` e as ordens ativas, sem nome, CPF, endereço e texto livre | importador, a cada carga | role `ai_read` |
 
 Role `ai_read`: só `SELECT` em `ai_read`, `default_transaction_read_only = on`,
 `statement_timeout = 5s` e sem `EXECUTE` em `set_config`, na família
@@ -409,7 +409,9 @@ conexão do portal, nunca pela do agente.
 Role `importador`: cria e substitui `analytics` e `analytics_staging`, faz
 `INSERT` em `operations.cargas` (criada pelo `init.sql` e depois gerida pelo
 Alembic) e `SELECT` em `operations.inspecoes` (concedido pela migração que
-cria a tabela). Não escreve em nenhuma outra tabela de `operations`.
+cria a tabela) e em `id_uc` e `status` de `operations.ordens_inspecao` (migração
+0003), para a fila da IA tirar as UCs com ordem ativa, como a do portal. Não
+escreve em nenhuma outra tabela de `operations`.
 
 As views que leem `analytics` (a `inspecoes` e as de `ai_read`) ficam em
 `importador/views.sql` e pertencem à role `importador`. Uma view do Postgres
