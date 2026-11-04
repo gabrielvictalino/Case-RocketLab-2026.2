@@ -237,6 +237,12 @@ da extração recebida, que pode diferir do dia da execução.
 Consulte [Workflow](docs/workflow_databricks.md) e
 [exportação](docs/gold/exportacao.md) para parâmetros, dependências e carga do lote real.
 
+Execução de 04/11/2026 a partir da `dev`: as 17 tarefas (Bronze, 8 Silvers, 7 Golds e
+a exportação) terminaram com sucesso em 38 minutos, partindo da landing, e geraram o
+lote `gold-20261022-de8393de`, que passou no `importador --verificar`.
+
+![Execução do Workflow no Databricks](docs/img/workflow_databricks.png)
+
 ## Endereços Locais
 
 | Serviço | URL |
@@ -377,3 +383,7 @@ A avaliação do agente tem workflow próprio, manual ou semanal, separado dos c
   automatizada de drift do OpenAPI. Pendências e critérios por domínio estão em
   [backend-pendencias](docs/backend-pendencias.md) e
   [aderência de faturas](docs/gold/aderencia-faturas-0.3.md).
+- As Golds analíticas de cadastro e de leituras (#106 e #109: qualidade do cadastro,
+  ligações por ano e perfil de consumo por UC) ficaram fora desta entrega. Nenhuma
+  tela as usa, e levá-las ao portal pede tabela no contrato, no importador e no
+  backend, além de tarefas no Workflow (#156).
