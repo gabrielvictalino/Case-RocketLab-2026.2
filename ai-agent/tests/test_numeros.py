@@ -89,6 +89,10 @@ def test_alta_com_real_no_meio():
         ('O volume foi de 351,2 MWh.', 351.2, 'volume_mwh'),
         ('A receita foi de R$ 1,2 milhão.', 1.2, 'receita_milhoes'),
         ('Foram 12 mil UCs.', 12, 'ucs_mil'),
+        # Outra unidade, a mesma energia: 351,2 MWh são 351.200 kWh e 0,3512 GWh.
+        ('O volume foi de 351.200 kWh.', 351.2, 'volume_mwh'),
+        ('O volume foi de 351,2 GWh.', 351200, 'volume_mwh'),
+        ('O volume foi de 351,2 MWh.', 351200, 'volume_kwh'),
     ],
 )
 def test_valor_ja_na_escala_do_texto(texto, valor, coluna):
@@ -110,6 +114,10 @@ def test_valor_ja_na_escala_do_texto(texto, valor, coluna):
         # Numa coluna já em MWh, 351.200 são 351.200 MWh: "351,2 MWh" é mil vezes menor.
         ('O volume foi de 351,2 MWh.', [[351200]], [], 'volume_mwh', ['351,2 MWh']),
         ('A receita foi de R$ 1,2 milhão.', [[1200000]], [], 'receita_milhoes', ['1,2 milhão']),
+        # A coluna em MWh com o texto em outra unidade: os dois vão para kWh antes.
+        ('O volume foi de 351,2 kWh.', [[351.2]], [], 'volume_mwh', ['351,2']),
+        ('O volume foi de 351,2 GWh.', [[351200000]], [], 'volume_mwh', ['351,2 GWh']),
+        ('O volume foi de 351,2.', [[351.2]], [], 'volume_mwh', ['351,2']),
     ],
 )
 def test_escala_inventada_nao_se_sustenta(texto, linhas, permitidos, coluna, sem_lastro):
@@ -267,3 +275,18 @@ def test_numeros_citados_na_pergunta():
         1000,
         1,
     ]
+
+
+def test_ano_permitido_so_vale_em_contexto_de_tempo():
+    # "São 2025 UCs" é uma contagem: o ano permitido não a sustenta.
+    assert numeros_sem_lastro('São 2025 UCs.', [[300]], [2025]) == ['2025']
+    assert numeros_sem_lastro('Há 2025 clientes em 2025.', [[300]], [2025]) == ['2025']
+    assert numeros_sem_lastro('De 2024 para 2025, e desde 2025.', [[300]], [2024, 2025]) == []
+    assert numeros_sem_lastro('2025 foi o ano.', [[300]], [2025]) == []
+
+
+def test_coluna_em_percentual_nao_e_lida_como_razao():
+    assert numeros_sem_lastro('A taxa foi de 742%.', [[7.42]], colunas=['taxa_pct']) == ['742%']
+    assert numeros_sem_lastro('A taxa foi de 7,42%.', [[7.42]], colunas=['taxa_pct']) == []
+    # Sem o nome, o valor pode ser a razão: 0,0742 → 7,42%.
+    assert numeros_sem_lastro('A taxa foi de 7,42%.', [[0.0742]], colunas=['taxa']) == []
