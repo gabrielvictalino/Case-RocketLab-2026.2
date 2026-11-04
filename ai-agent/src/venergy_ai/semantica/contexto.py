@@ -34,6 +34,11 @@ def descrever_periodo_padrao(
     else:
         linhas.append(f'Comparação padrão: {_periodo(comparacao)}')
     linhas.append('A resposta sempre diz o período e a métrica usados.')
+    linhas.append(
+        'O intervalo de datas acima filtra eventos novos no período. Para GD existente e '
+        'medidores atuais ou ativos ao fim do período, siga a regra específica da view; '
+        'não exclua equipamentos só porque foram instalados antes do início do período.'
+    )
     return '\n'.join(linhas)
 
 
@@ -55,10 +60,28 @@ def filtro_do_periodo(visao: Visao) -> str | None:
     if coluna == 'competencia':
         return "competencia BETWEEN DATE '<primeiro mês>' AND DATE '<último mês>'."
     # Data ou data e hora: um BETWEEN até o dia 1 do último mês perderia quase todo ele.
-    return (
+    intervalo = (
         f"{coluna} >= DATE '<primeiro mês>' AND {coluna} < DATE '<último mês>' + "
         "INTERVAL '1 month'. O último mês entra inteiro."
     )
+    if visao.nome == 'gd_uc':
+        return (
+            f'Para novas conexões no período: {intervalo} '
+            'Para GD existente ao fim do período, use somente '
+            "data_conexao < DATE '<último mês>' + INTERVAL '1 month', sem limite inferior. "
+            'Para o total atual da carga, conte todas as UCs da view, sem filtrar a '
+            'data de conexão pelo período padrão.'
+        )
+    if visao.nome == 'medidores_historico':
+        return (
+            f'Para novas instalações no período: {intervalo} '
+            'Para medidores atuais da carga, use data_retirada IS NULL, sem filtrar '
+            'data_instalacao pelo período padrão. Para medidores ativos ao fim do período: '
+            "data_instalacao < DATE '<último mês>' + INTERVAL '1 month' AND "
+            "(data_retirada IS NULL OR data_retirada >= DATE '<último mês>' + "
+            "INTERVAL '1 month'), sem limite inferior na instalação."
+        )
+    return intervalo
 
 
 @cache

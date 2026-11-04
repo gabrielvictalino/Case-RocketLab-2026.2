@@ -229,6 +229,28 @@ def test_inspecoes_do_portal_ficam_fora_do_limite_da_carga(base):
     assert "Exceção: as inspeções com origem = 'portal'" in carga
 
 
+def test_limite_do_historico_nao_recusa_taxa_de_acerto_do_portal():
+    limites = descrever_semantica().split('## Limites:', 1)[1].split('## Carga', 1)[0]
+    assert 'Esse limite vale só para o histórico' in limites
+    assert "origem = 'portal'" in limites
+    assert 'sem origem explícita, inclua ambas' in limites
+    assert 'denominador zero' in limites
+
+
+@pytest.mark.parametrize('nome', ['gd_uc', 'medidores_historico'])
+def test_estoque_nao_herda_filtro_de_novas_instalacoes(nome):
+    filtro = filtro_do_periodo(VISOES_POR_NOME[nome])
+    assert filtro.startswith('Para novas ')
+    assert 'sem limite inferior' in filtro
+    if nome == 'gd_uc':
+        assert 'conte todas as UCs da view' in filtro
+    else:
+        assert 'data_retirada IS NULL, sem filtrar data_instalacao' in filtro
+        assert "data_retirada >= DATE '<último mês>'" in filtro
+    padrao = descrever_periodo_padrao(periodo_padrao(date(2026, 6, 1)))
+    assert 'siga a regra específica da view' in padrao
+
+
 @pytest.mark.parametrize('visao', [v for v in VISOES if v.coluna_tempo], ids=lambda v: v.nome)
 def test_filtro_de_periodo_inclui_o_ultimo_mes(visao):
     secao = secoes_das_views(descrever_semantica())[visao.nome]

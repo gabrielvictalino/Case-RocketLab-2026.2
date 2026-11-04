@@ -141,8 +141,12 @@ VOCABULARIO = (
 # Nada aqui cita mês: uma exportação nova pode cobrir outros meses.
 LIMITES = (
     Limite(
-        'As inspeções históricas cobrem só parte da base. Fora dessa cobertura não há taxa de '
-        "acerto: ela sai de MIN(data) e MAX(data) de inspecoes com origem = 'historica'.",
+        'As inspeções históricas cobrem só parte da base. A cobertura do histórico sai de '
+        "MIN(data) e MAX(data) de inspecoes com origem = 'historica'. Esse limite vale só "
+        "para o histórico: inspeções com origem = 'portal' podem existir fora dele e "
+        'entram na taxa de acerto do período solicitado. Consulte as inspeções da origem '
+        'pedida; sem origem explícita, inclua ambas. Só não há taxa quando não há '
+        'inspeções no recorte (denominador zero).',
         ('inspecoes.origem', 'inspecoes.data'),
     ),
     Limite(
