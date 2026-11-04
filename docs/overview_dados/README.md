@@ -98,10 +98,12 @@ campo `alimentador` (ex.: `ALM-REC-004`), presente em UCs e ocorrências.
 3. **GD e fraude explicam a queda de volume**: UCs com geração distribuída
    −61% (−11,1 GWh) e UCs com fraude confirmada −51% (−2,6 GWh). As demais
    UCs cresceram 2,3%.
-4. **Fraude concentrada**: 96% das irregularidades estão em 4 bairros
-   (Iputinga, Macaxeira, Jardim Jordão, Prazeres). A queda de consumo antecede
-   a inspeção em 4–5 meses, e uma fila baseada nela teria 92% de acerto,
-   contra os 62,7% atuais.
+4. **Fraude concentrada**: 96% das irregularidades confirmadas estão em 4
+   bairros (Iputinga, Macaxeira, Jardim Jordão, Prazeres), que receberam 67%
+   das inspeções. A queda de consumo antecede a inspeção em 4–5 meses: com
+   dados de antes de cada inspeção, as UCs com queda de 50% ou mais tiveram
+   92,5% de acerto, contra os 62,7% atuais ([gold/perdas.md](../gold/perdas.md),
+   seções 2.2 e 2.8).
 5. **DEC/FEC**: o evento climático de jul/2025 dobra o DEC de 2025. O ranking
    por alimentador é dominado pelos alimentadores pequenos.
 6. **"Conta alta"**: em ~80% das reclamações o consumo não subiu mais de 10%

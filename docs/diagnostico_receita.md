@@ -54,9 +54,11 @@ Duas delas mudam os números deste diagnóstico:
   mediana da própria UC. Sem esse tratamento, a queda de volume aparece como
   −5,1%, e não −4,0%.
 
-> Os números foram calculados na análise exploratória dos dados brutos.
-> Devem ser reconferidos nas tabelas Gold do pipeline antes da apresentação
-> final; a ordem de grandeza e as conclusões não dependem de ajustes finos.
+> Os números foram calculados na análise exploratória dos dados brutos e
+> conferidos nas tabelas Gold em 04/11: receita, volume, UCs faturadas, preço
+> médio, meses de bandeira, a variação de A4 contra A3 e os três grupos da
+> seção 4 batem, com diferenças de arredondamento (por exemplo, 7,1 GWh, e não
+> 7,2, no volume A4 das UCs com GD).
 
 ## 2. Os números
 
@@ -118,11 +120,22 @@ industrial caiu 8,6% no último ano (−R$ 5,6 mi), mesmo com volume estável.
 | Grupo de UCs | UCs | Volume A1 | Volume A4 | Variação | Receita A1 → A4 |
 |---|---:|---:|---:|---:|---:|
 | Com geração distribuída (GD) | 3.510 | 18,3 GWh | 7,2 GWh | **−61%** | R$ 13,4 mi → R$ 6,0 mi (−55%) |
-| Com fraude confirmada | 871 | 5,1 GWh | 2,5 GWh | **−51%** | R$ 3,8 mi → R$ 2,1 mi (−43%) |
-| Demais | ~40.600 | 203,7 GWh | 208,3 GWh | **+2,3%** | R$ 140,0 mi → R$ 161,5 mi (+15%) |
+| Com fraude confirmada (sem GD) | 870 | 5,1 GWh | 2,5 GWh | **−51%** | R$ 3,8 mi → R$ 2,1 mi (−43%) |
+| Demais | 40.620 | 203,7 GWh | 208,3 GWh | **+2,3%** | R$ 140,0 mi → R$ 161,5 mi (+15%) |
 | **Total** | 45.000 | 227,1 GWh | 217,9 GWh | **−4,0%** | +8,0% |
 
-Sem GD e sem fraude, o volume teria **crescido 2,0%**.
+Sem GD e sem fraude, o volume teria **crescido 2,0%**. Uma das 871 UCs com
+fraude confirmada também tem GD e está contada no grupo GD.
+
+**Como ler esta tabela ao lado da tela de Receita.** Aqui, cada UC fica no grupo
+que ela é hoje, e o volume das mesmas UCs é comparado nos dois anos. A tela de
+Receita do portal agrupa pela regra R3 do contrato: a UC passa para GD a partir
+do mês da conexão e para fraude confirmada a partir do mês da primeira
+irregularidade. Por isso, na tela, os grupos GD e fraude começam do zero em A1
+(as conexões são de 2024 em diante), e as "Demais" aparecem caindo 7,3%
+(227,1 → 210,5 GWh): elas perdem as UCs que mudam de grupo. Os dois números
+estão certos. Esta tabela responde se o consumo das UCs sem GD e sem fraude
+caiu; a tela mostra quanto volume veio de cada grupo em cada mês.
 
 ### 4.1 Geração distribuída: a principal causa (≈ 80% da perda de volume)
 
@@ -151,7 +164,10 @@ Sem GD e sem fraude, o volume teria **crescido 2,0%**.
 
 - **Onde**: 96% das 871 fraudes confirmadas estão em **4 bairros** —
   **Iputinga** e **Macaxeira** (Recife), **Jardim Jordão** e **Prazeres**
-  (Jaboatão). São os bairros residenciais que mais perderam volume:
+  (Jaboatão). Esses bairros têm 8% das UCs, mas receberam 67% das inspeções:
+  a fraude foi procurada sobretudo ali, e por isso o bairro não pontua na fila
+  de inspeção ([gold/perdas.md](gold/perdas.md), seção 2.4). São os bairros
+  residenciais que mais perderam volume:
 
   | Bairro | Volume residencial A1 → A4 | Fraude | GD | Demais UCs |
   |---|---:|---:|---:|---:|
@@ -192,8 +208,8 @@ alta. Não há retração de demanda.
 
 | # | Recomendação | Evidência | Ordem de grandeza | Prazo |
 |---|---|---|---|---|
-| R1 | **Reinspecionar e regularizar as 871 UCs fraudadoras**, cobrando a energia recuperada | Consumo ainda em ~50% do histórico após a inspeção; 1,47 GWh de `kwh_recuperado` registrado | **≈ R$ 2,0 mi/ano** de faturamento recorrente + **≈ R$ 1,1 mi** de recuperação pontual | Curto (0–6 meses) |
-| R2 | **Fila de inspeção priorizada pelo Grid 360**: queda de consumo vs histórico da própria UC, excluindo GD, combinada com leituras estimadas, bairro e tipo de medidor | Nas inspeções já feitas, a fila teria acertado 92%, contra 62,7% hoje. A fraude aparece nos dados 4–5 meses antes da inspeção | Antecipar a detecção de 4–5 para 1–2 meses reduz em ~60% a perda por caso (~R$ 200/mês por UC fraudadora). Hoje há 100–170 UCs suspeitas ainda não inspecionadas | Curto |
+| R1 | **Reinspecionar e regularizar as 871 UCs fraudadoras**, cobrando a energia recuperada | Consumo ainda em ~50% do histórico após a inspeção; 1,47 GWh de `kwh_recuperado` registrado. É uma ação à parte: a fila de inspeção do Grid 360 tira essas UCs, porque a energia delas já está em `inspecoes_historicas` | **≈ R$ 2,0 mi/ano** de faturamento recorrente + **≈ R$ 1,1 mi** de recuperação pontual | Curto (0–6 meses) |
+| R2 | **Usar a fila de inspeção do Grid 360**: UCs sem GD com consumo pelo menos 40% abaixo do primeiro ano da própria UC, ordenadas por um score que soma a queda, o medidor eletromecânico e as leituras estimadas. O bairro fica de fora de propósito (seção 4.2) | Nas inspeções já feitas, medindo a queda só com os 3 meses antes de cada uma, as UCs com queda de 50% ou mais tiveram 92,5% de acerto, e as de 40% a 50%, 55,6%, contra 62,7% na média de hoje ([gold/perdas.md](gold/perdas.md), seção 2.2). A fraude aparece nos dados 4–5 meses antes da inspeção | Hoje a fila tem 141 UCs: 73 nunca inspecionadas e 68 reinspeções. Cada UC fraudadora deixa de faturar ~R$ 200/mês | Curto |
 | R3 | **Substituir os medidores eletromecânicos nos 4 bairros críticos**, aproveitando o programa de medidores inteligentes em curso | Nesses bairros, 92% das inspeções em UCs com eletromecânico encontraram fraude; o smart meter reduz leituras estimadas | Protege o ≈ R$ 2,0 mi/ano recuperado em R1 contra reincidência | Médio (6–12 meses) |
 | R4 | **Ação de cobrança focada em Residencial e Poder Público** | R$ 9,5 mi em aberto em A4 (5,6% do faturado); 8,5% em Residencial e 9,7% em Poder Público | Cada 1 p.p. de redução ≈ **R$ 1,7 mi/ano** em caixa | Curto |
 | R5 | **Incorporar a GD às projeções de receita e à estratégia comercial**: modelar a perda por nova conexão (~R$ 2,5 mil/ano por UC) e validar com a área regulatória a aplicação dos componentes tarifários previstos para micro e minigeração (Lei 14.300/2022) | GD retira ≈ R$ 8,7 mi/ano; +R$ 0,9 mi já contratado para o próximo ano; nos dados, a GD é faturada só sobre o consumo líquido | Tamanho do problema: ≈ R$ 8,7 mi/ano. Potencial regulatório a quantificar | Médio |
@@ -219,8 +235,8 @@ deve ser lida como melhora de desempenho comercial.
 | Pergunta de acompanhamento | Onde no Grid 360 |
 |---|---|
 | Quanto da variação de receita foi volume, reajuste e bandeira? | Painel de receita com a decomposição do período filtrado, por município, bairro e classe |
-| O volume perdido por GD e por fraude está aumentando? | Série mensal de volume por grupo (GD / fraude / demais) |
-| As UCs regularizadas voltaram a consumir? | Visão 360 da UC e fila de perdas com o status pós-inspeção |
+| O volume perdido por GD e por fraude está aumentando? | Série mensal de volume por grupo (GD / fraude / demais), pela regra R3 (seção 4) |
+| As UCs regularizadas voltaram a consumir? | Visão 360 da UC, com o consumo mês a mês depois da inspeção |
 | Quais UCs inspecionar agora? | Fila de inspeção priorizada, com motivo e energia estimada a recuperar |
 | Quanto falta receber? | Indicador de inadimplência por classe e município |
 
@@ -230,8 +246,8 @@ O mapeamento completo entre dados, requisitos e perguntas está em
 ## 8. Limitações e premissas
 
 - **Fraude**: só as UCs inspecionadas (ago–dez/2025) são classificadas como
-  fraudadoras. Pode haver fraude não detectada; a análise de quedas de
-  consumo indica um volume residual pequeno (100–170 UCs suspeitas).
+  fraudadoras. Pode haver fraude não detectada; a fila de inspeção tem hoje
+  73 UCs nunca inspecionadas com queda de consumo de 40% ou mais.
 - **Tarifa**: não há tabela de tarifas na base. A tarifa foi derivada de
   `valor_energia / consumo`, com erro médio de 0,2% no modelo base + bandeira.
 - **GD**: a energia injetada é uma média mensal declarada, e não uma série;

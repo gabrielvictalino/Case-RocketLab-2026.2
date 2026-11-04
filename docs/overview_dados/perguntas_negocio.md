@@ -140,7 +140,7 @@ O diagnóstico completo, com as recomendações priorizadas, está em
 | Alavanca | Evidência | Ordem de grandeza |
 |---|---|---|
 | Regularizar e cobrar as fraudes já encontradas | 871 UCs, `kwh_recuperado` total de 1,47 GWh; consumo ainda em ~50% da base | ~R$ 1,1 mi de recuperação + até ~R$ 2,0 mi/ano de faturamento ao normalizar o consumo |
-| Varredura dirigida nos 4 bairros e nas UCs com queda abrupta | Fila com 92% de acerto (seção 4) | Cada UC fraudadora deixa de faturar ~R$ 2,3 mil/ano |
+| Fila de inspeção priorizada pela queda de consumo | Queda de 50% ou mais antes da inspeção: 92,5% de acerto nas inspeções já feitas ([gold/perdas.md](../gold/perdas.md), seção 2.2) | Cada UC fraudadora deixa de faturar ~R$ 2,3 mil/ano |
 | Tratar GD como tendência estrutural nas projeções e na estratégia comercial | −61% de volume nas UCs com GD | ~R$ 8,7 mi/ano a preços atuais; cresce ~400–800 UCs/semestre |
 | Não contar com bandeira como receita recorrente | +R$ 7,4 mi de bandeiras em P1; sem elas, a receita cresceria só 3,2% | Volátil: depende do custo de geração definido pela ANEEL |
 
@@ -209,16 +209,17 @@ planilha de campo (diferenciais).
 
 | Sinal | Fonte | Poder de separação | Observação |
 |---|---|---|---|
-| **Queda de consumo** em relação ao histórico da própria UC | `leituras` | AUC 0,92; UCs inspecionadas com queda > 10% (sem GD) tiveram **92% de acerto**, contra 8% nas sem queda | O sinal mais forte |
+| **Queda de consumo** em relação ao histórico da própria UC | `leituras` | AUC 0,92 na análise exploratória. Com a queda medida só nos 3 meses antes de cada inspeção (sem GD): **92,5% de acerto** com queda de 50% ou mais, 55,6% de 40% a 50% e 7% a 8% abaixo de 40% ([gold/perdas.md](../gold/perdas.md), seções 2.2 e 2.8) | O sinal mais forte |
 | **Proporção de leituras estimadas** | `leituras.tipo_leitura` | AUC 0,79; 41% nas fraudadoras × 16–21% nas demais | Complementar: o fraudador costuma impedir a leitura |
-| **Localização** (bairro/alimentador) | `unidades_consumidoras` | 96% das fraudes em 4 bairros | Prioriza rotas de campo |
+| **Localização** (bairro/alimentador) | `unidades_consumidoras` | 96% das fraudes confirmadas em 4 bairros, que receberam 67% das inspeções | Não pontua na fila: repetiria a escolha de onde inspecionar ([gold/perdas.md](../gold/perdas.md), seção 2.4) |
 | **Classe** | `unidades_consumidoras` | Comercial 84% de acerto, Residencial 56% | |
 | **Tipo de medidor** | `medidores` | Nos 4 bairros: `ELETROMECANICO` 92% de acerto × `ELETRONICO` 12,5% | Fora desses bairros não separa (5–9%); usar combinado com a localização |
 | **Não ter GD** | `geracao_distribuida` | 3.510 UCs com GD caem ~61% por motivo legítimo | **Excluir ou descontar a injeção declarada**; sem isso a fila seria inundada por falsos positivos |
 
 O acerto observado hoje é de 62,7% (o "pouco mais da metade" do gerente).
-Uma fila ordenada por queda de consumo, sem UCs com GD, teria acertado ~92%
-nas mesmas inspeções.
+Com a queda medida só nos 3 meses antes de cada inspeção, sem UCs com GD, as
+inspeções com queda de 50% ou mais acertaram 92,5%; a fila de inspeção do portal
+prioriza esse perfil ([gold/perdas.md](../gold/perdas.md), seção 2.2).
 
 ### Energia a recuperar
 

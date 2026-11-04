@@ -74,7 +74,7 @@ Detalhes e números em [perguntas_negocio.md](perguntas_negocio.md).
 
 | Necessidade (persona / requisito) | Como esta fonte é usada |
 |---|---|
-| Fila de inspeção (Perdas) | Valida os sinais: com queda de consumo > 10% (sem GD), o acerto seria de 92%, contra os 62,7% atuais ("pouco mais da metade") |
+| Fila de inspeção (Perdas) | Valida os sinais: com a queda medida só nos 3 meses antes de cada inspeção (sem GD), o acerto é de 92,5% com queda de 50% ou mais e de 55,6% com queda de 40% a 50%, contra os 62,7% atuais ("pouco mais da metade"). A comparação P1 × P0 dava 92% com queda > 10%, mas o P1 inclui meses depois das inspeções ([gold/perdas.md](../gold/perdas.md), seção 2.8) |
 | Energia a recuperar | `kwh_recuperado` ≈ 6 × a queda mensal de consumo (correlação 0,92), o que dá uma fórmula para estimar o potencial de cada UC suspeita |
 | Diagnóstico da receita | As 871 UCs com fraude confirmada perderam 51% do volume (−2,6 GWh, ≈ −R$ 1,8 mi), concentradas em 4 bairros (Iputinga, Jardim Jordão, Prazeres, Macaxeira) |
 | Registro de resultados / upload da planilha | O layout destas abas é o formato de entrada esperado; a normalização de `resultado`, datas e decimais deve ser reaproveitada |
