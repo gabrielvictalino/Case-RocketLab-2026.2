@@ -1,15 +1,22 @@
 """Estado das conversas do agente no Redis, para os follow-ups.
 
-`conversa:{id}` guarda a dona e `conversa:{id}:trocas`, a lista das últimas trocas
-(pergunta, métrica, filtros, período e SQL), da mais antiga para a mais recente. As duas
-chaves têm TTL de 2 h, renovado a cada pergunta. O histórico permanente fica na
-auditoria. É fail-open: sem Redis, a pergunta segue sem o histórico.
+`conversa:v2:{id}` guarda a dona e `conversa:v2:{id}:trocas`, a lista das últimas trocas
+(pergunta, métrica, filtros, período, SQL e o período da tela), da mais antiga para a
+mais recente. As duas chaves têm TTL de 2 h, renovado a cada pergunta, na leitura e na
+gravação. O histórico permanente fica na auditoria. É fail-open: sem Redis, a pergunta
+segue sem o histórico, e uma troca que não se lê mais fica fora dele.
+
+O `v2` separa este formato do anterior, em que `conversa:{id}` era um JSON só com a
+dona e as trocas. Uma conversa aberta antes do deploy continua como conversa nova, sem
+o histórico de antes, e as chaves antigas expiram sozinhas em até 2 h.
 """
 
 import logging
 
+from pydantic import ValidationError
 from redis.exceptions import RedisError
 from venergy_ai.interface import TROCAS_NA_CONVERSA, RespostaAgente, Troca
+from venergy_ai.semantica import Periodo
 
 TTL_S = 2 * 60 * 60
 
@@ -32,34 +39,52 @@ logger = logging.getLogger('venergy.assistente')
 
 
 def chave(conversa_id) -> str:
-    return f'conversa:{conversa_id}'
+    return f'conversa:v2:{conversa_id}'
 
 
 def chave_das_trocas(conversa_id) -> str:
-    return f'conversa:{conversa_id}:trocas'
+    return f'conversa:v2:{conversa_id}:trocas'
 
 
 async def ler(redis, conversa_id, usuario_id) -> list[Troca]:
+    """As trocas da conversa. A leitura também renova o TTL: uma sequência de perguntas
+    fora do domínio, ou que falham, não deixa a conversa expirar no meio do uso."""
+    chaves = (chave(conversa_id), chave_das_trocas(conversa_id))
     try:
         async with redis.pipeline(transaction=True) as pipe:
-            pipe.get(chave(conversa_id))
-            pipe.lrange(chave_das_trocas(conversa_id), 0, -1)
-            dona, trocas = await pipe.execute()
+            pipe.get(chaves[0])
+            pipe.lrange(chaves[1], 0, -1)
+            for chave_redis in chaves:
+                pipe.expire(chave_redis, TTL_S)
+            dona, trocas, *_ = await pipe.execute()
     except RedisError:
         logger.warning('conversa=%s redis indisponível; pergunta sem histórico', conversa_id)
         return []
     # A dona da conversa já foi conferida na auditoria; aqui é só uma segunda trava.
     if dona is None or dona.decode() != str(usuario_id):
         return []
-    return [Troca.model_validate_json(troca) for troca in trocas]
+    legiveis = []
+    for troca in trocas:
+        try:
+            legiveis.append(Troca.model_validate_json(troca))
+        except ValidationError:
+            # Uma troca gravada por outra versão de Troca não derruba a pergunta: ela fica
+            # de fora, e a lista a descarta sozinha depois de 5 trocas novas.
+            logger.warning(
+                'conversa=%s troca ilegível no redis; fica fora do histórico', conversa_id
+            )
+    return legiveis
 
 
-async def registrar(redis, conversa_id, usuario_id, pergunta, resposta):
+async def registrar(
+    redis, conversa_id, usuario_id, pergunta, resposta, periodo_da_tela: Periodo | None
+):
     """Acrescenta a troca respondida. Uma resposta sem métrica (fora do domínio, por exemplo)
-    não muda o estado que o próximo follow-up herda."""
+    não muda o estado que o próximo follow-up herda. `periodo_da_tela` é o da pergunta: se
+    a tela mudar de período depois, a próxima pergunta sem período usa o da tela."""
     if resposta.metrica is None:
         return
-    troca = _troca(pergunta, resposta).model_dump_json()
+    troca = _troca(pergunta, resposta, periodo_da_tela).model_dump_json()
     chaves = (chave(conversa_id), chave_das_trocas(conversa_id))
     try:
         await redis.eval(
@@ -69,7 +94,7 @@ async def registrar(redis, conversa_id, usuario_id, pergunta, resposta):
         logger.warning('conversa=%s redis indisponível; troca não guardada', conversa_id)
 
 
-def _troca(pergunta: str, resposta: RespostaAgente) -> Troca:
+def _troca(pergunta: str, resposta: RespostaAgente, periodo_da_tela: Periodo | None) -> Troca:
     ultima = resposta.consultas[-1] if resposta.consultas else None
     return Troca(
         pergunta=pergunta,
@@ -77,4 +102,5 @@ def _troca(pergunta: str, resposta: RespostaAgente) -> Troca:
         filtros=resposta.filtros,
         periodo=resposta.periodo,
         sql=ultima and ultima.sql_executado,
+        periodo_da_tela=periodo_da_tela,
     )

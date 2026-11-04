@@ -178,7 +178,10 @@ def _como_dado(valor) -> str:
 
 
 def _conversa(historico: list[Troca]) -> str:
-    trocas = [troca.model_dump(mode='json', exclude_none=True) for troca in historico]
+    trocas = [
+        troca.model_dump(mode='json', exclude_none=True, exclude={'periodo_da_tela'})
+        for troca in historico
+    ]
     return '\n'.join(
         (
             '## Conversa até aqui',

@@ -232,10 +232,13 @@ def _nao_sei(motivo: str, alternativa: str | None = None, **usados) -> dict:
 
 def _periodo_padrao(contexto: Contexto) -> Periodo:
     """Sem período na pergunta, vale o da última troca da conversa, depois o da tela e,
-    por fim, os 12 meses até a competência mais recente."""
-    anterior = next((t.periodo for t in reversed(contexto.historico) if t.periodo), None)
-    if anterior is not None:
-        return Periodo(anterior.inicio, anterior.fim)
+    por fim, os 12 meses até a competência mais recente.
+
+    Se a tela mudou de período depois da última troca, a tela vence: a analista que troca
+    2025 por 2024 e faz uma pergunta nova quer 2024, com a comparação da tela."""
+    anterior = next((t for t in reversed(contexto.historico) if t.periodo), None)
+    if anterior is not None and anterior.periodo_da_tela == contexto.periodo:
+        return Periodo(anterior.periodo.inicio, anterior.periodo.fim)
     return contexto.periodo or periodo_padrao(
         contexto.competencia_mais_recente, contexto.competencia_inicial
     )

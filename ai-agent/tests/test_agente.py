@@ -646,6 +646,41 @@ async def test_follow_up_recebe_o_estado_da_conversa():
     assert resposta.filtros == ['município = Olinda']
 
 
+@pytest.mark.parametrize(
+    'tela_na_troca,tela_agora,esperado',
+    [
+        # A tela não mudou desde a troca: vale o período da troca anterior.
+        (Periodo(date(2025, 1, 1), date(2025, 6, 1)), None, 'jul/2025 a dez/2025'),
+        (None, None, 'jul/2025 a dez/2025'),
+        # A tela mudou de período depois da troca: vale o da tela.
+        (None, Periodo(date(2024, 1, 1), date(2024, 6, 1)), 'jan/2024 a jun/2024'),
+    ],
+)
+async def test_periodo_da_tela_vence_quando_mudou_desde_a_ultima_troca(
+    tela_na_troca, tela_agora, esperado
+):
+    anterior = Troca(
+        pergunta='Qual a receita de Recife?',
+        metrica='Receita faturada (R$)',
+        periodo=PeriodoUsado(
+            inicio=date(2025, 7, 1), fim=date(2025, 12, 1), descricao='jul/2025 a dez/2025'
+        ),
+        periodo_da_tela=tela_na_troca,
+    )
+    if tela_na_troca is not None:
+        tela_agora = tela_na_troca
+    contexto = CONTEXTO.model_copy(update={'historico': [anterior], 'periodo': tela_agora})
+    plano = PLANO | {'periodo_inicio': None, 'periodo_fim': None}
+    modelo, chamadas = modelo_simulado(plano, 'A receita foi de R$ 1.234.567,89.')
+    resposta = await AgenteTextoSQL(modelo, ExecutorFalso(RESULTADO)).responder(
+        'Qual a receita de Olinda?', contexto
+    )
+    assert f'Sem período na pergunta: {esperado}' in chamadas[0][1].instructions
+    assert resposta.periodo.descricao == esperado
+    # O período da tela é estado interno da conversa: não vai ao prompt.
+    assert 'periodo_da_tela' not in chamadas[0][1].instructions
+
+
 async def test_sem_conversa_nao_ha_bloco_de_conversa():
     modelo, chamadas = modelo_simulado(PLANO, TEXTO)
     await AgenteTextoSQL(modelo, ExecutorFalso(RESULTADO)).responder('Receita?', CONTEXTO)
