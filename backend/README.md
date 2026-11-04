@@ -398,6 +398,33 @@ reproduzíveis, manifesto, falhas na validação e na publicação, recarga pres
 `operations`, privilégios reais da IA, unicidade concorrente, transições e rollback
 da auditoria. Os testes existentes do Fluxo Git também continuam rodando.
 
+Os testes de integração entre módulos em
+[`tests/test_integracao_publicacao.py`](tests/test_integracao_publicacao.py) verificam:
+
+- Publicação de uma Gold alterada refletida nos KPIs, série, decomposição da receita
+  e executor SQL da IA, mantendo a mesma aplicação e seus pools de conexões.
+- Dry-run, hash inválido e falha de reconciliação preservando as respostas da API,
+  as consultas da IA, o histórico de cargas e a versão no Redis.
+- Publicação confirmada no Postgres com falha de atualização do Redis: o portal e
+  a IA consultam a carga nova mesmo com a versão antiga no cache.
+- Snapshot da ordem preservado quando a Gold muda; a UC com ordem ativa continua
+  fora das filas do portal e da IA e volta com os valores novos após cancelamento.
+- Cache de insights renovado após publicação, com fatos dos serviços reais e
+  somente o provedor externo do LLM simulado.
+- Role `portal` sem escrita nas tabelas analíticas após a troca de schema.
+
+```bash
+uv run pytest backend/tests/test_integracao_publicacao.py -q
+uv run pytest -m integration -q
+```
+
+A exportação desses cenários é sintética e temporária: dobra receita e arrecadação
+no detalhe e no agregado, preservando volume e componentes tarifários. Não representa
+uma regra comercial nova. Os valores esperados partem do exemplo R5 do contrato
+(Recife, Residencial, jun/2025 e jul/2025) e a amostra original é recarregada no
+encerramento de cada teste, inclusive quando uma asserção falha. A suíte usa a
+infraestrutura de testes da raiz; não valida o Nginx nem executa notebooks no Databricks.
+
 Somente testes sem containers:
 
 ```bash
