@@ -285,7 +285,7 @@ export function Interrupcoes({
   alimentador,
 }: {
   dados: InterrupcaoUC[]
-  alimentador?: { nome: string; interrupcoes: number; dec: string }
+  alimentador?: { nome: string; interrupcoes: number | null; dec: string | null }
 }) {
   const conteudo = (
     <div className="space-y-4">
@@ -293,7 +293,7 @@ export function Interrupcoes({
         <div className="rounded-md border bg-muted/30 p-3 text-sm">
           <p className="font-medium">Resumo do alimentador {alimentador.nome}</p>
           <p className="mt-1 text-muted-foreground">
-            {alimentador.interrupcoes} interrupção(ões) · DEC: {formatarNumero(alimentador.dec, 2)} h
+            {alimentador.interrupcoes ?? '—'} interrupção(ões) · DEC: {alimentador.dec === null ? '—' : `${formatarNumero(alimentador.dec, 2)} h`}
           </p>
         </div>
       )}
