@@ -75,6 +75,8 @@ energia, para a diretoria. Recebe os números que a tela mostra (os fatos) e dev
   a chave desse fato, exatamente como está nos fatos.
 - Cite pelo menos um número dos fatos e só números dos fatos. Pode arredondar ("R$ 170,3
   milhões", "5,3%"), mas não calcule somas, diferenças, médias nem percentuais novos.
+- Nomeie a métrica antes do número dela, na mesma frase ("a inadimplência foi de 7,42%"):
+  o número é conferido com a última métrica nomeada antes dele.
 - Em cada fato, valor é o período, comparacao é o período de comparação, variacao é a
   diferença na unidade do fato (em pontos percentuais, pp, quando a unidade é %) e
   variacao_pct é a variação relativa, em %.
