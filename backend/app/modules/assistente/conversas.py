@@ -15,7 +15,7 @@ import logging
 
 from pydantic import ValidationError
 from app.core.limites import FALHAS_DO_REDIS
-from venergy_ai.interface import TROCAS_NA_CONVERSA, RespostaAgente, Troca
+from venergy_ai.interface import TROCAS_NA_CONVERSA, Consulta, RespostaAgente, Troca
 from venergy_ai.semantica import Periodo
 
 TTL_S = 2 * 60 * 60
@@ -79,13 +79,14 @@ async def ler(redis, conversa_id, usuario_id) -> list[Troca]:
 async def registrar(
     redis, conversa_id, usuario_id, pergunta, resposta, periodo_da_tela: Periodo | None
 ):
-    """Acrescenta a troca respondida. Uma resposta sem consulta executada (fora do domínio,
-    por exemplo) não muda o estado que o próximo follow-up herda. Uma com consulta entra
-    mesmo sem métrica, que a conferência pode ter descartado por citar um número sem
-    lastro: os filtros, o período e o SQL dela ainda valem para "e em 2024?".
+    """Acrescenta a troca respondida. Uma resposta sem consulta que rodou com sucesso (fora
+    do domínio, ou com o SQL falhando no banco em todas as tentativas) não muda o estado
+    que o próximo follow-up herda. Uma com consulta bem-sucedida entra mesmo sem métrica,
+    que a conferência pode ter descartado por citar um número sem lastro: os filtros, o
+    período e o SQL dela ainda valem para "e em 2024?".
     `periodo_da_tela` é o da pergunta: se a tela mudar de período depois, a próxima
     pergunta sem período usa o da tela."""
-    if resposta.metrica is None and not any(c.sql_executado for c in resposta.consultas):
+    if resposta.metrica is None and _consulta_bem_sucedida(resposta) is None:
         return
     troca = _troca(pergunta, resposta, periodo_da_tela).model_dump_json()
     chaves = (chave(conversa_id), chave_das_trocas(conversa_id))
@@ -97,13 +98,23 @@ async def registrar(
         logger.warning('conversa=%s redis indisponível; troca não guardada', conversa_id)
 
 
+def _consulta_bem_sucedida(resposta: RespostaAgente) -> Consulta | None:
+    """A última consulta que rodou sem erro. Uma que a guarda rejeitou não tem
+    `sql_executado`; uma que falhou no banco tem, mas também tem `erro`."""
+    for consulta in reversed(resposta.consultas):
+        if consulta.sql_executado and consulta.erro is None:
+            return consulta
+    return None
+
+
 def _troca(pergunta: str, resposta: RespostaAgente, periodo_da_tela: Periodo | None) -> Troca:
-    ultima = resposta.consultas[-1] if resposta.consultas else None
+    # O follow-up parte do SQL que rodou, nunca de uma tentativa que falhou.
+    consulta = _consulta_bem_sucedida(resposta)
     return Troca(
         pergunta=pergunta,
         metrica=resposta.metrica,
         filtros=resposta.filtros,
         periodo=resposta.periodo,
-        sql=ultima and ultima.sql_executado,
+        sql=consulta and consulta.sql_executado,
         periodo_da_tela=periodo_da_tela,
     )
