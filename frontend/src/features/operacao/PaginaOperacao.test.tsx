@@ -27,8 +27,8 @@ beforeEach(() => {
     const url = typeof requisicao === 'string' ? requisicao : requisicao instanceof URL ? requisicao.href : requisicao.url
     const dados = url.includes('/api/v1/continuidade/serie')
       ? {
-          periodo: '2026-01:2026-06',
-          comparacao: '2025-01:2025-06',
+          periodo: '2026-01..2026-06',
+          comparacao: '2025-01..2025-06',
           sem_evento_atipico: true,
           totais: {
             chi: 1250,
@@ -69,8 +69,8 @@ beforeEach(() => {
         }
       : url.includes('/api/v1/continuidade/ranking')
         ? {
-            periodo: '2026-01:2026-06',
-            comparacao: '2025-01:2025-06',
+            periodo: '2026-01..2026-06',
+            comparacao: '2025-01..2025-06',
             sem_evento_atipico: true,
             ordem: new URL(url).searchParams.get('ordem') ?? 'chi',
             ranking: [
@@ -138,8 +138,103 @@ function renderizarOperacao(caminho = '/operacao') {
 }
 
 describe('Tela Operação', () => {
+  it('mantem os indicadores e graficos em carregamento enquanto a carga global esta pendente', async () => {
+    const fetchOriginal = vi.mocked(fetch).getMockImplementation()!
+
+    vi.stubGlobal('fetch', vi.fn((requisicao: Request | string | URL) => {
+      const url = typeof requisicao === 'string'
+        ? requisicao
+        : requisicao instanceof URL ? requisicao.href : requisicao.url
+
+      if (url.includes('/api/v1/meta/carga')) {
+        return new Promise<Response>(() => {})
+      }
+
+      return fetchOriginal(requisicao)
+    }))
+
+    renderizarOperacao()
+
+    expect(screen.getByRole('article', { name: 'DEC' })).not.toHaveTextContent('Sem dados no período')
+    expect(screen.getByRole('article', { name: 'FEC' })).not.toHaveTextContent('Sem dados no período')
+    expect(screen.getByRole('status', { name: 'Carregando gráficos de continuidade' })).toBeInTheDocument()
+    expect(screen.queryByText('Nenhum dado disponível')).not.toBeInTheDocument()
+  })
+  it('informa erro da carga global nos indicadores e no ranking', async () => {
+    const fetchOriginal = vi.mocked(fetch).getMockImplementation()!
+
+    vi.stubGlobal('fetch', vi.fn((requisicao: Request | string | URL) => {
+      const url = typeof requisicao === 'string'
+        ? requisicao
+        : requisicao instanceof URL ? requisicao.href : requisicao.url
+
+      if (url.includes('/api/v1/meta/carga')) {
+        return Promise.resolve(new Response(
+          JSON.stringify({ detail: 'Falha ao carregar período' }),
+          { status: 500, headers: { 'Content-Type': 'application/json' } },
+        ))
+      }
+
+      return fetchOriginal(requisicao)
+    }))
+
+    renderizarOperacao()
+
+    await waitFor(() => {
+      expect(screen.getByRole('article', { name: 'DEC' })).toHaveTextContent('Não foi possível carregar o período.')
+      expect(screen.getByRole('article', { name: 'FEC' })).toHaveTextContent('Não foi possível carregar o período.')
+    })
+
+    expect(screen.getByText('Não foi possível carregar o período.', { selector: '.ve-empty-text' })).toBeInTheDocument()
+  })
+  it('inclui eventos atipicos por padrao e permite exclui-los nas duas consultas', async () => {
+    renderizarOperacao()
+
+    const urlsConsultadas = () => vi.mocked(fetch).mock.calls
+      .map(([requisicao]) =>
+        typeof requisicao === 'string'
+          ? requisicao
+          : requisicao instanceof URL
+            ? requisicao.href
+            : requisicao.url,
+      )
+      .filter((url) =>
+        url.includes('/api/v1/continuidade/serie') ||
+        url.includes('/api/v1/continuidade/ranking'),
+      )
+
+    await waitFor(() => {
+      const urls = urlsConsultadas()
+      expect(urls.some((url) => url.includes('/api/v1/continuidade/serie'))).toBe(true)
+      expect(urls.some((url) => url.includes('/api/v1/continuidade/ranking'))).toBe(true)
+      expect(urls.every((url) => new URL(url).searchParams.get('sem_evento_atipico') === 'false')).toBe(true)
+    })
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /Com evento at.pico/ }))
+
+    await waitFor(() => {
+      const urls = urlsConsultadas().filter((url) =>
+        new URL(url).searchParams.get('sem_evento_atipico') === 'true',
+      )
+      expect(urls.some((url) => url.includes('/api/v1/continuidade/serie'))).toBe(true)
+      expect(urls.some((url) => url.includes('/api/v1/continuidade/ranking'))).toBe(true)
+    })
+  })
+  it('permite ordenar as colunas do ranking pelos cabecalhos', async () => {
+    renderizarOperacao()
+
+    const cabecalhos = ['Alimentador', 'Município', 'CHI', 'DEC (h)', 'FEC (vezes)', 'Nº de UCs', 'Causa mais frequente']
+
+    for (const nome of cabecalhos) {
+      const botao = await screen.findByRole('button', { name: new RegExp(nome.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) })
+      expect(botao).toBeEnabled()
+    }
+
+    fireEvent.click(screen.getByRole('button', { name: /^CHI/ }))
+    expect(screen.getByRole('columnheader', { name: /CHI/ })).toHaveAttribute('aria-sort', 'ascending')
+  })
   it('seleciona alimentador na serie sem filtrar o ranking', async () => {
-    const router = renderizarOperacao('/operacao?periodo=2026-01:2026-06')
+    const router = renderizarOperacao('/operacao?periodo=2026-01..2026-06')
 
     const tabela = await screen.findByRole('table', { name: 'Ranking de alimentadores' })
     await waitFor(() => expect(tabela).toHaveTextContent('AL-01'))
@@ -170,7 +265,7 @@ describe('Tela Operação', () => {
   })
 
   it('exibe os indicadores, o aviso regulatório e o ranking', async () => {
-    renderizarOperacao('/operacao?periodo=2026-01:2026-06&comparacao=2025-01:2025-06')
+    renderizarOperacao('/operacao?periodo=2026-01..2026-06&comparacao=2025-01..2025-06')
 
     expect(screen.getByRole('heading', { name: 'Operação' })).toBeInTheDocument()
     expect(screen.getByText(/limites regulatórios da ANEEL/)).toBeInTheDocument()
@@ -191,10 +286,10 @@ describe('Tela Operação', () => {
     }
   })
 
-  it('inicia sem filtro atípico e com ordenação CHI', () => {
+  it('inclui eventos atípicos por padrão e inicia com ordenação CHI', () => {
     renderizarOperacao()
 
-    expect(screen.getByRole('checkbox', { name: /Com evento atípico/ })).not.toBeChecked()
+    expect(screen.getByRole('checkbox', { name: /Com evento atípico/ })).toBeChecked()
     expect(screen.getByLabelText('Ordenar por')).toHaveValue('chi')
   })
 
@@ -204,7 +299,7 @@ describe('Tela Operação', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: /Com evento atípico/ }))
 
     await waitFor(() => {
-      expect(new URLSearchParams(router.state.location.search).get('atipico')).toBe('1')
+      expect(new URLSearchParams(router.state.location.search).get('atipico')).toBe('0')
     })
   })
 
@@ -223,20 +318,20 @@ describe('Tela Operação', () => {
 
   it('limpa filtros locais sem apagar o período global', async () => {
     const router = renderizarOperacao(
-      '/operacao?periodo=2026-01:2026-06&comparacao=2025-01:2025-06&municipio=Recife&alimentador=AL-01&atipico=1&ordenar=dec',
+      '/operacao?periodo=2026-01..2026-06&comparacao=2025-01..2025-06&municipio=Recife&alimentador=AL-01&atipico=1&ordem=dec',
     )
 
     fireEvent.click(screen.getByRole('button', { name: /Limpar filtros/ }))
 
     await waitFor(() => {
       const parametros = new URLSearchParams(router.state.location.search)
-      expect(parametros.get('periodo')).toBe('2026-01:2026-06')
-      expect(parametros.get('comparacao')).toBe('2025-01:2025-06')
-      for (const chave of ['municipio', 'bairro', 'alimentador', 'atipico', 'ordenar']) {
+      expect(parametros.get('periodo')).toBe('2026-01..2026-06')
+      expect(parametros.get('comparacao')).toBe('2025-01..2025-06')
+      for (const chave of ['municipio', 'bairro', 'alimentador', 'atipico', 'ordem']) {
         expect(parametros.has(chave)).toBe(false)
       }
       expect(screen.getByLabelText('Ordenar por')).toHaveValue('chi')
-      expect(screen.getByRole('checkbox', { name: /Com evento atípico/ })).not.toBeChecked()
+      expect(screen.getByRole('checkbox', { name: /Com evento atípico/ })).toBeChecked()
     })
   })
 
@@ -253,7 +348,7 @@ describe('Tela Operação', () => {
   })
 
   it('preserva o período ao selecionar um município', async () => {
-    const router = renderizarOperacao('/operacao?periodo=2026-01:2026-06')
+    const router = renderizarOperacao('/operacao?periodo=2026-01..2026-06')
 
     await waitFor(() => {
       expect(screen.getByRole('option', { name: 'Recife' })).toBeInTheDocument()
@@ -266,7 +361,7 @@ describe('Tela Operação', () => {
     await waitFor(() => {
       const parametros = new URLSearchParams(router.state.location.search)
       expect(parametros.get('municipio')).toBe('Recife')
-      expect(parametros.get('periodo')).toBe('2026-01:2026-06')
+      expect(parametros.get('periodo')).toBe('2026-01..2026-06')
     })
   })
 })

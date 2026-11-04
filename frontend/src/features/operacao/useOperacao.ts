@@ -1,4 +1,4 @@
-﻿import { useQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import type { ParametrosPeriodoApi } from '@/app/periodo/usePeriodo'
 import { api, desembrulhar } from '@/lib/api/cliente'
 import type { components } from '@/lib/api/schema'

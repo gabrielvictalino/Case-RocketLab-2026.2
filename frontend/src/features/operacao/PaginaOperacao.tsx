@@ -1,9 +1,10 @@
-﻿import { useSearchParams } from 'react-router'
+import { useSearchParams } from 'react-router'
+import { useCarga } from '@/app/periodo/useCarga'
 import { usePeriodo } from '@/app/periodo/usePeriodo'
 import { BarraRecorte } from '@/components/BarraRecorte'
 import { CabecalhoPagina } from '@/components/CabecalhoPagina'
 import { CartaoKpi } from '@/components/CartaoKpi'
-import { EstadoIndisponivel } from '@/components/Estados'
+import { Esqueleto, EstadoIndisponivel } from '@/components/Estados'
 import { GraficoSerieComparativa } from '@/components/Graficos'
 import { Painel } from '@/components/Painel'
 import { Selecao } from '@/components/Selecao'
@@ -25,47 +26,43 @@ import {
 } from './useOperacao'
 
 const colunasRanking: ColunaTabela<AlimentadorContinuidade, unknown>[] = [
-  { accessorKey: 'alimentador', header: 'Alimentador', enableSorting: false },
-  { accessorKey: 'municipio', header: 'Município', enableSorting: false },
+  { accessorKey: 'alimentador', header: 'Alimentador' },
+  { accessorKey: 'municipio', header: 'Município' },
   {
     id: 'chi',
     header: 'CHI',
     accessorFn: (linha) => numeroContinuidade(linha.chi),
     cell: ({ row }) => formatarContinuidade(row.original.chi),
-    enableSorting: false,
   },
   {
     id: 'dec',
     header: 'DEC (h)',
     accessorFn: (linha) => numeroContinuidade(linha.dec),
     cell: ({ row }) => formatarContinuidade(row.original.dec),
-    enableSorting: false,
   },
   {
     id: 'fec',
     header: 'FEC (vezes)',
     accessorFn: (linha) => numeroContinuidade(linha.fec),
     cell: ({ row }) => formatarContinuidade(row.original.fec),
-    enableSorting: false,
   },
   {
     id: 'numero_ucs',
     header: 'Nº de UCs',
     accessorFn: (linha) => linha.numero_ucs,
     cell: ({ row }) => formatarContinuidade(row.original.numero_ucs, 0),
-    enableSorting: false,
   },
   {
     id: 'causa',
     header: 'Causa mais frequente',
     accessorFn: (linha) => linha.causas[0]?.causa ?? '—',
-    enableSorting: false,
   },
 ]
 
 export function PaginaOperacao() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const { periodo, comparacao, parametros, carga } = usePeriodo()
+  const { periodo, comparacao, parametros, carga, carregando, erro } = usePeriodo()
+  const cargaQuery = useCarga()
   const filtrosMeta = useFiltrosMeta()
   const recortes = lerRecortesUrl(searchParams)
 
@@ -76,7 +73,7 @@ export function PaginaOperacao() {
   const filtros = {
     municipio: recortes.municipio,
     alimentador: recortes.alimentador,
-    comEventoAtipico: recortes.atipico,
+    comEventoAtipico: searchParams.get('atipico') !== '0',
   }
 
   const serie = useSerieContinuidade(parametros, filtros, carga?.batch_id)
@@ -90,7 +87,7 @@ export function PaginaOperacao() {
       : rotuloPeriodo
     : 'período atual'
 
-  const escopoAtipico = recortes.atipico
+  const escopoAtipico = filtros.comEventoAtipico
     ? 'com evento atípico'
     : 'sem evento atípico'
 
@@ -145,13 +142,15 @@ export function PaginaOperacao() {
         <label className="ve-switch">
           <input
             type="checkbox"
-            checked={recortes.atipico}
+            checked={filtros.comEventoAtipico}
             onChange={(evento) => {
-              setSearchParams(
-                atualizarRecorteUrl(searchParams, {
-                  atipico: evento.target.checked,
-                }),
-              )
+              const proximos = new URLSearchParams(searchParams)
+              if (evento.target.checked) {
+                proximos.delete('atipico')
+              } else {
+                proximos.set('atipico', '0')
+              }
+              setSearchParams(proximos)
             }}
           />
           <span className="ve-switch-track" aria-hidden="true" />
@@ -175,7 +174,9 @@ export function PaginaOperacao() {
           unidade="h"
           sentidoFavoravel="baixa"
           dica="Duração Equivalente de Interrupção por Unidade Consumidora."
-          carregando={serie.isLoading}
+          carregando={!erro && (carregando || serie.isPending)}
+          indisponivel={Boolean(erro || serie.isError)}
+          mensagemIndisponivel={erro ? 'Não foi possível carregar o período.' : 'Não foi possível carregar os indicadores.'}
           semDados={serie.isSuccess && numeroContinuidade(totais?.dec) === null}
           valor={formatarContinuidade(totais?.dec)}
           variacao={variacaoContinuidade(totais?.dec, totaisComparacao?.dec)}
@@ -190,7 +191,9 @@ export function PaginaOperacao() {
           unidade="vezes"
           sentidoFavoravel="baixa"
           dica="Frequência Equivalente de Interrupção por Unidade Consumidora."
-          carregando={serie.isLoading}
+          carregando={!erro && (carregando || serie.isPending)}
+          indisponivel={Boolean(erro || serie.isError)}
+          mensagemIndisponivel={erro ? 'Não foi possível carregar o período.' : 'Não foi possível carregar os indicadores.'}
           semDados={serie.isSuccess && numeroContinuidade(totais?.fec) === null}
           valor={formatarContinuidade(totais?.fec)}
           variacao={variacaoContinuidade(totais?.fec, totaisComparacao?.fec)}
@@ -208,13 +211,13 @@ export function PaginaOperacao() {
         />
       </div>
 
-      {serie.isError && (
+      {(erro || serie.isError) && (
         <div role="alert" className="rounded-lg border p-4 text-sm">
           Não foi possível carregar os indicadores de continuidade.
           <button
             type="button"
             className="ml-3 underline"
-            onClick={() => { void serie.refetch() }}
+            onClick={() => { void (erro ? cargaQuery.refetch() : serie.refetch()) }}
           >
             Tentar novamente
           </button>
@@ -230,8 +233,12 @@ export function PaginaOperacao() {
         titulo="DEC e FEC por competência"
         subtitulo={`${recortes.alimentador || 'Geral'} · eixo de tempo: competência · ${escopoAtipico}`}
       >
-        {serie.isError ? (
+        {erro || serie.isError ? (
           <EstadoIndisponivel />
+        ) : carregando || serie.isPending ? (
+          <div role="status" aria-label="Carregando gráficos de continuidade" className="p-4">
+            <Esqueleto linhas={6} altura={18} />
+          </div>
         ) : (
           <div
             style={{
@@ -293,9 +300,9 @@ export function PaginaOperacao() {
           dados={ranking.data?.ranking ?? []}
           chaveLinha={(linha) => linha.alimentador}
           aoClicarLinha={(linha) => selecionarAlimentador(linha.alimentador)}
-          carregando={ranking.isLoading}
-          erro={ranking.isError ? 'Não foi possível carregar o ranking.' : null}
-          aoTentarNovamente={() => { void ranking.refetch() }}
+          carregando={!erro && (carregando || ranking.isPending)}
+          erro={erro ? 'Não foi possível carregar o período.' : ranking.isError ? 'Não foi possível carregar o ranking.' : null}
+          aoTentarNovamente={() => { void (erro ? cargaQuery.refetch() : ranking.refetch()) }}
           tituloVazio="Nenhum dado disponível"
           mensagemVazio="Não há alimentadores para os filtros selecionados."
         />

@@ -1,15 +1,10 @@
 import type { PontoSerieComparativa } from '@/components/Graficos'
+import { converterNumero, formatarCompetencia, formatarNumero } from '@/lib/formatacao'
 import type { SerieContinuidade } from './useOperacao'
 
 type Metrica = 'dec' | 'fec'
 
-export function numeroContinuidade(
-  valor: number | string | null | undefined,
-): number | null {
-  if (valor === null || valor === undefined || valor === '') return null
-  const numero = Number(valor)
-  return Number.isFinite(numero) ? numero : null
-}
+export const numeroContinuidade = converterNumero
 
 export function variacaoContinuidade(
   atual: number | string | null | undefined,
@@ -39,21 +34,10 @@ export function montarSerieContinuidade(
   )
 
   return atual.map((ponto, indice) => ({
-    rotulo: ponto.competencia.slice(5, 7),
+    rotulo: formatarCompetencia(ponto.competencia),
     atual: numeroContinuidade(ponto[metrica]),
     comparacao: comparacaoPorIndice.get(indice) ?? null,
   }))
 }
 
-export function formatarContinuidade(
-  valor: number | string | null | undefined,
-  casasDecimais = 2,
-): string {
-  const numero = numeroContinuidade(valor)
-  if (numero === null) return '—'
-
-  return numero.toLocaleString('pt-BR', {
-    minimumFractionDigits: casasDecimais,
-    maximumFractionDigits: casasDecimais,
-  })
-}
+export const formatarContinuidade = formatarNumero
