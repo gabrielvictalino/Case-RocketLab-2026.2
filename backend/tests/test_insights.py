@@ -1,7 +1,9 @@
 import asyncio
 import inspect
 import json
+from datetime import datetime
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 from pydantic_ai import ModelHTTPError, ModelResponse, ToolCallPart
@@ -15,6 +17,7 @@ from app.modules.meta import repository as meta_repository
 pytestmark = pytest.mark.integration
 
 PERIODO = dict(periodo='2025-07..2026-06')
+SAMPLES = Path(__file__).resolve().parents[2] / 'contracts/samples'
 
 
 def br(valor, casas=2):
@@ -333,6 +336,25 @@ async def test_outro_modelo_nao_usa_o_insight_guardado(portal_insights):
     app.state.redator.versao = 'outra-versao'
     assert (await http.get(url, params=PERIODO, headers=headers)).status_code == 200
     assert len(chamadas) == 1
+
+
+async def test_reimportar_o_mesmo_lote_nao_devolve_a_carga_anterior(
+    portal_insights, infrastructure
+):
+    from importador.loader import load
+
+    app, http, headers = portal_insights
+    chamadas = usar_modelo(app, da_visao_geral)
+    url = '/api/v1/insights/visao-geral'
+    antes = (await http.get(url, params=PERIODO, headers=headers)).json()
+    # Mesmo batch_id e mesmos fatos, mas outra carga: outro UUID e outra data.
+    await load(SAMPLES, infrastructure['importer_url'], infrastructure['settings'].redis_url)
+    depois = (await http.get(url, params=PERIODO, headers=headers)).json()
+    assert depois['carga']['batch_id'] == antes['carga']['batch_id']
+    assert depois['carga']['id'] != antes['carga']['id']
+    data = lambda corpo: datetime.fromisoformat(corpo['carga']['carregado_em'])  # noqa: E731
+    assert data(depois) > data(antes)
+    assert len(chamadas) == 2
 
 
 async def test_receita_e_consultada_uma_vez_por_pedido(portal_insights, monkeypatch):

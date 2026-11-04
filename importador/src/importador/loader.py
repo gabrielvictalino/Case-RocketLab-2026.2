@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from datetime import date
@@ -13,6 +14,37 @@ from importador.contracts import ContractError, file_hash, manifest_for, records
 logger = logging.getLogger(__name__)
 VIEWS = Path(__file__).resolve().parents[2] / 'views.sql'
 PUBLICATION_LOCK = 7820360
+# Lock de transação da troca de `analytics`: exclusivo aqui, compartilhado nas leituras do
+# portal (`app.core.database.SWAP_LOCK`). O PUBLICATION_LOCK serializa só importadores e
+# dura a carga inteira; este dura só a troca, para não segurar as telas durante o COPY.
+SWAP_LOCK = 7820361
+# Enquanto o importador espera o SWAP_LOCK, as leituras novas do portal esperam atrás dele.
+# Por isso ele espera pouco de cada vez (`lock_timeout`) e abre a fila entre as tentativas,
+# em vez de prendê-la até uma leitura longa terminar. O mesmo prazo vale para os locks da
+# troca, que segura o portal: a soma das duas esperas fica abaixo da
+# `app.core.database.ESPERA_DA_PUBLICACAO_MS`. Esgotadas as tentativas, a carga é recusada
+# e a anterior fica preservada.
+ESPERA_DA_TROCA_MS = 1500
+TENTATIVAS_DA_TROCA = 8
+PAUSA_ENTRE_TENTATIVAS_S = 0.5
+
+
+class TrocaOcupada(Exception):
+    """Leituras do portal seguraram a troca de `analytics` além das tentativas."""
+
+
+async def _pegar_lock_da_troca(db):
+    for tentativa in range(TENTATIVAS_DA_TROCA):
+        if tentativa:
+            await asyncio.sleep(PAUSA_ENTRE_TENTATIVAS_S)
+        try:
+            # O savepoint isola a espera expirada; o lock pego nele fica com a transação.
+            async with db.transaction():
+                await db.execute('SELECT pg_advisory_xact_lock($1)', SWAP_LOCK)
+            return
+        except asyncpg.LockNotAvailableError:
+            logger.info('Leituras em curso; nova tentativa da troca (%d)', tentativa + 1)
+    raise TrocaOcupada(f'leituras do portal ocuparam a troca em {TENTATIVAS_DA_TROCA} tentativas')
 
 
 class _Verificado(Exception):
@@ -277,6 +309,10 @@ async def load(origin, database_url, redis_url=None, *, verify_only=False):
                 if verify_only:
                     raise _Verificado()
 
+                # Espera as leituras em curso terminarem; as novas aguardam o commit e já
+                # leem a carga nova, com os números e a identificação da mesma publicação.
+                await db.execute(f"SET LOCAL lock_timeout = '{ESPERA_DA_TROCA_MS}ms'")
+                await _pegar_lock_da_troca(db)
                 await db.execute('ALTER SCHEMA analytics RENAME TO analytics_anterior')
                 await db.execute('ALTER SCHEMA analytics_staging RENAME TO analytics')
                 await db.execute('GRANT USAGE ON SCHEMA analytics TO portal')

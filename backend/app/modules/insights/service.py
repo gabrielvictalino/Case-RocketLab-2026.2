@@ -1,8 +1,8 @@
 """Insights da Visão Geral e da Receita (seção 6 do system design).
 
 Os fatos saem dos mesmos serviços que a tela usa, numa sessão curta do portal, e o
-modelo só redige. O insight fica no Redis por tela, fatos e versão do redator (modelo e
-instruções): enquanto os números da tela não mudam, ele não volta ao modelo. Uma inspeção
+modelo só redige. O insight fica no Redis por carga, tela, fatos e versão do redator (modelo
+e instruções): enquanto os números da tela não mudam, ele não volta ao modelo. Uma inspeção
 concluída que muda a taxa de acerto muda os fatos, e o próximo pedido gera outro insight
 sem invalidação manual. Uma geração em que poucas observações passam na validação também
 fica guardada, por pouco tempo: abrir a tela de novo com os mesmos fatos não volta ao
@@ -25,6 +25,7 @@ from venergy_ai.interface import InsightIndisponivel, PedidoInsight, ProvedorInd
 from venergy_ai.semantica import Periodo as PeriodoDoAgente
 
 from app.core import limites
+from app.core.database import sincronizar_com_a_publicacao
 from app.core.errors import APIError
 from app.core.periodos import Periodo
 from app.modules.assistente.service import modelo_configurado
@@ -54,6 +55,7 @@ async def insight(state, tela, periodo, comparacao, recorte, usuario) -> Insight
         raise APIError(503, 'Insights não configurados neste ambiente', 'INSIGHT_INDISPONIVEL')
     # Nenhuma conexão do portal fica presa enquanto o modelo redige.
     async with state.portal_sessions() as db, db.begin():
+        await sincronizar_com_a_publicacao(db)
         await _conferir_recorte(db, recorte)
         tela_pronta, lista = await _montar(db, tela, periodo, comparacao, recorte)
     metadados = dict(
@@ -69,8 +71,10 @@ async def insight(state, tela, periodo, comparacao, recorte, usuario) -> Insight
         fatos=lista,
     )
     resumo = hashlib.sha1(pedido.model_dump_json().encode()).hexdigest()
-    # Com outro modelo ou outras instruções, o texto guardado não vale mais.
-    chave = f'insight:{tela_pronta.carga.batch_id}:{tela}:{state.redator.versao}:{resumo}'
+    # Com outro modelo ou outras instruções, o texto guardado não vale mais. A chave usa o
+    # UUID da carga, não o batch_id: reimportar o mesmo lote é outra carga, com outra
+    # identificação e outra data, e o insight guardado devolveria as da anterior.
+    chave = f'insight:{tela_pronta.carga.id}:{tela}:{state.redator.versao}:{resumo}'
     if (guardado := await _ler(state.redis, chave)) is not None:
         return guardado
     falha = f'{chave}:falha'
