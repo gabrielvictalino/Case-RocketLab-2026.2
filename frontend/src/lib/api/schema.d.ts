@@ -226,6 +226,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/continuidade/serie": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Serie */
+        get: operations["serie_api_v1_continuidade_serie_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/continuidade/ranking": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ranking */
+        get: operations["ranking_api_v1_continuidade_ranking_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/receita/decomposicao": {
         parameters: {
             query?: never;
@@ -349,6 +383,25 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** Alimentador */
+        Alimentador: {
+            /** Chi */
+            chi: string | null;
+            /** Interrupcoes */
+            interrupcoes: number | null;
+            /** Numero Ucs */
+            numero_ucs: number | null;
+            /** Dec */
+            dec: string | null;
+            /** Fec */
+            fec: string | null;
+            /** Alimentador */
+            alimentador: string;
+            /** Municipio */
+            municipio: string;
+            /** Causas */
+            causas: components["schemas"]["Causa"][];
+        };
         /** Auditoria */
         Auditoria: {
             /**
@@ -451,6 +504,15 @@ export interface components {
              * Format: date
              */
             competencia_mais_recente: string;
+        };
+        /** Causa */
+        Causa: {
+            /** Causa */
+            causa: string;
+            /** Ocorrencias */
+            ocorrencias: number;
+            /** Interrupcoes */
+            interrupcoes: number;
         };
         /** Chamado */
         Chamado: {
@@ -748,6 +810,19 @@ export interface components {
             /** Variacao Pct */
             variacao_pct: string | null;
         };
+        /** Indicadores */
+        Indicadores: {
+            /** Chi */
+            chi: string | null;
+            /** Interrupcoes */
+            interrupcoes: number | null;
+            /** Numero Ucs */
+            numero_ucs: number | null;
+            /** Dec */
+            dec: string | null;
+            /** Fec */
+            fec: string | null;
+        };
         /** Insight */
         Insight: {
             /** Periodo */
@@ -792,6 +867,8 @@ export interface components {
         };
         /** Interrupcoes */
         Interrupcoes: {
+            /** Sem Evento Atipico */
+            sem_evento_atipico: boolean;
             /** Ocorrencias */
             ocorrencias: components["schemas"]["OcorrenciaUC"][];
             alimentador: components["schemas"]["ResumoAlimentador"];
@@ -823,6 +900,8 @@ export interface components {
             /** Comparacao */
             comparacao: string | null;
             carga: components["schemas"]["Carga"];
+            /** Sem Evento Atipico */
+            sem_evento_atipico: boolean;
             receita: components["schemas"]["Indicador"];
             receita_arrecadada: components["schemas"]["Indicador"];
             volume_faturado_kwh: components["schemas"]["Indicador"];
@@ -1071,6 +1150,24 @@ export interface components {
             /** Consumo Ajustado */
             consumo_ajustado: boolean;
         };
+        /** PontoContinuidade */
+        PontoContinuidade: {
+            /** Chi */
+            chi: string | null;
+            /** Interrupcoes */
+            interrupcoes: number | null;
+            /** Numero Ucs */
+            numero_ucs: number | null;
+            /** Dec */
+            dec: string | null;
+            /** Fec */
+            fec: string | null;
+            /**
+             * Competencia
+             * Format: date
+             */
+            competencia: string;
+        };
         /** PontoSerie */
         PontoSerie: {
             /**
@@ -1082,6 +1179,25 @@ export interface components {
             receita: string | null;
             /** Volume Faturado Kwh */
             volume_faturado_kwh: string | null;
+        };
+        /** Ranking */
+        Ranking: {
+            /** Periodo */
+            periodo: string;
+            /** Comparacao */
+            comparacao: string | null;
+            carga: components["schemas"]["Carga"];
+            /** Sem Evento Atipico */
+            sem_evento_atipico: boolean;
+            /**
+             * Ordem
+             * @enum {string}
+             */
+            ordem: "chi" | "dec" | "fec";
+            /** Ranking */
+            ranking: components["schemas"]["Alimentador"][];
+            /** Ranking Comparacao */
+            ranking_comparacao: components["schemas"]["Alimentador"][] | null;
         };
         /** Rejeitada */
         Rejeitada: {
@@ -1160,19 +1276,15 @@ export interface components {
             /** Alimentador */
             alimentador: string;
             /** Interrupcoes */
-            interrupcoes: number;
+            interrupcoes: number | null;
             /** Dec */
-            dec: string;
+            dec: string | null;
         };
-        /** Serie */
-        Serie: {
-            /** Periodo */
-            periodo: string;
-            /** Comparacao */
-            comparacao: string | null;
-            carga: components["schemas"]["Carga"];
+        /** SeriePeriodo */
+        SeriePeriodo: {
+            totais: components["schemas"]["Indicadores"];
             /** Serie */
-            serie: components["schemas"]["PontoSerie"][];
+            serie: components["schemas"]["PontoContinuidade"][];
         };
         /**
          * Status
@@ -1266,6 +1378,30 @@ export interface components {
             inspecoes: components["schemas"]["Inspecao"][];
             ordem_ativa: components["schemas"]["Ordem"] | null;
             explicacao_conta: components["schemas"]["ExplicacaoConta"];
+        };
+        /** Serie */
+        app__modules__continuidade__schemas__Serie: {
+            totais: components["schemas"]["Indicadores"];
+            /** Serie */
+            serie: components["schemas"]["PontoContinuidade"][];
+            /** Periodo */
+            periodo: string;
+            /** Comparacao */
+            comparacao: string | null;
+            carga: components["schemas"]["Carga"];
+            /** Sem Evento Atipico */
+            sem_evento_atipico: boolean;
+            dados_comparacao: components["schemas"]["SeriePeriodo"] | null;
+        };
+        /** Serie */
+        app__modules__kpis__schemas__Serie: {
+            /** Periodo */
+            periodo: string;
+            /** Comparacao */
+            comparacao: string | null;
+            carga: components["schemas"]["Carga"];
+            /** Serie */
+            serie: components["schemas"]["PontoSerie"][];
         };
     };
     responses: never;
@@ -1624,7 +1760,9 @@ export interface operations {
     };
     obter_visao_uc_api_v1_ucs__id_uc__get: {
         parameters: {
-            query?: never;
+            query?: {
+                sem_evento_atipico?: boolean;
+            };
             header?: never;
             path: {
                 id_uc: string;
@@ -1662,6 +1800,7 @@ export interface operations {
                 classe?: string | null;
                 alimentador?: string | null;
                 comparacao?: string | null;
+                sem_evento_atipico?: boolean;
             };
             header?: never;
             path?: never;
@@ -1711,7 +1850,82 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Serie"];
+                    "application/json": components["schemas"]["app__modules__kpis__schemas__Serie"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    serie_api_v1_continuidade_serie_get: {
+        parameters: {
+            query: {
+                periodo: string;
+                municipio?: string | null;
+                bairro?: string | null;
+                classe?: string | null;
+                alimentador?: string | null;
+                comparacao?: string | null;
+                sem_evento_atipico?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["app__modules__continuidade__schemas__Serie"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ranking_api_v1_continuidade_ranking_get: {
+        parameters: {
+            query: {
+                periodo: string;
+                municipio?: string | null;
+                bairro?: string | null;
+                classe?: string | null;
+                alimentador?: string | null;
+                comparacao?: string | null;
+                sem_evento_atipico?: boolean;
+                ordem?: "chi" | "dec" | "fec";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ranking"];
                 };
             };
             /** @description Validation Error */

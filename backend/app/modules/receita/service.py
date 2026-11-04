@@ -3,8 +3,7 @@ from decimal import Decimal
 
 from app.core.decomposicao import decompor
 from app.core.errors import APIError
-from app.modules.kpis.service import razao
-from app.modules.metricas import contexto
+from app.modules.metricas import contexto, razao
 from app.modules.receita import repository
 from app.modules.receita.schemas import Decomposicao, Efeitos, Grupo, Grupos, Local, Locais
 

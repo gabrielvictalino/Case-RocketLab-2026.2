@@ -217,3 +217,45 @@ async def test_sla_performance(client, headers):
     duracao_ms = (time.perf_counter() - inicio) * 1000
     assert res.status_code == 200
     assert duracao_ms < 300
+
+
+@pytest.mark.parametrize('sem_evento', [False, True])
+async def test_resumo_compartilha_exclusao_com_continuidade(client, headers, sem_evento):
+    response = await client.get(
+        f'{BASE}/UC100000', headers=headers, params={'sem_evento_atipico': sem_evento}
+    )
+    assert response.status_code == 200, response.text
+    interrupcoes = response.json()['interrupcoes']
+    assert interrupcoes['sem_evento_atipico'] is sem_evento
+    assert len(interrupcoes['ocorrencias']) == (11 if sem_evento else 12)
+    serie = await client.get(
+        '/api/v1/continuidade/serie',
+        headers=headers,
+        params=dict(
+            periodo='2025-07..2026-06',
+            alimentador='ALM-REC-001',
+            sem_evento_atipico=sem_evento,
+        ),
+    )
+    assert serie.status_code == 200, serie.text
+    assert interrupcoes['alimentador']['dec'] == serie.json()['totais']['dec']
+    assert interrupcoes['alimentador']['interrupcoes'] == serie.json()['totais']['interrupcoes']
+
+
+async def test_resumo_sem_cobertura_e_nulo(client, headers, db):
+    rows = await db.fetch("""
+        DELETE FROM analytics.continuidade_alimentador_mensal
+        WHERE alimentador='ALM-REC-001' AND competencia BETWEEN '2025-07-01' AND '2026-06-01'
+        RETURNING *
+    """)
+    try:
+        response = await client.get(f'{BASE}/UC100000', headers=headers)
+        assert response.status_code == 200, response.text
+        resumo = response.json()['interrupcoes']['alimentador']
+        assert resumo['dec'] is resumo['interrupcoes'] is None
+    finally:
+        await db.copy_records_to_table(
+            'continuidade_alimentador_mensal',
+            schema_name='analytics',
+            records=[tuple(r) for r in rows],
+        )

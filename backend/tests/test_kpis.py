@@ -9,8 +9,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.periodos import Periodo
 from app.modules.kpis import repository as kpis_repository
-from app.modules.kpis.service import indicador, razao
-from app.modules.metricas import Recorte
+from app.modules.kpis.service import indicador
+from app.modules.metricas import Recorte, razao
 from app.modules.receita import repository as receita_repository
 
 SAMPLES = Path(__file__).resolve().parents[2] / 'contracts/samples'
@@ -100,7 +100,7 @@ async def test_oito_cards_e_formulas_da_amostra(client, headers):
     data = await get(client, headers, periodo='2025-07..2026-06')
     assert data['comparacao'] == '2024-07..2025-06'
     assert data['carga']['sintetica'] is True
-    assert len(set(data) - {'periodo', 'comparacao', 'carga'}) == 8
+    assert len(set(data) - {'periodo', 'comparacao', 'carga', 'sem_evento_atipico'}) == 8
     atual = agregado('2025-07-01', '2026-06-01')
     anterior = agregado('2024-07-01', '2025-06-01')
     for key in ('receita', 'receita_arrecadada', 'volume_faturado_kwh'):
