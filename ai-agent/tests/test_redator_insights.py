@@ -165,6 +165,13 @@ async def test_anos_e_meses_do_periodo_podem_ser_citados():
     assert [v.trecho for v in insight.observacoes[0].valores] == ['5,3%']
 
 
+async def test_competencias_do_periodo_podem_ser_citadas():
+    texto = 'Nas 12 competências do período, a receita faturada foi 5,3% maior.'
+    insight, _ = await redigir([('receita', texto), *VALIDAS[1:]])
+    assert insight.observacoes[0].texto == texto
+    assert [v.trecho for v in insight.observacoes[0].valores] == ['5,3%']
+
+
 @pytest.mark.parametrize(
     'texto',
     [
@@ -276,6 +283,9 @@ def test_citacoes_deixa_de_fora_o_ano_e_os_meses_do_periodo():
         ('8', [])
     ]
     assert citacoes('Nos últimos 12 meses.', [7], meses=[12]) == []
+    # O glossário fala em competência: "12 competências" também é o número de meses.
+    assert citacoes('Nas 12 competências do período.', [7], meses=[12]) == []
+    assert citacoes('Na 1 competência do período.', [7], meses=[1]) == []
     assert [c.trecho for c in citacoes('Foram 12 UCs.', [7], meses=[12])] == ['12']
     # Os meses do período não liberam "R$ 12 milhões", que é dinheiro.
     citadas = citacoes(

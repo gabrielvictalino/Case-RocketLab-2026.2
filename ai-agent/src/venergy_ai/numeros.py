@@ -134,10 +134,13 @@ SELECAO_ANTES = re.compile(
 PAPEL_DEPOIS = re.compile(
     r'\s*(?:%|p\.?p\.?)?\s*(?:ou\s+(?:mais|menos|acima|abaixo)\b'
     r'|(?:maiores|menores|piores|melhores|primeir[oa]s|[uú]ltim[oa]s)\b'
-    r'|(?:m[eê]s(?:es)?|anos?|dias|semanas|trimestres|semestres)\b)',
+    r'|(?:m[eê]s(?:es)?|compet[eê]ncias?|anos?|dias|semanas|trimestres|semestres)\b)',
     re.IGNORECASE,
 )
 DATA = re.compile(r'(\d{4})-\d{2}(?:-\d{2})?')
+# O número de meses do período, como o glossário e o texto comum o escrevem: "12 meses",
+# "12 competências".
+MESES_DEPOIS = re.compile(r'\s+(?:m[eê]s(?:es)?|compet[eê]ncias?)\b', re.IGNORECASE)
 
 
 class Leitura(NamedTuple):
@@ -263,11 +266,12 @@ def citacoes(
 
     Um ano do período ("em 2025") e o número de meses ("12 meses") ficam de fora só
     quando é isso que são: o ano depois de "em", "de", "até" e afins e sem unidade nem
-    contagem depois ("São 2025 UCs" é conferido); os meses seguidos de "meses". Os
-    `nomes` (de locais e recortes) saem do texto antes, para o "2" de "Setor 2" não ser
-    conferido. Os valores já vêm na unidade da tela: um percentual não é lido como razão
-    ("742%" não sai de 7,42%), e o número sem a escala escrita não vale ("R$ 1,2 milhão"
-    não sai de R$ 1,20). Um número que nenhum valor sustenta vem com `lastros` vazia.
+    contagem depois ("São 2025 UCs" é conferido); os meses seguidos de "meses" ou
+    "competências". Os `nomes` (de locais e recortes) saem do texto antes, para o "2" de
+    "Setor 2" não ser conferido. Os valores já vêm na unidade da tela: um percentual não é
+    lido como razão ("742%" não sai de 7,42%), e o número sem a escala escrita não vale
+    ("R$ 1,2 milhão" não sai de R$ 1,20). Um número que nenhum valor sustenta vem com
+    `lastros` vazia.
     """
     # Um fato não é o tamanho de uma queda: a variação vem com o sinal, e uma receita que
     # subiu 5,3% não sustenta "caiu 5,3%".
@@ -279,7 +283,7 @@ def citacoes(
         if inteiro and citado.unidade is None:
             if inteiro in anos and citado.leituras[0].no_tempo:
                 continue
-            if inteiro in meses and re.match(r'\s+m[eê]s(?:es)?\b', citado.depois, re.I):
+            if inteiro in meses and MESES_DEPOIS.match(citado.depois):
                 continue
         lastros = [
             i
