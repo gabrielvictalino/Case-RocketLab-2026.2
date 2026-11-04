@@ -123,7 +123,7 @@ def validar(rascunhos: list[Rascunho], pedido: PedidoInsight) -> tuple[list[Obse
             descartadas.append(f'{n}ª vazia ou repetida')
             continue
         citadas = [
-            _da_metrica_nomeada(_na_unidade(citada, alvos), alvos, texto, apelidos)
+            _da_metrica_nomeada(_na_unidade(citada, alvos), alvos, texto, apelidos, principal)
             for citada in citacoes(texto, [valor for _, _, valor in alvos], anos, meses, nomes)
         ]
         if sem_lastro := [citada.trecho for citada in citadas if not citada.lastros]:
@@ -196,14 +196,18 @@ def _mesma_unidade(escrita: str | None, fato: Fato, campo: CampoDoFato) -> bool:
 
 
 def _da_metrica_nomeada(
-    citada: Citacao, alvos: list[Alvo], texto: str, apelidos: dict[str, set[str]]
+    citada: Citacao,
+    alvos: list[Alvo],
+    texto: str,
+    apelidos: dict[str, set[str]],
+    principal: Fato,
 ) -> Citacao:
     """Fica só com os fatos da métrica que a frase nomeia antes do número. Filtrar pela
     unidade não basta: a taxa de acerto de 41,2% não sustenta "inadimplência de 41,2%".
-    Sem métrica nomeada na frase, valem todos os fatos na unidade certa."""
-    chaves = _metrica_antes(texto, citada.inicio, apelidos)
-    if chaves is None:
-        return citada
+    Sem métrica nomeada na frase, vale só o fato da própria observação: em "A
+    inadimplência merece atenção. Chegou a 41,2%.", a taxa de acerto não sustenta o
+    número, que não está na frase da inadimplência."""
+    chaves = _metrica_antes(texto, citada.inicio, apelidos) or {principal.chave}
     return citada._replace(lastros=[i for i in citada.lastros if alvos[i][0].chave in chaves])
 
 

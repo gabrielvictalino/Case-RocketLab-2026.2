@@ -344,6 +344,9 @@ def _descartada(chave, texto):
         ('inadimplencia', 'A inadimplência foi de 41,2%.'),
         # "São 2025 UCs" é uma contagem, não o ano do período.
         ('ucs_ativas', 'São 2025 UCs ativas e a receita foi de R$ 170,3 milhões.'),
+        # Sem métrica na frase do número, só o fato da observação o sustenta.
+        ('inadimplencia', 'A inadimplência merece atenção. Chegou a 41,2% no período.'),
+        ('inadimplencia', 'Chegou a 41,2% no período.'),
     ],
 )
 def test_numero_que_nao_sustenta_a_frase_e_descartado(chave, texto):
@@ -357,8 +360,9 @@ def test_numero_que_nao_sustenta_a_frase_e_descartado(chave, texto):
         ('taxa_acerto', 'A taxa de acerto foi de 41,2%.'),
         ('inadimplencia', 'A inadimplência foi de 7,42%, e a taxa de acerto, de 41,2%.'),
         ('ucs_ativas', 'Em 2025, eram 300 UCs ativas.'),
-        # Sem métrica nomeada antes, valem os fatos na unidade certa.
+        # Sem métrica nomeada antes, vale o fato da própria observação.
         ('receita', 'Foram R$ 170,3 milhões no período.'),
+        ('inadimplencia', 'A inadimplência merece atenção. Chegou a 7,42% no período.'),
     ],
 )
 def test_numero_da_metrica_nomeada_passa(chave, texto):
