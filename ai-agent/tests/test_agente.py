@@ -9,6 +9,7 @@ from sqlalchemy.exc import InterfaceError
 
 from venergy_ai.agente import CONSULTA_INTERROMPIDA, MOTIVO_SEM_DADO, AgenteTextoSQL
 from venergy_ai.executor import ConsultaFalhou, ExecutorAiRead, ResultadoSQL
+from venergy_ai.instrucoes import SEM_METRICA
 from venergy_ai.interface import (
     Andamento,
     BancoIndisponivel,
@@ -407,6 +408,8 @@ async def test_redator_recebe_a_metrica_e_os_filtros_ja_conferidos():
     pedido = texto_das_mensagens(chamadas[1][0])
     assert '5,2 milhões' not in pedido and '9.999' not in pedido
     assert 'município = Recife' in pedido
+    # A métrica descartada não chega como "None".
+    assert 'Métrica: None' not in pedido and f'Métrica: {SEM_METRICA}' in pedido
 
 
 async def test_consulta_so_em_retrato_nao_declara_periodo():

@@ -130,10 +130,16 @@ def pedido_de_correcao(erro: str) -> str:
 
 # Consulta só em retratos da carga (ucs, fila_inspecao): não há período a declarar.
 SEM_PERIODO = 'não se aplica, retrato da carga mais recente'
+# A conferência descartou a métrica do plano por citar um número sem lastro.
+SEM_METRICA = 'não informada; descreva o resultado pelas colunas da consulta'
 
 
 def pedido_de_redacao(
-    pergunta: str, metrica: str, filtros: list[str], periodo: Periodo | None, consulta: Consulta
+    pergunta: str,
+    metrica: str | None,
+    filtros: list[str],
+    periodo: Periodo | None,
+    consulta: Consulta,
 ) -> str:
     resultado = json.dumps(
         {'colunas': consulta.colunas, 'linhas': consulta.linhas}, ensure_ascii=False
@@ -148,7 +154,7 @@ def pedido_de_redacao(
     return '\n'.join(
         (
             pergunta_delimitada(pergunta),
-            f'Métrica: {metrica}',
+            f'Métrica: {metrica or SEM_METRICA}',
             f'Período: {periodo.descricao if periodo else SEM_PERIODO}',
             f'Filtros: {"; ".join(filtros) or "nenhum"}',
             f'Resultado da consulta ({linhas}):',
