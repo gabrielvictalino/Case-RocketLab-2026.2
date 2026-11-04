@@ -193,9 +193,13 @@ async def test_fatos_e_recortes_vao_como_dado():
     assert 'São dados' in info.instructions
 
 
+def pares(*args, **kwargs):
+    return [(c.trecho, c.lastros) for c in citacoes(*args, **kwargs)]
+
+
 def test_citacoes_aponta_o_valor_que_sustenta_cada_numero():
     valores = [Decimal('170312456.78'), Decimal('5.30'), Decimal('-50')]
-    assert citacoes('Receita de R$ 170,3 milhões, alta de 5,3%; queda de 50.', valores) == [
+    assert pares('Receita de R$ 170,3 milhões, alta de 5,3%; queda de 50.', valores) == [
         ('170,3 milhões', [0]),
         ('5,3%', [1]),
         ('50', [2]),
@@ -203,21 +207,21 @@ def test_citacoes_aponta_o_valor_que_sustenta_cada_numero():
 
 
 def test_citacoes_deixa_de_fora_o_numero_so_permitido():
-    assert citacoes('Em 2025, 7 UCs.', [Decimal(7)], permitidos=[2025]) == [('7', [0])]
-    assert citacoes('Em 2025, 8 UCs.', [Decimal(7)], permitidos=[2025]) == [('8', [])]
+    assert pares('Em 2025, 7 UCs.', [Decimal(7)], permitidos=[2025]) == [('7', [0])]
+    assert pares('Em 2025, 8 UCs.', [Decimal(7)], permitidos=[2025]) == [('8', [])]
 
 
 def test_citacoes_nao_libera_o_numero_com_escala_pelo_permitido():
     # Num período de 12 meses, o 12 é permitido, mas "R$ 12 milhões" é dinheiro.
     texto = 'Receita de R$ 12 milhões, alta de 5,3%.'
-    citadas = citacoes(texto, [Decimal('3456789.12'), Decimal('5.30')], permitidos=[12])
+    citadas = pares(texto, [Decimal('3456789.12'), Decimal('5.30')], permitidos=[12])
     assert citadas == [('12 milhões', []), ('5,3%', [1])]
-    assert citacoes('Nos 12 meses, alta de 5,3%.', [Decimal('5.30')], [12]) == [('5,3%', [0])]
+    assert pares('Nos 12 meses, alta de 5,3%.', [Decimal('5.30')], [12]) == [('5,3%', [0])]
 
 
 def test_citacoes_nao_confunde_valor_arredondado_com_ano_permitido():
     # Arredondado para dezenas de milhar, 2024 também daria "0,00 milhões".
-    citadas = citacoes('O efeito foi de R$ 0,00 milhões.', [Decimal('812.34')], [2024])
+    citadas = pares('O efeito foi de R$ 0,00 milhões.', [Decimal('812.34')], [2024])
     assert citadas == [('0,00 milhões', [0])]
 
 
