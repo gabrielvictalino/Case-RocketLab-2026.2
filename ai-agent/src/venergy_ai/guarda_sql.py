@@ -8,6 +8,7 @@ valendo como camadas independentes.
 
 import re
 from collections.abc import Collection
+from typing import NamedTuple
 
 import sqlglot
 from sqlglot import exp
@@ -88,6 +89,14 @@ class SQLRejeitado(ValueError):
     """SQL barrado pela guarda; a mensagem é o motivo devolvido ao agente."""
 
 
+class SQLConferido(NamedTuple):
+    # O SQL que pode ser executado pela role `ai_read`.
+    sql: str
+    # As views de `ai_read` que ele lê, sem as CTEs: o agente decide por elas se a
+    # resposta tem período, sem analisar o SQL de novo.
+    views: frozenset[str]
+
+
 def validar_sql(sql: str, views: Collection[str]) -> str:
     """Confere o SQL e devolve a versão que pode ser executada pela role `ai_read`.
 
@@ -95,12 +104,19 @@ def validar_sql(sql: str, views: Collection[str]) -> str:
     Nomes sem schema são qualificados com `ai_read`, e o `LIMIT` fica em no máximo
     `LIMITE_MAXIMO`. Levanta `SQLRejeitado` com o motivo, para a nova tentativa.
     """
+    return conferir_sql(sql, views).sql
+
+
+def conferir_sql(sql: str, views: Collection[str]) -> SQLConferido:
+    """Como `validar_sql`, devolvendo também as views que o SQL lê."""
     # O Postgres guarda em minúsculas os nomes criados sem aspas.
     views = frozenset(view.lower() for view in views)
     try:
         arvore = _tirar_parenteses(_uma_instrucao(sql))
+        lidas = set()
         for tabela in _conferir(arvore, views):
             tabela.set('db', exp.to_identifier(SCHEMA))
+            lidas.add(tabela.name)
         _impor_limite(arvore)
         seguro = arvore.sql(dialect=DIALETO, comments=False)
         # Confere também o texto regenerado, que é o que o Postgres vai executar.
@@ -111,7 +127,7 @@ def validar_sql(sql: str, views: Collection[str]) -> str:
         ) from erro
     except SqlglotError as erro:
         raise SQLRejeitado(f'SQL inválido: {erro}.') from erro
-    return seguro
+    return SQLConferido(seguro, frozenset(lidas))
 
 
 def _uma_instrucao(sql: str) -> exp.Expression:
