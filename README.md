@@ -23,8 +23,7 @@ web estão em [frontend/README.md](frontend/README.md).
 
 O [dicionário de dados da Gold](docs/gold/decisoes_silver_to_gold.md) reúne as
 12 tabelas do contrato e as saídas analíticas por domínio, com notebook produtor,
-grão, fórmulas e decisões de limpeza que afetam os indicadores. O índice distingue
-as entregas implementadas das pendências da Gold de perdas (#124).
+grão, fórmulas e decisões de limpeza que afetam os indicadores.
 Os layouts de exportação estão em [contracts/README.md](contracts/README.md);
 a auditoria das fontes está em [docs/overview_dados/README.md](docs/overview_dados/README.md).
 

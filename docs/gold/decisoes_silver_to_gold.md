@@ -22,8 +22,7 @@ fixas nem uma verificação do estado atual do Databricks.
 
 ## 1. Inventário por tabela
 
-**Contrato** identifica cada uma das 12 tabelas de `contracts/tabelas/`, inclusive
-as duas pendentes de perdas. **Analítica** identifica saídas fora desse contrato.
+**Contrato** identifica cada uma das 12 tabelas de `contracts/tabelas/`. **Analítica** identifica saídas fora desse contrato.
 Implementada significa que há produtor na `dev`; não comprova publicação ou
 homologação de um lote real. Todos os destinos usam o schema padrão
 `` `v-energy`.gold ``, configurável nos notebooks.
@@ -45,8 +44,8 @@ homologação de um lote real. Todos os destinos usam o schema padrão
 | 3. Continuidade | `continuidade_alimentador_mensal` | Contrato | alimentador × competência | [Continuidade](../../data-engineering/silver_to_gold/silver-to-gold-continuidade.ipynb) | [Continuidade](continuidade.md) — implementada |
 | 3. Continuidade | `ocorrencias_uc` | Contrato | ocorrência por UC | [Continuidade](../../data-engineering/silver_to_gold/silver-to-gold-continuidade.ipynb) | [Continuidade](continuidade.md) — implementada |
 | 3. Continuidade | `dim_alimentador` | Contrato | alimentador | [Continuidade](../../data-engineering/silver_to_gold/silver-to-gold-continuidade.ipynb) | [Continuidade](continuidade.md) — implementada |
-| 4. Perdas e inspeção | `inspecoes_historicas` | Contrato | inspeção | Pendente na [#124](https://github.com/gabrielvictalino/Case-RocketLab-2026.2/issues/124) | [Perdas](perdas.md) — contrato documentado, produtor pendente |
-| 4. Perdas e inspeção | `fila_inspecao` | Contrato | UC candidata | Pendente na [#124](https://github.com/gabrielvictalino/Case-RocketLab-2026.2/issues/124) | [Perdas](perdas.md) — score e estimativas pendentes |
+| 4. Perdas e inspeção | `inspecoes_historicas` | Contrato | inspeção | [Perdas](../../data-engineering/silver_to_gold/silver-to-gold-perdas.ipynb) | [Perdas](perdas.md) — implementada |
+| 4. Perdas e inspeção | `fila_inspecao` | Contrato | UC candidata | [Perdas](../../data-engineering/silver_to_gold/silver-to-gold-perdas.ipynb) | [Perdas](perdas.md) — implementada |
 | 5. Cadastro 360 | `dim_uc` | Contrato | UC | [Cadastro](../../data-engineering/silver_to_gold/silver-to-gold-dim-uc.ipynb) | [Cadastro](dim_uc.md) — implementada |
 | 5. Cadastro 360 | `medidores_historico` | Contrato | instalação de medidor | [Medidores](../../data-engineering/silver_to_gold/silver-to-gold-medidores.ipynb) | [Medidores](medidores.md) — implementada |
 | 5. Cadastro 360 | `tb_medidores_historico` | Analítica | instalação de medidor | [Medidores](../../data-engineering/silver_to_gold/silver-to-gold-medidores.ipynb) | [Medidores](medidores.md) — implementada |
@@ -182,16 +181,14 @@ revisões também guardam `consumo_proveniencia`, `complemento_proveniencia` e
 
 ## 5. Domínio 4 — Perdas Não Técnicas e Fila de Inspeção
 
-- **Situação:** produtor pendente na [#124](https://github.com/gabrielvictalino/Case-RocketLab-2026.2/issues/124); não há notebook Gold de perdas integrado na `dev`.
-- **Dicionário:** [perdas.md](perdas.md), com as colunas dos dois contratos, as decisões já conhecidas da Silver e as fórmulas que ainda dependem do produtor.
-- **Fontes previstas:** `tb_inspecoes`, `tb_leituras`, `tb_unidades_consumidoras`, `tb_medidores`, `tb_geracao_distribuida` e `gd_uc` para a exclusão obrigatória de GD (R4).
-- **Tabelas previstas:** `inspecoes_historicas` (laudos de inspeção e kWh recuperados) e `fila_inspecao` (UC candidata, score, motivos e potencial de recuperação).
-- **Perguntas:** quais UCs priorizar para inspeção, por quais sinais e com qual potencial de recuperação (Rafael Coutinho); quais irregularidades já foram confirmadas e quanto foi recuperado (Rafael Coutinho e Henrique Duarte).
-
-Score, pesos, limiar e fórmulas de recuperação ainda não estão definidos na
-Gold. Ao integrar a #124, seu PR deve atualizar este inventário e `perdas.md`
-com as regras efetivamente implementadas. Os samples do contrato são sintéticos
-e não preenchem essa pendência.
+- **Arquivo:** `data-engineering/silver_to_gold/silver-to-gold-perdas.ipynb`
+- **Dicionário completo:** [`docs/gold/perdas.md`](perdas.md), com as regras e a calibração (seção 2), o dicionário das colunas (seção 3) e os números da base (seção 5)
+- **Fontes:** `` `v-energy`.silver.tb_leituras ``, `tb_unidades_consumidoras`, `tb_medidores`, `tb_inspecoes` e `tb_faturas` (pela revisão do marcador `tb_faturas_publicacao`), e `` `v-energy`.gold.gd_uc `` para tirar as UCs com GD (R4)
+- **Tabelas publicadas:** `inspecoes_historicas` (inspeção) e `fila_inspecao` (UC candidata).
+- **Perguntas de negócio respondidas:**
+  - *Quais UCs inspecionar, da mais para a menos promissora, com o motivo da suspeita e a energia a recuperar (Rafael Coutinho, seção 4.2 do case).*
+  - *O histórico e o acerto das inspeções já feitas.*
+- **Decisões que afetam os números:** entra na fila a UC sem GD com consumo pelo menos 40% abaixo do P0, medido nos 3 meses antes da referência; as UCs com fraude confirmada em alguma inspeção ficam de fora; na reinspeção, só a queda desde a inspeção pontua, e, sem queda nova de 40%, ela fica abaixo das UCs nunca inspecionadas; o score soma pontos pela queda (degrau em 50%), pelo medidor eletromecânico e pelas leituras estimadas, sem bairro nem classe; a energia usa um fator calculado nas inspeções confirmadas e a tarifa média da UC.
 
 ---
 
