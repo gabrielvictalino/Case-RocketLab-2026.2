@@ -460,7 +460,7 @@ describe('Telas do portal e PainelAgente', () => {
     await waitFor(() => {
       expect(
         new URLSearchParams(router.state.location.search).get('atipico'),
-      ).toBe('1')
+      ).toBe('0')
     })
   })
 })
