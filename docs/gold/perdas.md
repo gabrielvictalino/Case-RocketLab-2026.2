@@ -26,8 +26,8 @@ Uma UC entra na fila quando cumpre as quatro condições:
 
 1. **Consumo caiu pelo menos 40%** em relação ao primeiro ano da própria UC. A queda compara a média dos 3 meses antes do mês de referência da fila (o seguinte à última leitura, hoje 07/2026) com a média do P0 (jul/2022 a jun/2023). As duas médias usam só leituras utilizáveis (`docs/silver/silver_leituras.md`, seção 5), com pelo menos 2 meses na janela recente e 6 no P0.
 2. **Não tem GD** (R4). A queda de quem instalou placa solar é legítima: 3.394 UCs com GD caíram 40% ou mais e ficam de fora.
-3. **A última inspeção não confirmou fraude** (seção 2.7).
-4. Tem tarifa média para converter a energia em R$ (seção 2.6). Hoje, todas têm.
+3. **Nenhuma inspeção confirmou fraude** na UC (seção 2.7).
+4. Tem tarifa média para converter a energia em R$ (seção 2.6). Hoje, todas têm; se faltar a alguma, o notebook para em vez de deixá-la de fora (seção 4).
 
 **Por que 40%, e não 10% ou 30%.** A queda foi medida nas 1.389 inspeções só com dados anteriores a cada uma (contra o P0, com os 3 meses antes da inspeção):
 
@@ -125,7 +125,7 @@ Na base, o consumo das UCs com irregularidade confirmada não volta ao nível an
 | até 5 meses depois | 270 | 392 |
 | 6 meses ou mais depois | 232 | 293 |
 
-Com essas UCs, a fila teria 828 casos já resolvidos entre 969 candidatas. Elas ficam de fora: a irregularidade já foi tratada, e a energia dela já está em `inspecoes_historicas`. Vale qualquer inspeção confirmada, e não só a última: uma UC confirmada que depois passe por uma inspeção sem irregularidade continua fora, para a energia não ser contada duas vezes. Hoje nenhuma UC tem mais de uma inspeção. As UCs inspecionadas sem irregularidade que continuam com consumo baixo ficam na fila como reinspeção, abaixo das nunca inspecionadas (seção 2.3), com o motivo que diz quando foi a inspeção e quanto o consumo mudou desde então.
+Com essas UCs, a fila teria 828 casos já resolvidos entre 969 candidatas. Elas ficam de fora: a irregularidade já foi tratada, e a energia dela já está em `inspecoes_historicas`. Vale qualquer inspeção confirmada, e não só a última: uma UC confirmada que depois passe por uma inspeção sem irregularidade continua fora, para a energia não ser contada duas vezes. Hoje nenhuma UC tem mais de uma inspeção. As UCs inspecionadas sem irregularidade que continuam com consumo baixo ficam na fila como reinspeção, abaixo das nunca inspecionadas enquanto não tiverem queda nova de 40% (seção 2.3), com o motivo que diz quando foi a inspeção e quanto o consumo mudou desde então.
 
 ### 2.8. O "92% de acerto" dos docs de overview
 
@@ -161,11 +161,11 @@ Só que o P1 inclui meses depois das inspeções (ago a dez/2025), quando o cons
 
 Todas param o notebook antes de gravar e se repetem sobre as tabelas gravadas, com `RESTORE` em caso de falha:
 
-* **Fontes:** padrões de `id_inspecao` e `id_uc`, data e resultado das inspeções; os 3 meses antes de cada inspeção depois do fim do P0 (jun/2023), para a calibração só usar dados anteriores a ela; colunas `municipio` e `bairro` do cadastro, usadas na seção 2 do notebook; mês e tipo das leituras; chaves únicas (inspeção, UC × mês, UC do cadastro); toda UC inspecionada no cadastro. As faturas só são lidas se o marcador tiver as duas linhas da mesma execução.
+* **Fontes:** padrões de `id_inspecao` e `id_uc`, data e resultado das inspeções; os 3 meses antes de cada inspeção depois do fim do P0 (jun/2023), para a calibração só usar dados anteriores a ela; nenhum medidor instalado ou retirado na data de uma inspeção, porque o medidor da calibração é o que o inspetor encontrou (hoje, 0 de 1.389); colunas `municipio` e `bairro` do cadastro, usadas na seção 2 do notebook; mês e tipo das leituras; chaves únicas (inspeção, UC × mês, UC do cadastro); toda UC inspecionada no cadastro. As faturas só são lidas se o marcador tiver as duas linhas da mesma execução.
 * **Calibração:** pelo menos 100 confirmadas com queda de 40% ou mais; fator de energia de 1 a 12; score ≥ 60 acertando mais que score < 60.
-* **Candidatas:** toda UC da fila com tarifa média e com no máximo um medidor na data de referência; nenhuma reinspeção sem queda nova de 40% com score de 39 ou mais (o piso das nunca inspecionadas); nenhuma reinspeção com inspeção dentro dos 3 meses antes da referência, porque as duas janelas da queda nova (os 3 meses antes da inspeção e os 3 recentes) se sobreporiam.
+* **Candidatas:** toda UC da fila com tarifa média de R$ 0,10 a R$ 2,00 e com no máximo um medidor na data de referência; nenhuma reinspeção sem queda nova de 40% com score de 39 ou mais (o piso das nunca inspecionadas); nenhuma reinspeção com inspeção dentro dos 3 meses antes da referência, porque as duas janelas da queda nova (os 3 meses antes da inspeção e os 3 recentes) se sobreporiam.
 * **`inspecoes_historicas`:** colunas, tipos e ordem do contrato; obrigatórias não nulas; padrões de `id_inspecao`, `id_uc` e `inspetor`; resultado no domínio; `kwh_recuperado` ≥ 0; confirmada com tipo; sem irregularidade sem tipo e com 0 kWh; linhas e soma de `kwh_recuperado` iguais às da Silver; chave única; UC no cadastro. Aviso (não para): tipo fora dos 5 da planilha.
-* **`fila_inspecao`:** colunas, tipos e ordem do contrato; nada nulo; padrão de `id_uc`; chave única; score de 0 a 100; `motivos` com pelo menos um texto e nenhum vazio; energia ≥ 0; tarifa média implícita (R$ ÷ kWh) de R$ 0,10 a R$ 2,00; UC no cadastro; nenhuma UC de `gd_uc` (R4); nenhuma UC com fraude confirmada em alguma inspeção.
+* **`fila_inspecao`:** colunas, tipos e ordem do contrato; nada nulo; padrão de `id_uc`; chave única; score de 0 a 100; `motivos` com pelo menos um texto e nenhum vazio; energia ≥ 0; tarifa média implícita (R$ ÷ kWh) de R$ 0,10 a R$ 2,00, a partir de 1 kWh, para o arredondamento não distorcer a divisão; UC no cadastro; nenhuma UC de `gd_uc` (R4); nenhuma UC com fraude confirmada em alguma inspeção.
 
 ## 5. Números da base atual
 

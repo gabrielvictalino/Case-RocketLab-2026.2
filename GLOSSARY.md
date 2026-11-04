@@ -145,7 +145,7 @@ _Evitar_: lista de suspeitos, ranking de fraude
 Nova ordem de inspeção para uma UC que já tem inspeção anterior.
 
 **Motivo da suspeita**:
-Os sinais que colocaram a UC na fila (queda de consumo, leituras estimadas, tipo de medidor, inspeção anterior), em linguagem do negócio. A localização fica de fora: as inspeções se concentraram em poucos bairros, e pontuá-los repetiria essa escolha.
+Os sinais que colocaram a UC na fila (queda de consumo, leituras estimadas, tipo de medidor, inspeção anterior), em linguagem do negócio.
 
 **Energia a recuperar**:
 Estimativa, em kWh, da energia não faturada que a inspeção pode recuperar se confirmar irregularidade.
