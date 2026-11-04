@@ -125,7 +125,7 @@ Na base, o consumo das UCs com irregularidade confirmada não volta ao nível an
 | até 5 meses depois | 270 | 392 |
 | 6 meses ou mais depois | 232 | 293 |
 
-Com essas UCs, a fila teria 828 casos já resolvidos entre 969 candidatas. Elas ficam de fora: a irregularidade já foi tratada, e a energia dela já está em `inspecoes_historicas`. As UCs inspecionadas sem irregularidade que continuam com consumo baixo ficam na fila como reinspeção, abaixo das nunca inspecionadas (seção 2.3), com o motivo que diz quando foi a inspeção e quanto o consumo mudou desde então.
+Com essas UCs, a fila teria 828 casos já resolvidos entre 969 candidatas. Elas ficam de fora: a irregularidade já foi tratada, e a energia dela já está em `inspecoes_historicas`. Vale qualquer inspeção confirmada, e não só a última: uma UC confirmada que depois passe por uma inspeção sem irregularidade continua fora, para a energia não ser contada duas vezes. Hoje nenhuma UC tem mais de uma inspeção. As UCs inspecionadas sem irregularidade que continuam com consumo baixo ficam na fila como reinspeção, abaixo das nunca inspecionadas (seção 2.3), com o motivo que diz quando foi a inspeção e quanto o consumo mudou desde então.
 
 ### 2.8. O "92% de acerto" dos docs de overview
 
@@ -161,11 +161,11 @@ Só que o P1 inclui meses depois das inspeções (ago a dez/2025), quando o cons
 
 Todas param o notebook antes de gravar e se repetem sobre as tabelas gravadas, com `RESTORE` em caso de falha:
 
-* **Fontes:** padrões de `id_inspecao` e `id_uc`, data e resultado das inspeções; mês e tipo das leituras; chaves únicas (inspeção, UC × mês, UC do cadastro); toda UC inspecionada no cadastro. As faturas só são lidas se o marcador tiver as duas linhas da mesma execução.
+* **Fontes:** padrões de `id_inspecao` e `id_uc`, data e resultado das inspeções; os 3 meses antes de cada inspeção depois do fim do P0 (jun/2023), para a calibração só usar dados anteriores a ela; colunas `municipio` e `bairro` do cadastro, usadas na seção 2 do notebook; mês e tipo das leituras; chaves únicas (inspeção, UC × mês, UC do cadastro); toda UC inspecionada no cadastro. As faturas só são lidas se o marcador tiver as duas linhas da mesma execução.
 * **Calibração:** pelo menos 100 confirmadas com queda de 40% ou mais; fator de energia de 1 a 12; score ≥ 60 acertando mais que score < 60.
-* **Candidatas:** toda UC da fila com tarifa média e com no máximo um medidor na data de referência; nenhuma reinspeção sem queda nova de 40% com score de 39 ou mais (o piso das nunca inspecionadas).
+* **Candidatas:** toda UC da fila com tarifa média e com no máximo um medidor na data de referência; nenhuma reinspeção sem queda nova de 40% com score de 39 ou mais (o piso das nunca inspecionadas); nenhuma reinspeção com inspeção dentro dos 3 meses antes da referência, porque as duas janelas da queda nova (os 3 meses antes da inspeção e os 3 recentes) se sobreporiam.
 * **`inspecoes_historicas`:** colunas, tipos e ordem do contrato; obrigatórias não nulas; padrões de `id_inspecao`, `id_uc` e `inspetor`; resultado no domínio; `kwh_recuperado` ≥ 0; confirmada com tipo; sem irregularidade sem tipo e com 0 kWh; linhas e soma de `kwh_recuperado` iguais às da Silver; chave única; UC no cadastro. Aviso (não para): tipo fora dos 5 da planilha.
-* **`fila_inspecao`:** colunas, tipos e ordem do contrato; nada nulo; padrão de `id_uc`; chave única; score de 0 a 100; `motivos` com pelo menos um texto e nenhum vazio; energia ≥ 0; tarifa média implícita (R$ ÷ kWh) de R$ 0,10 a R$ 2,00; UC no cadastro; nenhuma UC de `gd_uc` (R4); nenhuma UC cuja última inspeção confirmou fraude.
+* **`fila_inspecao`:** colunas, tipos e ordem do contrato; nada nulo; padrão de `id_uc`; chave única; score de 0 a 100; `motivos` com pelo menos um texto e nenhum vazio; energia ≥ 0; tarifa média implícita (R$ ÷ kWh) de R$ 0,10 a R$ 2,00; UC no cadastro; nenhuma UC de `gd_uc` (R4); nenhuma UC com fraude confirmada em alguma inspeção.
 
 ## 5. Números da base atual
 
@@ -181,6 +181,10 @@ Todas param o notebook antes de gravar e se repetem sobre as tabelas gravadas, c
 
 As primeiras da fila são UCs nunca inspecionadas, com medidor eletromecânico e muitas leituras estimadas. As 68 reinspeções vêm depois, e a energia delas (65% do total em R$) depende de a inspeção anterior ter deixado passar uma irregularidade.
 
+**Como apresentar o R$ da fila.** Sempre nas duas parcelas, e não como "R$ 80,7 mil a recuperar": R$ 28.034,39 das 73 nunca inspecionadas e R$ 52.715,78 das 68 reinspeções, que só se confirmam se a inspeção anterior deixou passar a irregularidade (seção 6).
+
+**Expectativa de acerto.** Nas inspeções passadas, score abaixo de 60 acertou 13,3% (seção 2.3). As nunca inspecionadas da fila têm score médio de 50,3, então a maior parte delas está nessa faixa. A fila ordena bem, mas a chance de acerto cai rápido depois das primeiras posições.
+
 ## 6. Decisões e alternativas
 
 | Decisão | Alternativa | Por que não |
@@ -191,6 +195,7 @@ As primeiras da fila são UCs nunca inspecionadas, com medidor eletromecânico e
 | Bairro e classe fora | Pontuar os bairros com mais fraude | Repetiria a concentração das inspeções (seção 2.4) |
 | Fraude confirmada fora da fila | Manter como reinspeção | A fila teria 828 casos já tratados, e a energia seria contada duas vezes |
 | Na reinspeção, só a queda nova pontua | Pontuar a queda contra o P0, como na primeira inspeção | A inspeção já usou essa queda e não achou nada; o acerto medido vale só para primeiras inspeções |
+| Energia das reinspeções pela queda contra o P0, como nas nunca inspecionadas | Só a queda nova, como no score | A energia a recuperar é condicional à confirmação (`GLOSSARY.md`): se a reinspeção confirmar, a irregularidade já existia na inspeção anterior, e a perda é a queda inteira. Pela queda nova, as 68 reinspeções valeriam quase nada e ficariam na fila sem motivo. Por isso, o R$ da fila se apresenta em duas parcelas (seção 5): R$ 28.034,39 das nunca inspecionadas e R$ 52.715,78 das reinspeções |
 | Reinspeção sem queda nova continua na fila, no fim | Tirar da fila | O Gerente de Perdas vê as UCs que seguem com consumo baixo depois de uma inspeção sem irregularidade, sem que elas passem à frente das nunca inspecionadas |
 | Fator de energia calculado a cada execução | Valor fixo no código | Acompanha os dados e para se sair do esperado |
 | `motivos` como `array<string>` | Texto JSON na Gold | O tipo nativo permite checar cada texto; a exportação escreve o JSON |
@@ -217,7 +222,7 @@ Se uma validação falhar, a mensagem lista cada regra violada com a quantidade 
 
 ## 8. Pendências
 
-* **`dim_uc`:** o `id_uc` das duas tabelas é conferido contra a Silver de cadastro, de onde sai a `dim_uc`. Quando a `dim_uc` for publicada, a exportação consolidada (#96) confere o `id_uc` das 12 tabelas contra ela.
+* **`dim_uc`:** o `id_uc` das duas tabelas é conferido contra a Silver de cadastro, de onde sai a `dim_uc` (#145). A exportação consolidada (#96) confere o `id_uc` das 12 tabelas contra ela.
 * **Exportação para o banco local:** fica no passo único de exportação do Job (#96), que escreve `motivos` em JSON.
 * **Contrato provisório:** `fila_inspecao.yaml` e `inspecoes_historicas.yaml` estão como `provisorio-nao-aprovado`. Os pontos do score são uma proposta da Gold para a área de Perdas validar.
 * **Reincidência:** o consumo das UCs com fraude confirmada continua baixo depois da inspeção (seção 2.7). Pode ser reincidência ou um limite da base sintética; uma fila de reincidência seria uma tabela à parte.
