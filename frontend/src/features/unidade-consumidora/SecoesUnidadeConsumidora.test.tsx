@@ -35,6 +35,32 @@ describe('GraficoConsumo', () => {
 })
 
 
+describe('GraficoConsumo - ano anterior', () => {
+  it('identifica os indicadores exclusivos do ano anterior', () => {
+    render(
+      <GraficoConsumo
+        dados={[
+          {
+            competencia: '10/2026',
+            consumoKwh: 180,
+            consumoAnoAnteriorKwh: 150,
+            estimado: false,
+            trocaMedidor: false,
+            estimadoAnoAnterior: true,
+            trocaMedidorAnoAnterior: true,
+          },
+        ]}
+      />,
+    )
+
+    expect(screen.getAllByText(/Ano anterior: Leitura estimada/)).toHaveLength(2)
+    expect(
+      screen.getAllByText(/Ano anterior: Troca de medidor: consumo estimado pela mediana da UC/),
+    ).toHaveLength(2)
+    expect(screen.queryByText(/Últimos 12 meses: Leitura estimada/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Últimos 12 meses: Troca de medidor/)).not.toBeInTheDocument()
+  })
+})
 describe('Faturas - regressao', () => {
   it('nao apresenta fatura com atraso desconhecido como em dia', () => {
     render(

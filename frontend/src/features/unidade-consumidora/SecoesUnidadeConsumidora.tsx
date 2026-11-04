@@ -16,6 +16,8 @@ export type ConsumoMensal = {
   consumoAnoAnteriorKwh: number | null
   estimado: boolean
   trocaMedidor: boolean
+  estimadoAnoAnterior?: boolean
+  trocaMedidorAnoAnterior?: boolean
 }
 
 export type FaturaUC = {
@@ -106,25 +108,32 @@ export function GraficoConsumo({ dados }: { dados: ConsumoMensal[] }) {
     comparacao: item.consumoAnoAnteriorKwh,
   }))
 
+  function indicadores(item: ConsumoMensal) {
+    return [
+      item.estimado ? 'Últimos 12 meses: Leitura estimada' : '',
+      item.trocaMedidor
+        ? 'Últimos 12 meses: Troca de medidor: consumo estimado pela mediana da UC'
+        : '',
+      item.estimadoAnoAnterior ? 'Ano anterior: Leitura estimada' : '',
+      item.trocaMedidorAnoAnterior
+        ? 'Ano anterior: Troca de medidor: consumo estimado pela mediana da UC'
+        : '',
+    ].filter(Boolean)
+  }
+
   const marcadores = Object.fromEntries(
     dados
-      .filter((item) => item.estimado || item.trocaMedidor)
+      .filter((item) => indicadores(item).length > 0)
       .map((item) => [
         item.competencia,
-        `${item.estimado ? '\u25cf' : ''}${item.trocaMedidor ? '\u25c6' : ''}`,
+        (item.estimado || item.estimadoAnoAnterior ? '\u25cf' : '') + (item.trocaMedidor || item.trocaMedidorAnoAnterior ? '\u25c6' : ''),
       ]),
   )
 
   const observacoes = Object.fromEntries(
     dados
-      .filter((item) => item.estimado || item.trocaMedidor)
-      .map((item) => [
-        item.competencia,
-        [
-          item.estimado ? 'Leitura estimada' : '',
-          item.trocaMedidor ? 'Troca de medidor: consumo estimado pela mediana da UC' : '',
-        ].filter(Boolean).join(' · '),
-      ]),
+      .filter((item) => indicadores(item).length > 0)
+      .map((item) => [item.competencia, indicadores(item).join(' · ')]),
   )
 
   return (
@@ -150,15 +159,13 @@ export function GraficoConsumo({ dados }: { dados: ConsumoMensal[] }) {
       </div>
 
       <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-        {dados.filter((item) => item.estimado || item.trocaMedidor).map((item) => (
+        {dados.filter((item) => indicadores(item).length > 0).map((item) => (
           <span key={item.competencia}>
-            {item.competencia}: {[
-              item.estimado ? '● Leitura estimada' : '',
-              item.trocaMedidor ? '◆ Troca de medidor: consumo estimado pela mediana da UC' : '',
-            ].filter(Boolean).join(' · ')}
+            {item.competencia}: {indicadores(item).join(' · ')}
           </span>
         ))}
       </div>
+
       <Tabela colunas={['Competência', 'Consumo', 'Ano anterior', 'Observação']}>
         {dados.map((item) => (
           <tr key={item.competencia}>
@@ -170,10 +177,7 @@ export function GraficoConsumo({ dados }: { dados: ConsumoMensal[] }) {
                 : formatarKwh(item.consumoAnoAnteriorKwh, 1)}
             </td>
             <td className="px-3 py-3 text-muted-foreground">
-              {[
-                item.estimado ? 'Leitura estimada' : '',
-                item.trocaMedidor ? 'Troca de medidor: consumo estimado pela mediana da UC' : '',
-              ].filter(Boolean).join(' · ') || '—'}
+              {indicadores(item).join(' · ') || '—'}
             </td>
           </tr>
         ))}

@@ -13,5 +13,7 @@ export function adaptarConsumoUC(
       : null,
     estimado: mes.atual?.leitura_estimada ?? false,
     trocaMedidor: mes.atual?.troca_medidor ?? false,
+    estimadoAnoAnterior: mes.anterior?.leitura_estimada ?? false,
+    trocaMedidorAnoAnterior: mes.anterior?.troca_medidor ?? false,
   }))
 }
