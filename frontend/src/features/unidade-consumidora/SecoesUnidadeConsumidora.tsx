@@ -140,6 +140,7 @@ export function GraficoConsumo({ dados }: { dados: ConsumoMensal[] }) {
         <GraficoBarrasComparativas
           dados={pontos}
           rotuloAtual="Últimos 12 meses"
+          corAtual="data-2"
           rotuloComparacao="Ano anterior"
           altura={260}
           formatarValor={(valor) => formatarKwh(valor, 1)}
@@ -260,10 +261,10 @@ export function Faturas({
               <td className="px-3 py-3">{formatarMoeda(fatura.valor)}</td>
               <td className="px-3 py-3">
                 {fatura.diasAtraso === null
-                          ? 'Atraso não informado'
-                          : fatura.diasAtraso <= 0
-                            ? 'Em dia'
-                            : `${fatura.diasAtraso} dias`}
+                  ? 'Atraso não informado'
+                  : fatura.diasAtraso <= 0
+                    ? 'Em dia'
+                    : `${fatura.diasAtraso} dias`}
               </td>
             </tr>
           ))}

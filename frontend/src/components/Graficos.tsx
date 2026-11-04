@@ -162,19 +162,7 @@ export function GraficoBarrasComparativas({
               />
             ) : undefined}
           />
-          <Bar dataKey="atual" name={rotuloAtual} fill={fillAtual}>
-            {marcadores && (
-              <>
-
-                {dados.map((ponto, indice) => (
-                  <Cell
-                    key={`${ponto.rotulo}-${indice}`}
-                    fill={marcadores[ponto.rotulo] ? 'var(--data-1)' : fillAtual}
-                  />
-                ))}
-              </>
-            )}
-          </Bar>
+          <Bar dataKey="atual" name={rotuloAtual} fill={fillAtual} />
           {rotuloComparacao && (
             <Bar
               dataKey="comparacao"

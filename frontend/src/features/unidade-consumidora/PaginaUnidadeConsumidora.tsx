@@ -341,12 +341,12 @@ function ConteudoUnidadeConsumidora({ ucParametro }: { ucParametro: string }) {
                 id: inspecao.id_inspecao,
                 data: formatarDataPtBr(inspecao.data),
                 resultado: inspecao.resultado,
-                  origem: inspecao.origem,
-                  tipoIrregularidade: inspecao.tipo_irregularidade,
+                origem: inspecao.origem,
+                tipoIrregularidade: inspecao.tipo_irregularidade,
               }))}
               ordemAtiva={
                 consultaUC.data.ordem_ativa
-                  ? `${consultaUC.data.ordem_ativa.id.slice(0, 8)} (${rotulosOrdem[consultaUC.data.ordem_ativa.status as components['schemas']['Ordem']['status']]})`
+                  ? `${consultaUC.data.ordem_ativa.id.slice(0, 8)} (${(rotulosOrdem[consultaUC.data.ordem_ativa.status as components['schemas']['Ordem']['status']] ?? consultaUC.data.ordem_ativa.status)})`
                   : null
               }
               idOrdemAtiva={consultaUC.data.ordem_ativa?.id ?? null}
