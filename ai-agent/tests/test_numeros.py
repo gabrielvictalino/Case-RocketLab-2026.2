@@ -107,6 +107,9 @@ def test_valor_ja_na_escala_do_texto(texto, valor, coluna):
         # Nem contra os números permitidos: os 12 meses e as 5 linhas não viram receita.
         ('A receita foi de R$ 12 milhões.', [[3456789.12]], [12], 'receita', ['12 milhões']),
         ('A receita foi de R$ 5 mil.', [[3456789.12]], [5], 'receita', ['5 mil']),
+        # Numa coluna já em MWh, 351.200 são 351.200 MWh: "351,2 MWh" é mil vezes menor.
+        ('O volume foi de 351,2 MWh.', [[351200]], [], 'volume_mwh', ['351,2 MWh']),
+        ('A receita foi de R$ 1,2 milhão.', [[1200000]], [], 'receita_milhoes', ['1,2 milhão']),
     ],
 )
 def test_escala_inventada_nao_se_sustenta(texto, linhas, permitidos, coluna, sem_lastro):
