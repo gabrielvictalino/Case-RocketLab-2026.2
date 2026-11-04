@@ -202,9 +202,13 @@ def test_todo_ranking_da_avaliacao_confere_a_ordem():
         ('São 2025 UCs ativas.', [[300]], ['ucs'], ['2025']),
         # Só arredondamento: o truncamento que o agente tolera não passa aqui.
         ('O índice ficou em 16,6.', [[16.66]], ['indice'], ['16,6']),
+        # Coluna em MWh, texto em outra unidade: os dois vão para kWh antes.
+        ('O volume foi de 351,2 kWh.', [[351.2]], ['volume_mwh'], ['351,2']),
+        ('O volume foi de 351,2 GWh.', [[351200000]], ['volume_mwh'], ['351,2 GWh']),
         # Com a escala aplicada, ou numa coluna que já está nela, passa.
         ('A receita foi de R$ 3,5 milhões.', [[3456789.12]], ['receita'], []),
         ('O volume foi de 351,2 MWh.', [[351.2]], ['volume_mwh'], []),
+        ('O volume foi de 351,2 GWh.', [[351200]], ['volume_mwh'], []),
         ('A taxa ficou em 16,7%.', [[0.1666]], ['taxa'], []),
         ('Em 2025, a receita foi de R$ 300.', [[300]], ['receita'], []),
     ],

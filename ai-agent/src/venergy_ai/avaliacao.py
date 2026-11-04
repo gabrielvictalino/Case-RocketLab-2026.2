@@ -15,12 +15,13 @@ Toda resposta é conferida também contra número inventado, com uma regra próp
 estrita que a do agente e independente dela: se a avaliação usasse a mesma conferência,
 toda resposta já teria passado nela, e um furo do validador nunca apareceria. Aqui, cada
 número do texto precisa sair de um valor das linhas que o redator recebeu só por
-arredondamento nas casas mostradas, com a escala escrita aplicada (o número sem a escala
-só vale numa coluna que já está nela pelo nome, como volume_mwh) e o % como valor pronto
-ou razão. Fora das linhas, valem só os metadados na posição em que são metadados: o
-número de linhas, os meses do período seguidos de "meses", um ano do período ou da
-comparação depois de "em", "de", "até" e afins e sem unidade depois, e um número da
-pergunta no mesmo contexto em que ela o usou ("os 10 bairros", "acima de 30%").
+arredondamento nas casas mostradas, com o número e a coluna na mesma unidade (a escala
+escrita multiplica o número, e a escala do nome da coluna, como volume_mwh, multiplica o
+valor dela) e o % como valor pronto ou razão. Fora das linhas, valem só os metadados na
+posição em que são metadados: o número de linhas, os meses do período seguidos de
+"meses", um ano do período ou da comparação depois de "em", "de", "até" e afins e sem
+unidade depois, e um número da pergunta no mesmo contexto em que ela o usou ("os 10
+bairros", "acima de 30%").
 O relatório traz a taxa de acerto, a de "não sei" correto e a latência média.
 """
 
@@ -312,13 +313,13 @@ def _sustenta(valor: Decimal, escala: str | None, numero: str, alvo: Decimal, co
     nome = (escala or '').strip().lower()
     if nome == '%' or nome.startswith('p'):
         return any(_arredonda(valor, alvo * fator, casas) for fator in (1, 100))
-    for prefixo, multiplicador, padrao in ESCALAS:
-        if nome.startswith(prefixo):
-            # O número sem a escala só vale numa coluna que já está nela pelo nome.
-            if re.search(padrao, coluna, re.IGNORECASE):
-                return _arredonda(valor, alvo, casas)
-            return _arredonda(valor * multiplicador, alvo, casas, multiplicador)
-    return _arredonda(valor, alvo, casas)
+    # Os dois na mesma unidade: 351,2 em volume_mwh são 351.200 kWh, e "351,2 kWh" não os
+    # descreve.
+    escrita = next((m for prefixo, m, _ in ESCALAS if nome.startswith(prefixo)), Decimal(1))
+    da_coluna = next(
+        (m for _, m, padrao in ESCALAS if re.search(padrao, coluna, re.IGNORECASE)), Decimal(1)
+    )
+    return _arredonda(valor * escrita, alvo * da_coluna, casas, escrita)
 
 
 def _arredonda(citado: Decimal, alvo: Decimal, casas: int, multiplicador=Decimal(1)) -> bool:
