@@ -106,24 +106,71 @@ menos de 3 válidas, o bloco fica indisponível.
 
 ### Como rodar
 
-No `.env` (ver `.env.example`): `GEMINI_API_KEY` (ou `AI_PROVEDOR=openrouter` com
-`OPENROUTER_API_KEY`) e, se quiser outro modelo, `AI_MODELO`. Sem a chave, o portal sobe
+Requisitos: Docker com Compose v2, uv e Python 3.12. Na raiz do repositório, copie
+`.env.example` para `.env` se ainda não existir. Crie uma chave no
+[Google AI Studio](https://aistudio.google.com/api-keys) e preencha somente no `.env`:
+
+```dotenv
+AI_PROVEDOR=google
+AI_MODELO=gemini-3.1-flash-lite
+GEMINI_API_KEY=<sua chave>
+```
+
+O identificador é o [modelo estável do Google](https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-lite).
+O `.env` é ignorado pelo Git. A chave é usada pelo backend; não a coloque em variável
+`VITE_*` nem no navegador. Para OpenRouter, use `AI_PROVEDOR=openrouter`,
+`OPENROUTER_API_KEY` e um `AI_MODELO` do provedor. Sem a chave, o portal sobe
 normalmente, e o assistente e os insights respondem `503`. Os limites ficam em
 `ASSISTENTE_PERGUNTAS_POR_MINUTO`, `ASSISTENTE_COTA_TOKENS_DIA`, `INSIGHTS_POR_MINUTO` e
 `ASSISTENTE_TIMEOUT_S` (30 s). As rotas estão no [README do backend](backend/README.md).
 
-```bash
-uv run pytest ai-agent
-```
-
-Esses testes usam o modelo simulado e rodam no CI obrigatório. A avaliação com o modelo
-real fica fora dele, porque depende da chave e da cota do provedor:
+Para iniciar com a amostra sintética (os comandos não publicam a Gold no Databricks):
 
 ```bash
-GEMINI_API_KEY=... uv run pytest ai-agent/evals
+docker compose up -d postgres redis
+docker compose build backend nginx
+docker compose run --rm migracoes
+docker compose run --rm importador --origem contracts/samples
+docker compose run --rm backend python -m app.seed
+docker compose up -d backend nginx
 ```
 
-O resultado da última rodada está em [docs/avaliacao-agente.md](docs/avaliacao-agente.md).
+Acesse `http://localhost` (ou `PORTAL_PORT`), entre com `diretoria` e a senha local
+`Demo-Venergy-2026!`. Se o ambiente já estiver iniciado e apenas a chave mudar, execute
+`docker compose up -d --force-recreate backend` para atualizar o container.
+
+### Testar e registrar a homologação
+
+Testes com modelo simulado, incluindo integração com Postgres/Redis temporários no
+Docker. Não chamam o provedor mesmo que uma chave esteja exportada:
+
+```bash
+uv sync --frozen --all-packages
+uv run pytest ai-agent/tests
+```
+
+A avaliação com modelo real é um comando separado e consome a cota do provedor. O
+teste lê a chave do **ambiente do processo**, não do `.env` do Compose. Em PowerShell 7:
+
+```powershell
+$env:PYTHONUTF8 = '1'
+$env:GEMINI_API_KEY = Read-Host 'Chave Gemini' -MaskInput
+$env:AI_PROVEDOR = 'google'
+$env:AI_MODELO = 'gemini-3.1-flash-lite'
+uv run pytest ai-agent/evals -q -rs
+Remove-Item Env:GEMINI_API_KEY
+```
+
+Em Bash, exporte `GEMINI_API_KEY` antes do mesmo comando `uv run pytest ai-agent/evals`.
+No GitHub, cadastre o secret `GEMINI_API_KEY` em **Settings → Secrets and variables →
+Actions**. O workflow [Avaliação do agente](.github/workflows/avaliacao-agente.yml)
+fica fora dos checks obrigatórios e executa manualmente ou às segundas. Para aparecer
+em Actions e receber o agendamento, o arquivo precisa estar na branch padrão `main`;
+enquanto a promoção estiver pendente, use a execução local.
+
+A rodada real ainda está **pendente**. O local para registrar o relatório, o commit,
+o modelo e os testes no navegador é [docs/avaliacao-agente.md](docs/avaliacao-agente.md).
+Um teste pulado por falta de chave não é uma avaliação aprovada.
 
 ## Suposições
 
@@ -134,3 +181,18 @@ O resultado da última rodada está em [docs/avaliacao-agente.md](docs/avaliacao
 - Conta atrasada é a fatura em aberto com vencimento antes da data de referência do manifesto da carga; conta em aberto é a fatura `ABERTA`, vencida ou não.
 - A fila de inspeção que o agente consulta é a mesma do portal: a fila da Gold sem as UCs com ordem aberta ou em campo.
 - Os testes do agente e a avaliação rodam sobre a amostra sintética de `contracts/samples`. As perguntas de avaliação não têm número escrito à mão: o esperado sai de uma consulta de referência, e vale igual para a Gold real.
+
+## Evidências ainda necessárias para a entrega
+
+- Execução com Gemini real: relatório da avaliação, pergunta/follow-up/recusa e insights
+  da Visão Geral e Receita no navegador, registrando qual carga foi usada.
+- Workflow completo do Databricks (#97): o bundle atual contém somente a Gold de faturas.
+  O print de sucesso de ponta a ponta exigido pelo case ainda precisa ser anexado aqui.
+- Publicação final de medidores com a `dim_uc` e inclusão no lote de exportação (#96),
+  conforme o [procedimento de medidores](docs/gold/medidores.md#8-como-executar-no-databricks).
+
+O [diagnóstico de receita](docs/diagnostico_receita.md) e o
+[dicionário da Gold](docs/gold/decisoes_silver_to_gold.md) reúnem as conclusões e definições.
+Na preparação da apresentação, acompanhe a correção da avaliação retrospectiva da fila
+na [#144](https://github.com/gabrielvictalino/Case-RocketLab-2026.2/issues/144): os 92% da
+análise original não devem ser apresentados como precisão prospectiva do modelo.
