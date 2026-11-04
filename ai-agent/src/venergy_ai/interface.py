@@ -140,6 +140,9 @@ class ValorCitado(BaseModel):
 
     # Como o número está escrito no texto: "5,3%", "R$ 1,2 milhão" sem o "R$".
     trecho: str
+    # Onde o trecho está no texto da observação: o frontend destaca pela posição.
+    inicio: int
+    fim: int
     chave: str
     metrica: str
     campo: CampoDoFato
@@ -183,4 +186,7 @@ class Assistente(Protocol):
 
 
 class Redator(Protocol):
+    # Identifica o modelo e as instruções: um insight guardado com outra versão não vale.
+    versao: str
+
     async def redigir(self, pedido: PedidoInsight, uso: RunUsage | None = None) -> Insight: ...

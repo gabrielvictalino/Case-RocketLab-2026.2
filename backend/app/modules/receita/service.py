@@ -96,6 +96,17 @@ async def decomposicao(db, periodo, comparacao, recorte):
 
 async def locais(db, periodo, comparacao, recorte, nivel):
     ctx, totais = await dados(db, periodo, comparacao, recorte)
+    return locais_de(ctx, totais, nivel)
+
+
+async def grupos(db, periodo, comparacao, recorte):
+    ctx, totais = await dados(db, periodo, comparacao, recorte)
+    return grupos_de(ctx, totais)
+
+
+# Os agrupamentos a partir de `dados`: quem precisa de mais de um (os insights) consulta
+# e decompõe a receita uma vez só.
+def locais_de(ctx, totais, nivel):
     agrupados = {}
     for (municipio, bairro, _classe, _grupo), valor in totais.items():
         chave = (municipio, bairro if nivel == 'bairro' else None)
@@ -108,8 +119,7 @@ async def locais(db, periodo, comparacao, recorte, nivel):
     return Locais(**ctx.metadados(), itens=itens, total=total_decomposicao(ctx, totais))
 
 
-async def grupos(db, periodo, comparacao, recorte):
-    ctx, totais = await dados(db, periodo, comparacao, recorte)
+def grupos_de(ctx, totais):
     agrupados = {grupo: Totais() for grupo in GRUPOS}
     for (_, _, _, grupo), valor in totais.items():
         agrupados[grupo].adicionar(valor)

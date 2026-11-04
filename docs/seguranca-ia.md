@@ -31,8 +31,11 @@ usuário → Nginx → POST /api/v1/assistente/perguntas → plano do LLM → gu
 Os insights da Visão Geral e da Receita não geram SQL: o backend calcula os fatos com os
 serviços da tela e o modelo só redige. Valem as camadas 1 (limite por usuário, que conta
 só o que vai ao modelo, e a cota diária de tokens), 2 (os fatos e os recortes vão como
-JSON escapado num bloco `<fatos>`, tratado como dado) e 7 (cada número da observação
-precisa estar nos fatos; a observação com número de fora é descartada). Testes:
+JSON escapado num bloco `<fatos>`, tratado como dado, e o recorte da URL só vale com
+valores da carga) e 7 (cada número da observação precisa estar nos fatos, na mesma
+unidade e na métrica que a frase nomeia, sem ler percentual como razão nem tirar a escala
+escrita, e um ano só vale em contexto de tempo; a observação com número de fora é
+descartada, e com menos de 3 válidas não há insight). Testes:
 `ai-agent/tests/test_redator_insights.py` e `backend/tests/test_insights.py`.
 
 ## Testes

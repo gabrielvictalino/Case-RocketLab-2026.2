@@ -91,8 +91,18 @@ class Reserva:
     id: str = ''
 
 
-async def consumir(redis, usuario_id, rota: str, limite: int, agora: float | None = None):
-    """Conta uma chamada na janela de 1 minuto; acima do limite, responde 429."""
+async def consumir(
+    redis,
+    usuario_id,
+    rota: str,
+    limite: int,
+    agora: float | None = None,
+    rotulo: str = 'perguntas',
+    codigo: str = 'LIMITE_DE_PERGUNTAS',
+):
+    """Conta uma chamada na janela de 1 minuto; acima do limite, responde 429.
+
+    `rotulo` e `codigo` dizem o que foi limitado: quem abre a Visão Geral não fez pergunta."""
     chave = f'rl:{usuario_id}:{rota}'
     agora = time.time() if agora is None else agora
     membro = f'{agora:.6f}:{uuid4().hex}'
@@ -113,8 +123,8 @@ async def consumir(redis, usuario_id, rota: str, limite: int, agora: float | Non
     espera = max(1, math.ceil(mais_antiga + JANELA_S - agora))
     raise APIError(
         429,
-        f'Limite de {limite} perguntas por minuto atingido. Tente de novo em {espera} s.',
-        'LIMITE_DE_PERGUNTAS',
+        f'Limite de {limite} {rotulo} por minuto atingido. Tente de novo em {espera} s.',
+        codigo,
         headers={'Retry-After': str(espera)},
     )
 
