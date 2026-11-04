@@ -1,10 +1,19 @@
+import type { ReactNode } from 'react'
 import { AlertTriangle, ListFilter } from 'lucide-react'
 import { Etiqueta } from '@/components/Etiqueta'
 import { Esqueleto, TEXTO_DADOS_INDISPONIVEIS } from '@/components/Estados'
 
+export interface Destaque {
+  inicio: number
+  fim: number
+}
+
 export interface ItemInsight {
   texto: string
   etiqueta?: string
+  // Posições, no texto, dos números que a observação cita e o backend conferiu. Vêm do
+  // Python, em pontos de código, e não nas unidades UTF-16 do JavaScript.
+  destaques?: ReadonlyArray<Destaque>
 }
 
 export interface BlocoInsightProps {
@@ -12,8 +21,44 @@ export interface BlocoInsightProps {
   meta?: string
   itens?: ReadonlyArray<ItemInsight>
   carregando?: boolean
+  mensagemCarregando?: string
   indisponivel?: boolean
+  tituloIndisponivel?: string
   mensagemIndisponivel?: string
+  rodape?: string
+}
+
+// A posição de cada ponto de código em unidades UTF-16: um emoji ocupa duas.
+function posicoesUtf16(texto: string) {
+  const posicoes = [0]
+  for (const letra of texto) {
+    posicoes.push(posicoes[posicoes.length - 1]! + letra.length)
+  }
+  return posicoes
+}
+
+// Pela posição: buscar o trecho "25" no texto marcaria também o fim de "2025".
+function comDestaques(texto: string, destaques: ReadonlyArray<Destaque> = []) {
+  const utf16 = posicoesUtf16(texto)
+  const ordenados = destaques
+    .filter(({ inicio, fim }) => inicio >= 0 && inicio < fim && fim < utf16.length)
+    .map(({ inicio, fim }) => ({ inicio: utf16[inicio]!, fim: utf16[fim]! }))
+    .sort((a, b) => a.inicio - b.inicio)
+  const partes: ReactNode[] = []
+  let cursor = 0
+  for (const { inicio, fim } of ordenados) {
+    if (inicio < cursor) {
+      continue
+    }
+    partes.push(
+      texto.slice(cursor, inicio),
+      <strong key={inicio} className="ve-insight-num">
+        {texto.slice(inicio, fim)}
+      </strong>,
+    )
+    cursor = fim
+  }
+  return partes.length === 0 ? texto : [...partes, texto.slice(cursor)]
 }
 
 export function BlocoInsight({
@@ -21,8 +66,11 @@ export function BlocoInsight({
   meta,
   itens = [],
   carregando = false,
+  mensagemCarregando,
   indisponivel = false,
+  tituloIndisponivel = 'Síntese indisponível',
   mensagemIndisponivel = TEXTO_DADOS_INDISPONIVEIS,
+  rodape,
 }: BlocoInsightProps) {
   return (
     <section className="ve-insight" aria-label={titulo}>
@@ -38,13 +86,16 @@ export function BlocoInsight({
         <div className="ve-insight-off" role="status">
           <AlertTriangle size={16} className="ve-icon" aria-hidden="true" />
           <div>
-            <strong>Síntese indisponível</strong>
+            <strong>{tituloIndisponivel}</strong>
             {' · '}
             <span>{mensagemIndisponivel}</span>
           </div>
         </div>
       ) : carregando ? (
-        <Esqueleto linhas={4} altura={14} />
+        <>
+          {mensagemCarregando && <p className="ve-insight-meta">{mensagemCarregando}</p>}
+          <Esqueleto linhas={4} altura={14} />
+        </>
       ) : (
         <ol>
           {itens.map((item, idx) => (
@@ -67,13 +118,14 @@ export function BlocoInsight({
                 >
                   {idx + 1}
                 </strong>
-                {item.texto}
+                {comDestaques(item.texto, item.destaques)}
               </span>
               {item.etiqueta && <Etiqueta>{item.etiqueta}</Etiqueta>}
             </li>
           ))}
         </ol>
       )}
+      {rodape && !indisponivel && !carregando && <p className="ve-insight-foot">{rodape}</p>}
     </section>
   )
 }

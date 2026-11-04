@@ -291,7 +291,8 @@ describe('Telas do portal e PainelAgente', () => {
     endpointComErro = '/api/v1/kpis'
     renderizar('/visao-geral')
     expect(await screen.findByText('Não foi possível carregar os indicadores.')).toBeInTheDocument()
-    expect(screen.getByText(/O insight de IA deste período/)).toBeInTheDocument()
+    // O bloco de insight segue na tela, com o próprio estado.
+    expect(await screen.findByText(/^Insight indisponível/)).toBeInTheDocument()
   })
 
   it('mostra erro de carga sem esqueleto eterno', async () => {

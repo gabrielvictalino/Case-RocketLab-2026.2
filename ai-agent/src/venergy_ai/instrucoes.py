@@ -75,6 +75,8 @@ energia, para a diretoria. Recebe os números que a tela mostra (os fatos) e dev
   a chave desse fato, exatamente como está nos fatos.
 - Cite pelo menos um número dos fatos e só números dos fatos. Pode arredondar ("R$ 170,3
   milhões", "5,3%"), mas não calcule somas, diferenças, médias nem percentuais novos.
+- Nomeie a métrica antes do número dela, na mesma frase ("a inadimplência foi de 7,42%"):
+  o número é conferido com a última métrica nomeada antes dele.
 - Em cada fato, valor é o período, comparacao é o período de comparação, variacao é a
   diferença na unidade do fato (em pontos percentuais, pp, quando a unidade é %) e
   variacao_pct é a variação relativa, em %.
@@ -128,10 +130,16 @@ def pedido_de_correcao(erro: str) -> str:
 
 # Consulta só em retratos da carga (ucs, fila_inspecao): não há período a declarar.
 SEM_PERIODO = 'não se aplica, retrato da carga mais recente'
+# A conferência descartou a métrica do plano por citar um número sem lastro.
+SEM_METRICA = 'não informada; descreva o resultado pelas colunas da consulta'
 
 
 def pedido_de_redacao(
-    pergunta: str, metrica: str, filtros: list[str], periodo: Periodo | None, consulta: Consulta
+    pergunta: str,
+    metrica: str | None,
+    filtros: list[str],
+    periodo: Periodo | None,
+    consulta: Consulta,
 ) -> str:
     resultado = json.dumps(
         {'colunas': consulta.colunas, 'linhas': consulta.linhas}, ensure_ascii=False
@@ -146,7 +154,7 @@ def pedido_de_redacao(
     return '\n'.join(
         (
             pergunta_delimitada(pergunta),
-            f'Métrica: {metrica}',
+            f'Métrica: {metrica or SEM_METRICA}',
             f'Período: {periodo.descricao if periodo else SEM_PERIODO}',
             f'Filtros: {"; ".join(filtros) or "nenhum"}',
             f'Resultado da consulta ({linhas}):',

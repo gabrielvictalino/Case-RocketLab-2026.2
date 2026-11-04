@@ -6,9 +6,9 @@ import pytest
 from pydantic_ai import ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.models.function import FunctionModel
 from redis.asyncio import Redis
-from venergy_ai.agente import AgenteTextoSQL
+from venergy_ai.agente import CONSULTA_INTERROMPIDA, AgenteTextoSQL
 from venergy_ai.executor import ExecutorAiRead
-from venergy_ai.interface import RespostaAgente
+from venergy_ai.interface import Consulta, RespostaAgente
 
 from app.modules.assistente import conversas
 from app.modules.assistente.conversas import chave, chave_das_trocas
@@ -258,3 +258,93 @@ async def test_historico_da_conversa_so_para_a_dona(portal):
     assert alheia.status_code == 404 and alheia.json()['code'] == 'CONVERSA_NAO_ENCONTRADA'
     inexistente = await http.get(f'/api/v1/assistente/conversas/{uuid4()}', headers=perdas)
     assert inexistente.status_code == 404
+
+
+async def test_resposta_com_consulta_entra_no_historico_mesmo_sem_metrica(portal):
+    # A conferência pode descartar a métrica por um número sem lastro; os filtros, o
+    # período e o SQL da troca ainda valem para o follow-up.
+    app, http = portal
+    usar_modelo(app, PLANO, TEXTO)
+    headers = await entrar(http, 'perdas')
+    primeira = (await http.post(URL, json={'pergunta': 'UCs?'}, headers=headers)).json()
+    usuario = await app.state.redis.get(chave(primeira['conversa_id']))
+    consulta = Consulta(sql_gerado='SELECT 1', sql_executado='SELECT 1 LIMIT 1000')
+    resposta = RespostaAgente(
+        tipo='resposta',
+        texto=TEXTO,
+        filtros=['município = Recife'],
+        consultas=[consulta],
+        modelo='simulado',
+    )
+    await conversas.registrar(
+        app.state.redis, primeira['conversa_id'], usuario.decode(), 'E Recife?', resposta, None
+    )
+    trocas = await trocas_no_redis(app, primeira['conversa_id'])
+    assert [t['pergunta'] for t in trocas] == ['UCs?', 'E Recife?']
+    assert trocas[1]['filtros'] == ['município = Recife'] and trocas[1]['metrica'] is None
+
+
+async def test_consulta_que_falhou_no_banco_nao_entra_no_historico(portal):
+    # O SQL que falhou em todas as tentativas tem sql_executado, mas também tem erro: o
+    # follow-up não pode partir dele.
+    app, http = portal
+    usar_modelo(app, PLANO, TEXTO)
+    headers = await entrar(http, 'perdas')
+    primeira = (await http.post(URL, json={'pergunta': 'UCs?'}, headers=headers)).json()
+    usuario = await app.state.redis.get(chave(primeira['conversa_id']))
+    falhas = [
+        Consulta(sql_gerado='SELECT x', sql_executado='SELECT x LIMIT 1000', erro=erro)
+        for erro in ('Erro do banco: coluna x não existe', CONSULTA_INTERROMPIDA)
+    ]
+    resposta = RespostaAgente(
+        tipo='nao_sei',
+        texto='Não sei. Não consegui montar uma consulta válida.',
+        filtros=['município = Recife'],
+        consultas=falhas,
+        modelo='simulado',
+    )
+    await conversas.registrar(
+        app.state.redis, primeira['conversa_id'], usuario.decode(), 'E Recife?', resposta, None
+    )
+    trocas = await trocas_no_redis(app, primeira['conversa_id'])
+    assert [t['pergunta'] for t in trocas] == ['UCs?']
+
+
+async def test_troca_guarda_o_sql_que_rodou_e_nao_a_tentativa_que_falhou(portal):
+    app, http = portal
+    usar_modelo(app, PLANO, TEXTO)
+    headers = await entrar(http, 'perdas')
+    primeira = (await http.post(URL, json={'pergunta': 'UCs?'}, headers=headers)).json()
+    usuario = await app.state.redis.get(chave(primeira['conversa_id']))
+    resposta = RespostaAgente(
+        tipo='resposta',
+        texto=TEXTO,
+        consultas=[
+            Consulta(sql_gerado='SELECT 1', sql_executado='SELECT 1 LIMIT 1000'),
+            Consulta(sql_gerado='SELECT x', sql_executado='SELECT x LIMIT 1000', erro='Erro'),
+        ],
+        modelo='simulado',
+    )
+    await conversas.registrar(
+        app.state.redis, primeira['conversa_id'], usuario.decode(), 'E Recife?', resposta, None
+    )
+    trocas = await trocas_no_redis(app, primeira['conversa_id'])
+    assert trocas[1]['sql'] == 'SELECT 1 LIMIT 1000'
+
+
+class RedisQueNaoResponde:
+    """Cada comando estoura com o TimeoutError nativo, que não vem embrulhado em
+    RedisError."""
+
+    def pipeline(self, *args, **kwargs):
+        raise TimeoutError('timeout de conexão do redis')
+
+    async def eval(self, *args):
+        raise TimeoutError('timeout de conexão do redis')
+
+
+async def test_timeout_do_redis_nao_derruba_a_conversa():
+    redis = RedisQueNaoResponde()
+    assert await conversas.ler(redis, uuid4(), uuid4()) == []
+    resposta = RespostaAgente(tipo='resposta', texto=TEXTO, metrica='UCs', modelo='simulado')
+    await conversas.registrar(redis, uuid4(), uuid4(), 'UCs?', resposta, None)

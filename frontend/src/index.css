@@ -1062,6 +1062,16 @@
   margin-top: 1px;
   flex: none;
 }
+.ve-insight-num {
+  font-weight: 600;
+  color: var(--ink);
+}
+.ve-insight-foot {
+  margin-top: var(--space-3);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink-muted);
+}
 
 /* ---------- nav ---------- */
 .ve-nav {

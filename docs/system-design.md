@@ -368,7 +368,9 @@ objeto só com esses números e entrega ao `ai-agent`, que apenas redige o
 texto. A resposta volta com os números citados, e o frontend os exibe ao
 lado. O resultado fica em cache por tela, filtros e versão da carga. Se o
 LLM falhar, o endpoint responde `503` e o frontend mostra "insight
-indisponível".
+indisponível". A falha de validação (poucas observações válidas) fica em cache
+por 10 minutos, para a mesma tela não voltar ao modelo a cada visita; provedor
+fora do ar e tempo esgotado não ficam.
 
 Cada observação aponta o fato principal (a etiqueta mostrada) e passa pela mesma
 validação de números das respostas do agente (`venergy_ai.numeros`): a que cita um

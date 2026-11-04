@@ -1,12 +1,12 @@
 import { Download } from 'lucide-react'
 import { useCarga } from '@/app/periodo/useCarga'
 import { usePeriodo } from '@/app/periodo/usePeriodo'
-import { BlocoInsight } from '@/components/BlocoInsight'
 import { CabecalhoPagina } from '@/components/CabecalhoPagina'
 import { CartaoKpi } from '@/components/CartaoKpi'
 import { Esqueleto, EstadoErro, EstadoVazio } from '@/components/Estados'
 import { GraficoBarrasComparativas, GraficoSerieComparativa } from '@/components/Graficos'
 import { Painel } from '@/components/Painel'
+import { InsightDaTela } from '@/features/insights/InsightDaTela'
 import {
   alinharSeries,
   montarCartoes,
@@ -19,7 +19,7 @@ import { formatarIntervaloPeriodo, formatarMoedaCompacta, formatarNumero } from 
 import { caminhoComPeriodo } from '@/lib/navegacao'
 
 export function PaginaVisaoGeral() {
-  const { periodo, comparacao, carga, parametros, carregando, erro } = usePeriodo()
+  const { periodo, comparacao, parametros, carregando, erro } = usePeriodo()
   const cargaQuery = useCarga()
   const kpis = useKpis(parametros)
   const serie = useSerieKpis(parametros?.periodo ?? null)
@@ -28,9 +28,6 @@ export function PaginaVisaoGeral() {
   const rotuloComparacao = comparacao ? formatarIntervaloPeriodo(comparacao) : null
   let resumoPeriodo = rotuloPeriodo ?? 'período atual'
   if (rotuloPeriodo && rotuloComparacao) resumoPeriodo += ` × ${rotuloComparacao}`
-  const metaInsight = carga
-    ? `Gerado para ${resumoPeriodo} · carga ${carga.batch_id}`
-    : `Gerado para ${resumoPeriodo}`
   const dados = serie.data?.serie ?? []
   const mostrarComparacao = !!parametros?.comparacao && anterior.isSuccess
   const alinhadas = alinharSeries(dados, mostrarComparacao ? anterior.data?.serie : undefined)
@@ -145,14 +142,7 @@ export function PaginaVisaoGeral() {
           </Painel>
         </>
       )}
-      <BlocoInsight
-        titulo="Insight do período"
-        meta={metaInsight}
-        indisponivel
-        mensagemIndisponivel={
-          'O insight de IA deste período será gerado na próxima versão do portal.'
-        }
-      />
+      <InsightDaTela tela="visao-geral" />
     </div>
   )
 }

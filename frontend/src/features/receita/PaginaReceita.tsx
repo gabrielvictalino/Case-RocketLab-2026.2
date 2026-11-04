@@ -3,7 +3,6 @@ import { useSearchParams } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { usePeriodo } from '@/app/periodo/usePeriodo'
 import { BarraRecorte } from '@/components/BarraRecorte'
-import { BlocoInsight } from '@/components/BlocoInsight'
 import { CabecalhoPagina } from '@/components/CabecalhoPagina'
 import {
   Esqueleto,
@@ -36,6 +35,7 @@ import {
 import { useDecomposicao, useGrupos, useLocais } from './useReceita'
 import { Painel } from '@/components/Painel'
 import { Selecao } from '@/components/Selecao'
+import { InsightDaTela } from '@/features/insights/InsightDaTela'
 import { atualizarRecorteUrl, lerRecortesUrl, limparRecortesUrl } from '@/lib/recortes'
 import { useFiltrosMeta } from '@/lib/useFiltrosMeta'
 
@@ -186,10 +186,6 @@ export function PaginaReceita() {
       : rotuloPeriodo
     : 'período atual'
 
-  const metaInsight = carga
-    ? `${resumoPeriodo} · carga ${carga.batch_id}`
-    : resumoPeriodo
-
   const dadosCascata = decomposicao.data
   const temReceita =
     dadosCascata &&
@@ -282,11 +278,7 @@ export function PaginaReceita() {
         {conteudoCascata}
       </Painel>
 
-      <BlocoInsight
-        titulo="Insight do período"
-        meta={metaInsight}
-        indisponivel
-      />
+      <InsightDaTela tela="receita" />
 
       <div
         style={{

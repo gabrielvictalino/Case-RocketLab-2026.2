@@ -56,7 +56,7 @@ IGNORADOS = re.compile(
 NUMERO = re.compile(
     r'(?<![\w,.])(?P<sinal>[-−+])?'
     r'(?P<numero>\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+,\d+|\d+\.\d+|\d+)'
-    r'(?:\s*(?P<escala>%|p\.?p\.?(?![^\W\d_])|(?:milh(?:ão|ões|ao|oes)|mil|mi'
+    r'(?:\s*(?P<escala>%|pontos?\s+percentua(?:l|is)|p\.?p\.?(?![^\W\d_])|(?:milh(?:ão|ões|ao|oes)|mil|mi'
     r'|bilh(?:ão|ões|ao|oes)|bi|MWh|GWh)(?![^\W\d_])))?',
     re.IGNORECASE,
 )
@@ -107,7 +107,7 @@ ANTES_DO_ANO = re.compile(
     re.IGNORECASE,
 )
 DEPOIS_DO_ANO = re.compile(
-    r'\s*(?:%|p\.?p\.?|R\$|[kMG]?Wh|kW\b|h\b|horas?\b|mil\b|milh|bilh|UCs?\b|unidades\b'
+    r'\s*(?:%|p\.?p\.?|pontos?\s+percentua|R\$|[kMG]?Wh|kW\b|h\b|horas?\b|mil\b|milh|bilh|UCs?\b|unidades\b'
     r'|clientes\b|consumidores\b|faturas\b|bairros\b|munic|alimentadores\b|inspe|ocorr'
     r'|interrup|atendimentos\b|reclama|protocolos\b)',
     re.IGNORECASE,
@@ -134,10 +134,13 @@ SELECAO_ANTES = re.compile(
 PAPEL_DEPOIS = re.compile(
     r'\s*(?:%|p\.?p\.?)?\s*(?:ou\s+(?:mais|menos|acima|abaixo)\b'
     r'|(?:maiores|menores|piores|melhores|primeir[oa]s|[uú]ltim[oa]s)\b'
-    r'|(?:m[eê]s(?:es)?|anos?|dias|semanas|trimestres|semestres)\b)',
+    r'|(?:m[eê]s(?:es)?|compet[eê]ncias?|anos?|dias|semanas|trimestres|semestres)\b)',
     re.IGNORECASE,
 )
 DATA = re.compile(r'(\d{4})-\d{2}(?:-\d{2})?')
+# O número de meses do período, como o glossário e o texto comum o escrevem: "12 meses",
+# "12 competências".
+MESES_DEPOIS = re.compile(r'\s+(?:m[eê]s(?:es)?|compet[eê]ncias?)\b', re.IGNORECASE)
 
 
 class Leitura(NamedTuple):
@@ -253,21 +256,35 @@ def _parece_ano(valor: Decimal) -> bool:
 
 
 def citacoes(
-    texto: str, valores: Sequence[object], permitidos: Iterable[object] = ()
+    texto: str,
+    valores: Sequence[object],
+    anos: Iterable[int] = (),
+    meses: Iterable[int] = (),
+    nomes: Iterable[str] = (),
 ) -> list[Citacao]:
     """Cada número do texto com os valores que o sustentam, para mostrar ao lado do texto.
 
-    Um número igual a um dos `permitidos` (um ano, o número de meses) fica de fora. Os
-    permitidos não valem por arredondamento: "R$ 0,00 milhões" não é o ano de 2024, nem
-    com a escala escrita: "R$ 12 milhões" não é o número de meses. Um número que nenhum
-    valor sustenta vem com `lastros` vazia.
+    Um ano do período ("em 2025") e o número de meses ("12 meses") ficam de fora só
+    quando é isso que são: o ano depois de "em", "de", "até" e afins e sem unidade nem
+    contagem depois ("São 2025 UCs" é conferido); os meses seguidos de "meses" ou
+    "competências". Os `nomes` (de locais e recortes) saem do texto antes, para o "2" de
+    "Setor 2" não ser conferido. Os valores já vêm na unidade da tela: um percentual não é
+    lido como razão ("742%" não sai de 7,42%), e o número sem a escala escrita não vale
+    ("R$ 1,2 milhão" não sai de R$ 1,20). Um número que nenhum valor sustenta vem com
+    `lastros` vazia.
     """
-    por_valor = [[Valor(v, True) for v in _decimais(valor)] for valor in valores]
-    livres = {v for item in permitidos for v in _decimais(item)}
+    # Um fato não é o tamanho de uma queda: a variação vem com o sinal, e uma receita que
+    # subiu 5,3% não sustenta "caiu 5,3%".
+    por_valor = [[Valor(v, razao=False) for v in _decimais(valor)] for valor in valores]
+    anos, meses = set(anos), set(meses)
     resultado = []
-    for citado in _citados(texto):
-        if any(leitura.valor in livres for leitura in citado.leituras):
-            continue
+    for citado in _citados(texto, nomes):
+        inteiro = re.fullmatch(r'\d+', citado.trecho) and int(citado.trecho)
+        if inteiro and citado.unidade is None:
+            if inteiro in anos and citado.leituras[0].no_tempo:
+                continue
+            if inteiro in meses and MESES_DEPOIS.match(citado.depois):
+                continue
         lastros = [
             i
             for i, decimais in enumerate(por_valor)
@@ -281,7 +298,10 @@ def _citados(texto: str, nomes: Iterable[str] = ()) -> Iterator[Citado]:
     # Trocar por espaços do mesmo tamanho mantém as posições do texto original.
     limpo = IGNORADOS.sub(lambda m: ' ' * len(m.group(0)), texto)
     for nome in sorted({n for n in nomes if n}, key=len, reverse=True):
-        limpo = re.sub(re.escape(nome), lambda m: ' ' * len(m.group(0)), limpo, flags=re.I)
+        # Só o nome inteiro: "Setor 2" não apaga o começo de "Setor 21", nem "Bairro 1" o
+        # de "1.234" logo depois.
+        padrao = rf'(?<!\w){re.escape(nome)}(?!\w|[.,]\d)'
+        limpo = re.sub(padrao, lambda m: ' ' * len(m.group(0)), limpo, flags=re.I)
     for citado in NUMERO.finditer(limpo):
         antes = limpo[: citado.start()]
         nivel = PARA.match(limpo, citado.end()) is not None

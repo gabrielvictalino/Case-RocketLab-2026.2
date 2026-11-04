@@ -161,7 +161,15 @@ it('mostra cascata e grupos, navega ao bairro, volta e preserva filtros', async 
   expect(new URLSearchParams(router.state.location.search).get('classe')).toBe(
     'Residencial',
   )
-  expect(urls.some((u) => u.pathname.includes('/insights'))).toBe(false)
+  // O insight da tela usa o mesmo período e os recortes dela.
+  expect(
+    urls.some(
+      (u) =>
+        u.pathname === '/api/v1/insights/receita' &&
+        u.searchParams.get('periodo') === '2025-07..2026-06' &&
+        u.searchParams.get('classe') === 'Residencial',
+    ),
+  ).toBe(true)
 })
 it('aplica município e classe sem enviar bairro ou alimentador', async () => {
   const router = iniciar(
