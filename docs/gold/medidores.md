@@ -5,7 +5,7 @@
 | Item | Referência |
 | :--- | :--- |
 | **Notebook** | `data-engineering/silver_to_gold/silver-to-gold-medidores.ipynb` (autocontido; sem módulo `.py` e sem `%run`) |
-| **Fontes Silver lidas** | `` `v-energy`.silver.tb_medidores `` (PR #22; regras em `docs/silver/silver_medidores.md`) e `` `v-energy`.silver.tb_unidades_consumidoras ``, só o `id_uc`, para a referência à `dim_uc` |
+| **Fontes lidas** | `` `v-energy`.silver.tb_medidores `` (PR #22; regras em `docs/silver/silver_medidores.md`) e, na publicação final, `` `v-energy`.gold.dim_uc `` via `tabela_cadastro`, só o `id_uc`, para a referência contratual |
 | **Tabelas Gold publicadas** | `` `v-energy`.gold.medidores_historico `` (contrato do portal) e `` `v-energy`.gold.tb_medidores_historico `` (analítica) |
 | **Contrato** | `contracts/tabelas/medidores_historico.yaml` (`0.3.0-provisional`), lido pelo notebook a cada execução |
 | **Versão das regras** | `GOLD_MEDIDORES_V1` |
@@ -80,7 +80,13 @@ Uma coluna da `tb_` que entrar no contrato passa a sair também na tabela do con
 ### 3.8. `id_uc` no cadastro
 O YAML declara `references: [dim_uc, id_uc]`. A `dim_uc` sai da Silver de cadastro, então a Gold confere todo `id_uc` contra `` `v-energy`.silver.tb_unidades_consumidoras ``, como as Golds de GD e de continuidade. Sem essa regra, um medidor de UC removida do cadastro (uma `TESTE*` ou uma duplicata) passaria por todas as regras e só seria barrado no importador, que rejeita a exportação inteira pela chave estrangeira. Na base atual, todo `id_uc` de medidores está no cadastro.
 
-**Premissa:** a `dim_uc` ainda não está na Gold, e a regra supõe que ela vai sair da Silver de cadastro sem descartar nenhuma UC. Se a `dim_uc` descartar alguma, a regra passa e o importador rejeita a exportação. Quando a `dim_uc` for publicada, o Job passa `tabela_cadastro` = `` `v-energy`.gold.dim_uc ``, e a regra confere contra a própria tabela da chave estrangeira. A premissa está registrada no #106, que monta a Gold de UCs.
+**Publicação final:** o produtor de `dim_uc` foi integrado pelo #145. Depois de executá-lo
+no workspace, o Job deve passar `tabela_cadastro` = `` `v-energy`.gold.dim_uc ``,
+conferindo a própria tabela da chave estrangeira. O widget conserva o padrão Silver
+para compatibilidade com as execuções anteriores; na homologação final é obrigatório
+sobrescrevê-lo e depender da tarefa da `dim_uc`. A existência do produtor no Git não
+comprova que a tabela foi publicada no workspace. A execução final de medidores com
+esse parâmetro ainda precisa de evidência no Databricks.
 
 ### 3.9. Leitura e publicação
 Mesmo padrão das Golds de GD (#94) e de continuidade (#98):
@@ -221,15 +227,15 @@ WHERE flag_instalado_em_troca;
 | Ler a Silver por versão fixa e publicar com `RESTORE` | `overwrite` direto | Mesmo padrão das outras Golds; uma carga reprovada nunca substitui a Gold boa |
 | `RESTORE` só se, depois da versão guardada, houver apenas commits desta execução (marcados no `userMetadata`) e de manutenção | `RESTORE` direto à versão guardada; ou aceitar qualquer commit de escrita | Um `RESTORE` às cegas descartaria o commit de outra tarefa do Job ou de outra pessoa, e o tipo da operação sozinho não separa a escrita desta execução da de outra |
 | Contrato lido do YAML a cada execução | Cópia das colunas no notebook | Com o contrato `0.3.0-provisional` e o #111 propondo colunas novas, a cópia passaria a conferir a Gold contra um contrato antigo |
-| `id_uc` conferido contra a Silver de cadastro, e contra a `dim_uc` quando ela for publicada | Deixar para o importador | O importador rejeita a exportação inteira; a Gold aponta a linha antes de publicar |
+| `id_uc` conferido contra a `dim_uc` na publicação final; Silver apenas no fluxo anterior | Deixar para o importador | O importador rejeita a exportação inteira; a Gold aponta a linha antes de publicar |
 
 ---
 
 ## 8. Como executar no Databricks
 
-1. **Pré-requisito:** `` SELECT COUNT(*) FROM `v-energy`.silver.tb_medidores `` → 51.299 e `` SELECT COUNT(*) FROM `v-energy`.silver.tb_unidades_consumidoras `` → 45.000. Se não existirem, rode antes a Bronze unificada e as Silvers de medidores e de cadastro.
+1. **Pré-requisito:** na extração documentada, `` SELECT COUNT(*) FROM `v-energy`.silver.tb_medidores `` → 51.299 e `` SELECT COUNT(*) FROM `v-energy`.gold.dim_uc `` → 45.000. Se não existirem, execute a Bronze/Silvers e o produtor de `dim_uc` (#145), respeitando suas dependências. Esses totais são referências da extração, não constantes para futuras cargas.
 2. **Abrir** `silver-to-gold-medidores.ipynb` pelo Git folder do repositório e conectar em **Serverless**. O notebook lê o YAML do contrato pelo caminho relativo; se for importado avulso, informe o caminho do YAML no widget `contrato_yaml`.
-3. **Validar:** **Run all** com o widget `modo = validar`. Nada é gravado.
+3. **Validar:** configure `tabela_cadastro = v-energy.gold.dim_uc` e **Run all** com `modo = validar`. Nada é gravado. Não use o padrão Silver para esta homologação final.
 4. **Publicar:** troque o widget `modo` para `publicar` e rode **Run all** de novo.
 5. **Conferir:**
    * tabela de regras com 24 linhas `OK`;
@@ -237,7 +243,17 @@ WHERE flag_instalado_em_troca;
    * a Visão 360 da `UC100015`;
    * o parque atual por tecnologia e as trocas por competência;
    * no fim, `Publicada: ... medidores_historico` e `Publicada: ... tb_medidores_historico`.
-6. **No Workflow (#97):** a tarefa depende das Silvers de medidores e de cadastro e passa `modo=publicar`. Quando a `dim_uc` existir, a tarefa passa a depender dela e a passar `tabela_cadastro` com o nome dela.
+6. **No Workflow (#97):** a tarefa depende da Silver de medidores e da Gold `dim_uc`, passando `modo=publicar` e `tabela_cadastro=v-energy.gold.dim_uc`. O Job completo e seu print de sucesso ainda são pendências de integração.
+7. **Evidência:** registre commit, parâmetros, data, link/id da execução e versões Delta das duas saídas. Confira a ausência de órfãos e mantenha o print das regras aprovadas. Depois inclua `medidores_historico` no lote consolidado (#96); a tabela analítica `tb_medidores_historico` fica fora do contrato.
+
+```sql
+SELECT count(*) AS orfaos
+FROM `v-energy`.gold.medidores_historico m
+LEFT ANTI JOIN `v-energy`.gold.dim_uc u ON u.id_uc = m.id_uc;
+-- Esperado: 0. Conferir também as regras do próprio notebook.
+DESCRIBE HISTORY `v-energy`.gold.medidores_historico LIMIT 1;
+DESCRIBE HISTORY `v-energy`.gold.tb_medidores_historico LIMIT 1;
+```
 
 ---
 
@@ -276,6 +292,7 @@ A cadeia Bronze → Silver → Gold rodou localmente em Spark 4.0.1 + Delta 4.0.
 
 ## 10. Pendências
 
+* **Homologação final:** executar a versão revisada em Serverless com `tabela_cadastro=v-energy.gold.dim_uc`, registrar a evidência e incluir a tarefa no Workflow #97. As execuções anteriores documentadas não substituem essa rodada.
 * **Contrato provisório:** o YAML está como `provisorio-nao-aprovado`. As colunas da `tb_medidores_historico` (medidor atual, ordem e troca) são uma proposta para a próxima versão (#111), se o portal quiser usá-las direto.
 * **Exportação para o banco local:** passo único de exportação do Job (#96).
 * **Código de publicação comum:** `publicar_delta`, `qualificar`, `ler_snapshot` e `_contar` estão copiados nas Golds, e só esta tem a recuperação que confere o histórico. A issue #139 leva esse código para um módulo compartilhado.

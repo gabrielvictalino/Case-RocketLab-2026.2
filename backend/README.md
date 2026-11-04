@@ -342,15 +342,24 @@ Os dois respondem `429` com `Retry-After` (`LIMITE_DE_PERGUNTAS`,
 `COTA_DE_TOKENS_ESGOTADA`).
 
 Insights (`GET /insights/{tela}`): os fatos saem dos mesmos serviços da tela
-(`kpis` na Visão Geral; `receita.decomposicao`, `grupos` e `locais` na Receita), numa
-sessão curta do portal, e o modelo só redige. Todo número de uma observação precisa
-estar nos fatos; a que cita um número de fora é descartada e, sem nenhuma válida, a
-rota responde `503 INSIGHT_INDISPONIVEL`. Provedor fora do ar e tempo esgotado também
-são 503 (`PROVEDOR_INDISPONIVEL`, `INSIGHT_TEMPO_ESGOTADO`). O insight fica 24 h em
-`insight:{batch_id}:{tela}:{sha1(pedido)}`, e o pedido inclui os fatos: enquanto os
-números da tela não mudam, ele sai do cache; uma inspeção concluída que muda a taxa de
-acerto gera outro, sem invalidação manual. Só quem vai ao modelo gasta
-`rl:{usuario}:insights` (`INSIGHTS_POR_MINUTO`, padrão 30) e a cota diária de tokens.
+(`kpis` na Visão Geral; uma só consulta de `receita.dados` para a cascata, os grupos e
+os locais na Receita), numa sessão curta do portal, e o modelo só redige. Os recortes da
+URL só valem com valores que existem na carga (senão, `422 RECORTE_INVALIDO`). Todo
+número de uma observação precisa estar nos fatos, na mesma unidade (% com percentual,
+pp com variação de um fato em %, R$, kWh e h com fatos nessas unidades) e na métrica que
+a frase nomeia antes dele ("a inadimplência foi de 41,2%" não sai da taxa de acerto). Os
+fatos em % não são lidos como razão ("742%" não sai de 7,42%), a escala escrita vale
+sempre ("R$ 1,2 milhão" não sai de R$ 1,20) e um ano só fica livre em contexto de tempo
+("em 2025"; "São 2025 UCs" é conferido). A observação que cita um número de fora é
+descartada e, com menos de 3 válidas, a rota responde
+`503 INSIGHT_INDISPONIVEL`. Cada valor citado traz `inicio` e `fim` no texto. Provedor
+fora do ar e tempo esgotado também são 503 (`PROVEDOR_INDISPONIVEL`,
+`INSIGHT_TEMPO_ESGOTADO`). O insight fica 24 h em
+`insight:{batch_id}:{tela}:{versão do redator}:{sha1(pedido)}`: a versão muda com o
+modelo e as instruções, e o pedido inclui os fatos. Enquanto os números da tela não
+mudam, ele sai do cache; uma inspeção concluída que muda a taxa de acerto gera outro,
+sem invalidação manual. Só quem vai ao modelo gasta `rl:{usuario}:insights`
+(`INSIGHTS_POR_MINUTO`, padrão 30, `429 LIMITE_DE_INSIGHTS`) e a cota diária de tokens.
 Sem Redis, o insight é gerado a cada pedido.
 
 Follow-up: `conversa:v2:{id}` no Redis guarda a dona, e `conversa:v2:{id}:trocas`, a

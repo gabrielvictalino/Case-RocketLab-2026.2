@@ -1,9 +1,13 @@
 """Insights da Visão Geral e da Receita (seção 6 do system design).
 
 Os fatos saem dos mesmos serviços que a tela usa, numa sessão curta do portal, e o
-modelo só redige. O insight fica no Redis por tela e fatos: enquanto os números da tela
-não mudam, ele não volta ao modelo. Uma inspeção concluída que muda a taxa de acerto
-muda os fatos, e o próximo pedido gera outro insight sem invalidação manual.
+modelo só redige. O insight fica no Redis por tela, fatos e versão do redator (modelo e
+instruções): enquanto os números da tela não mudam, ele não volta ao modelo. Uma inspeção
+concluída que muda a taxa de acerto muda os fatos, e o próximo pedido gera outro insight
+sem invalidação manual.
+
+O módulo não tem `repository`: não há SQL próprio. Os fatos vêm dos serviços de `kpis` e
+`receita`, e os recortes válidos, do serviço de `meta`, que confere a carga publicada.
 """
 
 import asyncio
@@ -13,7 +17,7 @@ from datetime import UTC, datetime
 
 from pydantic import ValidationError
 from pydantic_ai import RunUsage
-from redis.exceptions import RedisError
+from app.core.limites import FALHAS_DO_REDIS
 from venergy_ai.insights import RedatorDeInsights
 from venergy_ai.interface import InsightIndisponivel, PedidoInsight, ProvedorIndisponivel, Redator
 from venergy_ai.semantica import Periodo as PeriodoDoAgente
@@ -25,6 +29,7 @@ from app.modules.assistente.service import modelo_configurado
 from app.modules.insights import fatos
 from app.modules.insights.schemas import TELAS, Insight
 from app.modules.kpis import service as kpis
+from app.modules.meta import service as meta
 from app.modules.receita import service as receita
 
 TTL_S = 24 * 60 * 60
@@ -44,6 +49,7 @@ async def insight(state, tela, periodo, comparacao, recorte, usuario) -> Insight
         raise APIError(503, 'Insights não configurados neste ambiente', 'INSIGHT_INDISPONIVEL')
     # Nenhuma conexão do portal fica presa enquanto o modelo redige.
     async with state.portal_sessions() as db, db.begin():
+        await _conferir_recorte(db, recorte)
         tela_pronta, lista = await _montar(db, tela, periodo, comparacao, recorte)
     metadados = dict(
         periodo=tela_pronta.periodo, comparacao=tela_pronta.comparacao, carga=tela_pronta.carga
@@ -58,7 +64,8 @@ async def insight(state, tela, periodo, comparacao, recorte, usuario) -> Insight
         fatos=lista,
     )
     resumo = hashlib.sha1(pedido.model_dump_json().encode()).hexdigest()
-    chave = f'insight:{tela_pronta.carga.batch_id}:{tela}:{resumo}'
+    # Com outro modelo ou outras instruções, o texto guardado não vale mais.
+    chave = f'insight:{tela_pronta.carga.batch_id}:{tela}:{state.redator.versao}:{resumo}'
     if (guardado := await _ler(state.redis, chave)) is not None:
         return guardado
     # Só o que vai ao modelo conta no limite e na cota: um insight do cache não gasta.
@@ -68,7 +75,14 @@ async def insight(state, tela, periodo, comparacao, recorte, usuario) -> Insight
     )
     uso = RunUsage()
     try:
-        await limites.consumir(state.redis, usuario['id'], 'insights', settings.insights_por_minuto)
+        await limites.consumir(
+            state.redis,
+            usuario['id'],
+            'insights',
+            settings.insights_por_minuto,
+            rotulo='insights',
+            codigo='LIMITE_DE_INSIGHTS',
+        )
         gerado = await _redigir(state, pedido, uso, tela)
     finally:
         await limites.acertar_cota(state.redis, reserva, uso.input_tokens + uso.output_tokens)
@@ -114,12 +128,38 @@ async def _montar(db, tela, periodo, comparacao, recorte):
     if tela == 'visao-geral':
         cards = await kpis.kpis(db, periodo, comparacao, recorte)
         return cards, fatos.da_visao_geral(cards)
-    decomposicao = await receita.decomposicao(db, periodo, comparacao, recorte)
-    grupos = await receita.grupos(db, periodo, comparacao, recorte)
+    # Uma consulta e uma decomposição para os três blocos: a chave do cache sai dos fatos,
+    # então este custo vale também para um insight que vem do cache.
+    ctx, totais = await receita.dados(db, periodo, comparacao, recorte)
+    decomposicao = receita.total_decomposicao(ctx, totais)
     # Com um município escolhido, o detalhamento da tela desce para os bairros.
     nivel = 'bairro' if recorte.municipio else 'municipio'
-    locais = await receita.locais(db, periodo, comparacao, recorte, nivel)
-    return decomposicao, fatos.da_receita(decomposicao, grupos, locais)
+    locais = receita.locais_de(ctx, totais, nivel)
+    return decomposicao, fatos.da_receita(decomposicao, receita.grupos_de(ctx, totais), locais)
+
+
+async def _conferir_recorte(db, recorte):
+    """O recorte vem da URL e vai ao prompt: só valem valores que existem na carga.
+
+    Sem recorte (a Visão Geral nunca manda), não há o que conferir nem consulta a fazer.
+    Com recorte, as dimensões vêm do serviço de `meta`, que confere antes a carga
+    publicada: sem carga, a resposta é 503 `BASE_INDISPONIVEL`, como nas outras rotas."""
+    parametros = recorte.parametros()
+    if not parametros:
+        return
+    dimensoes = await meta.filtros(db)
+    bairros = dimensoes.bairros
+    validos = {
+        'municipio': set(dimensoes.municipios),
+        'bairro': set(bairros.get(recorte.municipio, ()))
+        if recorte.municipio
+        else {bairro for lista in bairros.values() for bairro in lista},
+        'classe': set(dimensoes.classes),
+        'alimentador': set(dimensoes.alimentadores),
+    }
+    for campo, valor in parametros.items():
+        if valor not in validos[campo]:
+            raise APIError(422, f'{campo} fora da carga publicada', 'RECORTE_INVALIDO')
 
 
 def _do_agente(texto: str) -> PeriodoDoAgente:
@@ -130,7 +170,7 @@ def _do_agente(texto: str) -> PeriodoDoAgente:
 async def _ler(redis, chave) -> Insight | None:
     try:
         guardado = await redis.get(chave)
-    except RedisError:
+    except FALHAS_DO_REDIS:
         logger.warning('redis indisponível; insight gerado sem cache')
         return None
     if guardado is None:
@@ -145,5 +185,5 @@ async def _ler(redis, chave) -> Insight | None:
 async def _guardar(redis, chave, resposta: Insight):
     try:
         await redis.set(chave, resposta.model_dump_json(), ex=TTL_S)
-    except RedisError:
+    except FALHAS_DO_REDIS:
         logger.warning('redis indisponível; insight não guardado')
