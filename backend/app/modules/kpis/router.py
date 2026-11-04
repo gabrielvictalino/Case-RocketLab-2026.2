@@ -16,9 +16,10 @@ async def kpis(
     periodo: str,
     recorte: Annotated[Recorte, Query()],
     comparacao: str | None = None,
+    sem_evento_atipico: bool = False,
     db=Depends(session, scope='function'),
 ):
-    return await service.kpis(db, periodo, comparacao, recorte)
+    return await service.kpis(db, periodo, comparacao, recorte, sem_evento_atipico)
 
 
 @router.get('/serie', response_model=Serie)

@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from app.modules.perdas.schemas import Ordem
+from app.modules.perdas.schemas import Inspecao, Ordem
 
 
 class MedidorAtual(BaseModel):
@@ -80,12 +80,13 @@ class OcorrenciaUC(BaseModel):
 class ResumoAlimentador(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     alimentador: str
-    interrupcoes: int
-    dec: Decimal
+    interrupcoes: int | None
+    dec: Decimal | None
 
 
 class Interrupcoes(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+    sem_evento_atipico: bool
     ocorrencias: list[OcorrenciaUC]
     alimentador: ResumoAlimentador
 
@@ -105,17 +106,6 @@ class Chamado(BaseModel):
     status: str
     nota: Decimal | None
     historico: list[ChamadoHistorico]
-
-
-class Inspecao(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id_inspecao: str
-    data: date
-    inspetor: str
-    resultado: str
-    tipo_irregularidade: str | None
-    kwh_recuperado: Decimal
-    origem: str
 
 
 class FaturaComparada(BaseModel):

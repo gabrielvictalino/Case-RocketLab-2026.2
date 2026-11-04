@@ -24,6 +24,7 @@ class Continuidade(BaseModel):
 
 
 class KPIs(RespostaMetricas):
+    sem_evento_atipico: bool
     receita: Indicador
     receita_arrecadada: Indicador
     volume_faturado_kwh: Indicador

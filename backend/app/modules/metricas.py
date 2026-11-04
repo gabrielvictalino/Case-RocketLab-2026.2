@@ -1,6 +1,7 @@
 """Contexto das métricas: períodos, recortes e metadados da carga publicada."""
 
 from dataclasses import dataclass
+from decimal import Decimal, ROUND_HALF_UP
 
 from pydantic import BaseModel
 
@@ -50,3 +51,11 @@ async def contexto(db, periodo: str, comparacao: str | None):
         periodo, comparacao, atual.competencia_inicial, atual.competencia_mais_recente
     )
     return Contexto(p, c, atual)
+
+
+def razao(numerador, denominador, fator=1, casas='0.01'):
+    if numerador is None or denominador is None or denominador == 0:
+        return None
+    return (Decimal(numerador) * fator / Decimal(denominador)).quantize(
+        Decimal(casas), rounding=ROUND_HALF_UP
+    )
