@@ -4,7 +4,7 @@ O pipeline roda de ponta a ponta num Job do Databricks, definido no bundle [`dat
 
 ## 1. Tarefas e dependências
 
-Uma tarefa por notebook. Cada uma espera só as tarefas cujas tabelas ela lê, então as Silvers rodam em paralelo depois da Bronze, e as Golds começam assim que as suas fontes ficam prontas.
+Uma tarefa por notebook. Cada uma espera só as tarefas cujas tabelas ela lê, então as Silvers rodam em paralelo depois da Bronze (as de atendimentos e de inspeções, depois da de cadastro), e as Golds começam assim que as suas fontes ficam prontas.
 
 | Tarefa | Notebook | Espera |
 | :--- | :--- | :--- |
@@ -14,7 +14,7 @@ Uma tarefa por notebook. Cada uma espera só as tarefas cujas tabelas ela lê, e
 | `silver_leituras` | `data-engineering/bronze_to_silver/bronze-to-silver-leituras.ipynb` | Bronze |
 | `silver_medidores` | `data-engineering/bronze_to_silver/bronze-to-silver-medidores.ipynb` | Bronze |
 | `silver_ocorrencias_rede` | `data-engineering/bronze_to_silver/bronze-to-silver-ocorrencias-rede.ipynb` | Bronze |
-| `silver_atendimentos` | `data-engineering/bronze_to_silver/bronze-to-silver-atendimentos.ipynb` | Bronze |
+| `silver_atendimentos` | `data-engineering/bronze_to_silver/bronze-to-silver-atendimentos.ipynb` | Silver de cadastro (confere toda UC dos atendimentos) |
 | `silver_faturas` | `data-engineering/bronze-to-silver-faturas.ipynb` | Bronze |
 | `silver_inspecoes` | `data-engineering/bronze_to_silver/bronze-to-silver-inspecoes.ipynb` | Silver de cadastro (confere toda UC inspecionada) |
 | `gold_geracao_distribuida` | `data-engineering/silver_to_gold/silver-to-gold-geracao-distribuida.ipynb` | Silvers de GD, cadastro e leituras |
@@ -31,6 +31,7 @@ Uma tarefa por notebook. Cada uma espera só as tarefas cujas tabelas ela lê, e
 - As Golds recebem `modo=publicar`. O padrão dos notebooks continua `validar`, para que um *Run all* manual não grave nada.
 - A exportação recebe `modo=exportar`.
 - A Gold de faturas e a exportação recebem a mesma `data_referencia` e o mesmo `diretorio_exportacao`, que são variáveis do bundle.
+- Todas as Golds e a exportação recebem o mesmo `schema_gold` (variável do bundle, `v-energy.gold` por padrão). As referências entre Golds (`gd_uc` na Gold de perdas e na `dim_uc`; `dim_alimentador` na `dim_uc`) apontam para esse schema, então trocar a variável muda o pipeline inteiro de destino.
 
 ## 2. Garantias de uma execução
 
