@@ -105,7 +105,12 @@ publicação com as leituras: cada transação do portal o pega compartilhado
 (`app.core.database.sincronizar_com_a_publicacao`) e o importador o pega exclusivo
 só na troca de `analytics`. Assim uma resposta nunca mistura a identificação de uma
 carga com os números de outra; durante a troca, que leva frações de segundo, as
-leituras novas esperam. `carregado_em` usa o relógio da publicação e
+leituras novas esperam. As duas esperas têm prazo no servidor (`lock_timeout`). O
+importador espera o lock 1,5 s por tentativa e libera a fila entre as tentativas, por até
+8 tentativas; depois disso a carga é recusada e a anterior fica preservada. Uma leitura
+espera até 4 s, abaixo do `command_timeout` de 5 s do asyncpg; se a troca não terminar
+nesse prazo, a resposta é `503 CARGA_EM_PUBLICACAO` com `Retry-After`, nunca um 500.
+`carregado_em` usa o relógio da publicação e
 `ordem_publicacao`, uma sequência do banco, define a carga atual em `/meta/carga`.
 Uma falha de Redis pode manter sua chave antiga: consumidores de cache devem obter
 a versão em `operations.cargas`, usando a mesma transação da consulta analítica,

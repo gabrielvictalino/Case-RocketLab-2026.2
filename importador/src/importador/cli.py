@@ -7,7 +7,7 @@ import sys
 from dotenv import load_dotenv
 
 from importador.contracts import ContractError
-from importador.loader import load
+from importador.loader import TrocaOcupada, load
 
 
 def main():
@@ -33,7 +33,7 @@ def main():
                 verify_only=args.verificar,
             )
         )
-    except ContractError as exc:
+    except (ContractError, TrocaOcupada) as exc:
         if args.verificar:
             sys.stderr.write(f'Verificação falhou: {exc}\n')
         else:
