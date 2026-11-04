@@ -95,6 +95,21 @@ BAIXA = re.compile(
     r'|encolh\w*)' + ANTES_DO_NUMERO,
     re.IGNORECASE,
 )
+# Uma coluna em percentual já vem multiplicada por 100 (taxa_pct = 7,42): "742%" não sai dela.
+COLUNA_EM_PERCENTUAL = re.compile(r'pct|percent', re.IGNORECASE)
+# Um ano só é o ano quando o texto fala de tempo: "em 2025", "de 2024 para 2025". Em
+# "São 2025 UCs", é uma contagem, e precisa estar nas linhas.
+ANTES_DO_ANO = re.compile(
+    r'(?:\b(?:em|de|do|da|desde|at[eé]|entre|e|a|ao|ante|contra|ano|anos|no|na|para|versus'
+    r'|vs\.?)\s+|[/(]\s*|^\s*|[.;:!?]\s+)$',
+    re.IGNORECASE,
+)
+DEPOIS_DO_ANO = re.compile(
+    r'\s*(?:%|p\.?p\.?|R\$|[kMG]?Wh|kW\b|h\b|horas?\b|mil\b|milh|bilh|UCs?\b|unidades\b'
+    r'|clientes\b|consumidores\b|faturas\b|bairros\b|munic|alimentadores\b|inspe|ocorr'
+    r'|interrup|atendimentos\b|reclama|protocolos\b)',
+    re.IGNORECASE,
+)
 # A coluna que já é o tamanho da queda vem positiva. "perd" fica de fora: perdas_kwh e
 # perda_pct costumam ser o nível de perdas, não uma variação.
 COLUNA_DE_QUEDA = re.compile(r'qued|redu|dimin|recuo|retra', re.IGNORECASE)
@@ -139,6 +154,9 @@ class Leitura(NamedTuple):
     # A leitura sem a escala escrita ("351,2" de "351,2 MWh"): a família da escala, que a
     # coluna precisa ter no nome. None nas leituras comuns.
     sem_escala: str | None = None
+    # Um ano escrito em contexto de tempo ("em 2025"): só esta leitura é sustentada por
+    # um ano permitido ou pelo ano de uma data das linhas.
+    no_tempo: bool = False
 
 
 class Valor(NamedTuple):
@@ -148,6 +166,11 @@ class Valor(NamedTuple):
     # As escalas em que a coluna já está, pelo nome (volume_mwh): só elas sustentam o
     # número escrito sem a escala.
     escalas: frozenset[str] = frozenset()
+    # O valor pode ser uma razão, que o texto escreve vezes 100 com % (0,167 → "16,7%").
+    # Falso numa coluna em percentual e nos fatos dos insights, que já vêm em %.
+    razao: bool = True
+    # Um ano (permitido ou de uma data das linhas): só sustenta um ano em contexto de tempo.
+    ano: bool = False
 
 
 class Citado(NamedTuple):
@@ -191,13 +214,14 @@ def numeros_sem_lastro(
     o tamanho de uma queda e a que já está numa escala."""
     nomes = list(colunas)
     valores = [
-        _valor_da_coluna(v, nomes[i] if i < len(nomes) else '')
+        _valor_da_coluna(v, nomes[i] if i < len(nomes) else '', isinstance(item, str))
         for linha in linhas
         for i, item in enumerate(linha)
         for v in _decimais(item)
     ]
-    # Um número permitido não é variação: sustenta a queda e a alta.
-    valores += [Valor(v, True) for item in permitidos for v in _decimais(item)]
+    # Um número permitido não é variação: sustenta a queda e a alta. Um ano permitido só
+    # vale como ano ("em 2025"), não como contagem ("2025 UCs").
+    valores += [Valor(v, True, ano=_parece_ano(v)) for item in permitidos for v in _decimais(item)]
     dos_limiares = [Valor(v, True) for item in limiares for v in _decimais(item)]
     sem_lastro = []
     for citado in _citados(texto):
@@ -213,9 +237,20 @@ def _algum_lastro(citado: Citado, valores: list[Valor]) -> bool:
     return any(_tem_lastro(leitura, valores) for leitura in citado.leituras)
 
 
-def _valor_da_coluna(valor: Decimal, coluna: str) -> Valor:
+def _valor_da_coluna(valor: Decimal, coluna: str, de_data: bool = False) -> Valor:
     escalas = frozenset(nome for nome, padrao in ESCALA_DA_COLUNA.items() if padrao.search(coluna))
-    return Valor(valor, bool(COLUNA_DE_QUEDA.search(coluna)), escalas)
+    return Valor(
+        valor,
+        bool(COLUNA_DE_QUEDA.search(coluna)),
+        escalas,
+        razao=not COLUNA_EM_PERCENTUAL.search(coluna),
+        # O ano de uma data das linhas ("2025-07-01") só sustenta o ano do texto.
+        ano=de_data,
+    )
+
+
+def _parece_ano(valor: Decimal) -> bool:
+    return valor == valor.to_integral_value() and 1900 <= valor <= 2100
 
 
 def citacoes(
@@ -228,17 +263,20 @@ def citacoes(
     """Cada número do texto com os valores que o sustentam, para mostrar ao lado do texto.
 
     Um ano do período ("em 2025") e o número de meses ("12 meses") ficam de fora só
-    quando é isso que são: sem unidade e, no caso dos meses, seguidos de "meses". Os
+    quando é isso que são: o ano depois de "em", "de", "até" e afins e sem unidade nem
+    contagem depois ("São 2025 UCs" é conferido); os meses seguidos de "meses". Os
     `nomes` (de locais e recortes) saem do texto antes, para o "2" de "Setor 2" não ser
-    conferido. Um número que nenhum valor sustenta vem com `lastros` vazia.
+    conferido. Os valores já vêm na unidade da tela: um percentual não é lido como razão
+    ("742%" não sai de 7,42%), e o número sem a escala escrita não vale ("R$ 1,2 milhão"
+    não sai de R$ 1,20). Um número que nenhum valor sustenta vem com `lastros` vazia.
     """
-    por_valor = [[Valor(v, True) for v in _decimais(valor)] for valor in valores]
+    por_valor = [[Valor(v, True, razao=False) for v in _decimais(valor)] for valor in valores]
     anos, meses = set(anos), set(meses)
     resultado = []
     for citado in _citados(texto, nomes):
         inteiro = re.fullmatch(r'\d+', citado.trecho) and int(citado.trecho)
         if inteiro and citado.unidade is None:
-            if inteiro in anos and len(citado.trecho) == 4:
+            if inteiro in anos and citado.leituras[0].no_tempo:
                 continue
             if inteiro in meses and re.match(r'\s+m[eê]s(?:es)?\b', citado.depois, re.I):
                 continue
@@ -262,9 +300,14 @@ def _citados(texto: str, nomes: Iterable[str] = ()) -> Iterator[Citado]:
         alta = not nivel and ALTA.search(antes) is not None
         baixa = not nivel and BAIXA.search(antes) is not None
         trecho = citado.group(0).strip().rstrip('.')
+        no_tempo = (
+            re.fullmatch(r'\d{4}', citado.group(0).strip()) is not None
+            and ANTES_DO_ANO.search(antes) is not None
+            and DEPOIS_DO_ANO.match(limpo, citado.end()) is None
+        )
         yield Citado(
             trecho,
-            _leituras(citado, alta, baixa),
+            _leituras(citado, alta, baixa, no_tempo),
             citado.start(),
             citado.start() + len(trecho),
             _tem_papel(limpo, citado),
@@ -328,7 +371,9 @@ def _decimais(valor: object) -> list[Decimal]:
     return [decimal] if decimal.is_finite() else []
 
 
-def _leituras(citado: re.Match, alta: bool = False, baixa: bool = False) -> list[Leitura]:
+def _leituras(
+    citado: re.Match, alta: bool = False, baixa: bool = False, no_tempo: bool = False
+) -> list[Leitura]:
     numero, escala = citado['numero'], (citado['escala'] or '').lower()
     sinal = {'-': -1, '−': -1, '+': 1}.get(citado['sinal'] or '', 0)
     percentual = escala == '%' or escala.startswith('p')
@@ -361,17 +406,21 @@ def _leituras(citado: re.Match, alta: bool = False, baixa: bool = False) -> list
                     baixa,
                     significativos,
                     sem_escala,
+                    no_tempo,
                 )
             )
     return leituras
 
 
 def _tem_lastro(leitura: Leitura, valores: list[Valor]) -> bool:
-    # Com % ou pp, o resultado pode trazer o percentual pronto (16,7) ou a razão (0,167).
-    fatores = (Decimal(1), Decimal(100)) if leitura.percentual else (Decimal(1),)
-    for valor, de_queda, escalas in valores:
+    for valor, de_queda, escalas, razao, ano in valores:
+        if ano and not leitura.no_tempo:
+            continue
         if leitura.sem_escala is not None and leitura.sem_escala not in escalas:
             continue
+        # Com % ou pp, o resultado pode trazer o percentual pronto (16,7) ou a razão
+        # (0,167), a não ser que o valor já esteja em percentual.
+        fatores = (Decimal(1), Decimal(100)) if leitura.percentual and razao else (Decimal(1),)
         if leitura.sinal and valor and (valor > 0) != (leitura.sinal > 0):
             continue
         if leitura.alta and valor < 0:

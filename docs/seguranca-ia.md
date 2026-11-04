@@ -33,8 +33,9 @@ serviços da tela e o modelo só redige. Valem as camadas 1 (limite por usuário
 só o que vai ao modelo, e a cota diária de tokens), 2 (os fatos e os recortes vão como
 JSON escapado num bloco `<fatos>`, tratado como dado, e o recorte da URL só vale com
 valores da carga) e 7 (cada número da observação precisa estar nos fatos, na mesma
-unidade; a observação com número de fora é descartada, e com menos de 3 válidas não há
-insight). Testes:
+unidade e na métrica que a frase nomeia, sem ler percentual como razão nem tirar a escala
+escrita, e um ano só vale em contexto de tempo; a observação com número de fora é
+descartada, e com menos de 3 válidas não há insight). Testes:
 `ai-agent/tests/test_redator_insights.py` e `backend/tests/test_insights.py`.
 
 ## Testes

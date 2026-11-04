@@ -5,7 +5,7 @@ import pytest
 from pydantic_ai import ModelHTTPError, ModelResponse, RunUsage, ToolCallPart
 from pydantic_ai.models.function import FunctionModel
 
-from venergy_ai.insights import RedatorDeInsights
+from venergy_ai.insights import Rascunho, RedatorDeInsights, validar
 from venergy_ai.interface import (
     Fato,
     InsightIndisponivel,
@@ -308,3 +308,59 @@ async def test_numero_do_nome_de_um_local_nao_e_conferido():
         [('local:Setor 2 (Recife)', 'O Setor 2 caiu 2%.'), *VALIDAS], pedido=com_setor
     )
     assert insight.descartadas == ['1ª com número fora dos fatos (2%)']
+
+
+PEDIDO_COM_TAXAS = PEDIDO.model_copy(
+    update={
+        'fatos': [
+            *PEDIDO.fatos,
+            Fato(chave='taxa_acerto', metrica='Taxa de acerto', unidade='%', valor=Decimal('41.2')),
+            Fato(chave='ucs_ativas', metrica='UCs ativas', unidade='UCs', valor=Decimal('300')),
+            Fato(
+                chave='tarifa_media', metrica='Tarifa média', unidade='R$/kWh', valor=Decimal('1.2')
+            ),
+        ]
+    }
+)
+
+
+def _descartada(chave, texto):
+    return validar([Rascunho(chave=chave, texto=texto)], PEDIDO_COM_TAXAS)
+
+
+@pytest.mark.parametrize(
+    'chave,texto',
+    [
+        # Um fato já em % não é lido como razão: 7,42% não sustenta 742%.
+        ('inadimplencia', 'A inadimplência chegou a 742%.'),
+        # O número sem a escala escrita não vale: R$ 1,20 não sustenta R$ 1,2 milhão.
+        ('tarifa_media', 'Foram R$ 1,2 milhão.'),
+        # A métrica nomeada precisa sustentar o número: 41,2% é a taxa de acerto.
+        ('inadimplencia', 'A inadimplência foi de 41,2%.'),
+        # "São 2025 UCs" é uma contagem, não o ano do período.
+        ('ucs_ativas', 'São 2025 UCs ativas e a receita foi de R$ 170,3 milhões.'),
+    ],
+)
+def test_numero_que_nao_sustenta_a_frase_e_descartado(chave, texto):
+    observacoes, descartadas = _descartada(chave, texto)
+    assert observacoes == [] and 'número fora dos fatos' in descartadas[0]
+
+
+@pytest.mark.parametrize(
+    'chave,texto',
+    [
+        ('taxa_acerto', 'A taxa de acerto foi de 41,2%.'),
+        ('inadimplencia', 'A inadimplência foi de 7,42%, e a taxa de acerto, de 41,2%.'),
+        ('ucs_ativas', 'Em 2025, eram 300 UCs ativas.'),
+        # Sem métrica nomeada antes, valem os fatos na unidade certa.
+        ('receita', 'Foram R$ 170,3 milhões no período.'),
+    ],
+)
+def test_numero_da_metrica_nomeada_passa(chave, texto):
+    observacoes, descartadas = _descartada(chave, texto)
+    assert descartadas == [] and len(observacoes) == 1
+
+
+def test_citacoes_nao_le_o_percentual_dos_fatos_como_razao_nem_tira_a_escala():
+    assert [c.lastros for c in citacoes('Chegou a 742%.', [Decimal('7.42')])] == [[]]
+    assert [c.lastros for c in citacoes('Foram R$ 1,2 milhão.', [Decimal('1.20')])] == [[]]
