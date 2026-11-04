@@ -14,6 +14,10 @@ pytestmark = pytest.mark.integration
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def definicao(view: str) -> str:
+    return f"SELECT pg_get_viewdef('{view}'::regclass)"
+
+
 async def test_upgrade_existing_publication_and_downgrade(infrastructure):
     # Banco isolado no container da suíte; as roles já existem no cluster.
     name = 'migration_' + uuid4().hex
@@ -73,6 +77,9 @@ async def test_upgrade_existing_publication_and_downgrade(infrastructure):
         await migrate('upgrade', 'head')
         assert await db.fetchval('SELECT ordem_publicacao FROM operations.cargas') == 1
         assert await db.fetchval('SELECT count(*) FROM portal_read.inspecoes') == 0
+        # A 0002 criou a view do portal sobre ai_read.inspecoes; a 0004 a desliga da IA
+        # antes de trocar o tipo de irregularidade, para o portal seguir com o texto livre.
+        assert 'ai_read' not in await db.fetchval(definicao('portal_read.inspecoes'))
         await load(ROOT / 'contracts/samples', importer_url)
         assert await db.fetchval('SELECT max(ordem_publicacao) FROM operations.cargas') == 2
         assert await db.fetchval('SELECT count(*) FROM portal_read.inspecoes') == 2
@@ -82,15 +89,15 @@ async def test_upgrade_existing_publication_and_downgrade(infrastructure):
         await migrate('upgrade', 'head')
         await load(ROOT / 'contracts/samples', importer_url)
         assert await db.fetchval('SELECT count(*) FROM portal_read.inspecoes') == 2
-        # Num banco já carregado, a 0004 troca as views da IA sem esperar outra carga.
+        # Num banco já carregado, a 0004 troca as views sem esperar outra carga, e as
+        # views que ela cria são as mesmas da carga (importador/views.sql).
+        views = ('ai_read.fila_inspecao', 'ai_read.inspecoes', 'portal_read.inspecoes')
+        da_carga = {view: await db.fetchval(definicao(view)) for view in views}
         await migrate('downgrade', '0003')
-        definicao = "SELECT pg_get_viewdef('ai_read.fila_inspecao'::regclass)"
-        assert 'ordens_inspecao' not in await db.fetchval(definicao)
+        assert 'ordens_inspecao' not in await db.fetchval(definicao('ai_read.fila_inspecao'))
+        assert 'translate' not in await db.fetchval(definicao('ai_read.inspecoes'))
         await migrate('upgrade', 'head')
-        assert 'ordens_inspecao' in await db.fetchval(definicao)
-        assert 'translate' in await db.fetchval(
-            "SELECT pg_get_viewdef('ai_read.inspecoes'::regclass)"
-        )
+        assert {view: await db.fetchval(definicao(view)) for view in views} == da_carga
     finally:
         await db.close()
         await admin.execute(f'DROP DATABASE {name}')
