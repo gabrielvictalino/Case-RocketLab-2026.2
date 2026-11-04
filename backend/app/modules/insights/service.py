@@ -4,7 +4,9 @@ Os fatos saem dos mesmos serviços que a tela usa, numa sessão curta do portal,
 modelo só redige. O insight fica no Redis por tela, fatos e versão do redator (modelo e
 instruções): enquanto os números da tela não mudam, ele não volta ao modelo. Uma inspeção
 concluída que muda a taxa de acerto muda os fatos, e o próximo pedido gera outro insight
-sem invalidação manual.
+sem invalidação manual. Uma geração em que poucas observações passam na validação também
+fica guardada, por pouco tempo: abrir a tela de novo com os mesmos fatos não volta ao
+modelo nem gasta a cota até o prazo vencer.
 
 O módulo não tem `repository`: não há SQL próprio. Os fatos vêm dos serviços de `kpis` e
 `receita`, e os recortes válidos, do serviço de `meta`, que confere a carga publicada.
@@ -33,6 +35,9 @@ from app.modules.meta import service as meta
 from app.modules.receita import service as receita
 
 TTL_S = 24 * 60 * 60
+# O modelo não é determinístico: depois deste prazo, os mesmos fatos voltam a ele.
+TTL_FALHA_S = 10 * 60
+SEM_OBSERVACOES_VALIDAS = 'Nenhuma observação do modelo passou na validação'
 # Reserva da cota diária por insight: os fatos e as instruções somam uns 2 mil tokens.
 RESERVA_TOKENS = 5_000
 
@@ -68,6 +73,9 @@ async def insight(state, tela, periodo, comparacao, recorte, usuario) -> Insight
     chave = f'insight:{tela_pronta.carga.batch_id}:{tela}:{state.redator.versao}:{resumo}'
     if (guardado := await _ler(state.redis, chave)) is not None:
         return guardado
+    falha = f'{chave}:falha'
+    if await _falhou_ha_pouco(state.redis, falha):
+        raise APIError(503, SEM_OBSERVACOES_VALIDAS, 'INSIGHT_INDISPONIVEL')
     # Só o que vai ao modelo conta no limite e na cota: um insight do cache não gasta.
     settings = state.settings
     reserva = await limites.reservar_cota(
@@ -83,7 +91,13 @@ async def insight(state, tela, periodo, comparacao, recorte, usuario) -> Insight
             rotulo='insights',
             codigo='LIMITE_DE_INSIGHTS',
         )
-        gerado = await _redigir(state, pedido, uso, tela)
+        gerado = await _redigir(state, pedido, uso)
+    except InsightIndisponivel as erro:
+        # Só a validação vai para o cache: o tempo esgotado e o provedor fora do ar são
+        # passageiros, e o próximo pedido tenta de novo.
+        logger.warning('tela=%s %s', tela, erro)
+        await _guardar_falha(state.redis, falha)
+        raise APIError(503, SEM_OBSERVACOES_VALIDAS, 'INSIGHT_INDISPONIVEL') from None
     finally:
         await limites.acertar_cota(state.redis, reserva, uso.input_tokens + uso.output_tokens)
     if gerado.descartadas:
@@ -99,7 +113,7 @@ async def insight(state, tela, periodo, comparacao, recorte, usuario) -> Insight
     return resposta
 
 
-async def _redigir(state, pedido: PedidoInsight, uso: RunUsage, tela: str):
+async def _redigir(state, pedido: PedidoInsight, uso: RunUsage):
     """Chama o redator com o teto de tempo. Só o que acontece dentro do teto passa pelos
     ramos dele: um TimeoutError de fora (do limite por minuto, por exemplo) não chega a
     ler o `limite`."""
@@ -115,11 +129,6 @@ async def _redigir(state, pedido: PedidoInsight, uso: RunUsage, tela: str):
     except ProvedorIndisponivel:
         raise APIError(
             503, 'O provedor do modelo está indisponível', 'PROVEDOR_INDISPONIVEL'
-        ) from None
-    except InsightIndisponivel as erro:
-        logger.warning('tela=%s %s', tela, erro)
-        raise APIError(
-            503, 'Nenhuma observação do modelo passou na validação', 'INSIGHT_INDISPONIVEL'
         ) from None
 
 
@@ -187,3 +196,18 @@ async def _guardar(redis, chave, resposta: Insight):
         await redis.set(chave, resposta.model_dump_json(), ex=TTL_S)
     except FALHAS_DO_REDIS:
         logger.warning('redis indisponível; insight não guardado')
+
+
+async def _falhou_ha_pouco(redis, chave) -> bool:
+    try:
+        return bool(await redis.exists(chave))
+    except FALHAS_DO_REDIS:
+        # Sem Redis, o pedido vai ao modelo, como no cache do insight.
+        return False
+
+
+async def _guardar_falha(redis, chave):
+    try:
+        await redis.set(chave, '1', ex=TTL_FALHA_S)
+    except FALHAS_DO_REDIS:
+        logger.warning('redis indisponível; falha do insight não guardada')

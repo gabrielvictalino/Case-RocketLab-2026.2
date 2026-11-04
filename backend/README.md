@@ -358,7 +358,10 @@ fora do ar e tempo esgotado também são 503 (`PROVEDOR_INDISPONIVEL`,
 `insight:{batch_id}:{tela}:{versão do redator}:{sha1(pedido)}`: a versão muda com o
 modelo e as instruções, e o pedido inclui os fatos. Enquanto os números da tela não
 mudam, ele sai do cache; uma inspeção concluída que muda a taxa de acerto gera outro,
-sem invalidação manual. Só quem vai ao modelo gasta `rl:{usuario}:insights`
+sem invalidação manual. Uma geração com menos de 3 observações válidas fica 10 min em
+`insight:...:falha`, na mesma chave: nesse prazo, os mesmos fatos respondem
+`503 INSIGHT_INDISPONIVEL` sem ir ao modelo. Provedor fora do ar e tempo esgotado não
+entram no cache. Só quem vai ao modelo gasta `rl:{usuario}:insights`
 (`INSIGHTS_POR_MINUTO`, padrão 30, `429 LIMITE_DE_INSIGHTS`) e a cota diária de tokens.
 Sem Redis, o insight é gerado a cada pedido.
 

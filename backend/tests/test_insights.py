@@ -9,6 +9,7 @@ from pydantic_ai.models.function import FunctionModel
 from redis.asyncio import Redis
 from venergy_ai.insights import RedatorDeInsights
 
+from app.modules.insights import service
 from app.modules.meta import repository as meta_repository
 
 pytestmark = pytest.mark.integration
@@ -185,7 +186,36 @@ async def test_sem_observacao_valida_responde_503(portal_insights):
     resposta = await http.get('/api/v1/insights/visao-geral', params=PERIODO, headers=headers)
     assert resposta.status_code == 503
     assert resposta.json()['code'] == 'INSIGHT_INDISPONIVEL'
-    # Nada vai para o cache: o próximo pedido tenta de novo.
+    # Só a falha vai para o cache, e por pouco tempo; nenhum insight é guardado.
+    chaves = [chave.decode() async for chave in app.state.redis.scan_iter('insight:*')]
+    assert len(chaves) == 1 and chaves[0].endswith(':falha')
+    assert 0 < await app.state.redis.ttl(chaves[0]) <= service.TTL_FALHA_S
+
+
+async def test_falha_recente_nao_volta_ao_modelo_nem_gasta_o_limite(portal_insights):
+    app, http, headers = portal_insights
+    app.state.settings = app.state.settings.model_copy(update={'insights_por_minuto': 1})
+    invalida = [{'chave': 'receita', 'texto': 'A receita subiu 987,65%.'}]
+    chamadas = usar_modelo(app, lambda fatos: invalida)
+    url = '/api/v1/insights/visao-geral'
+    for _ in range(3):
+        resposta = await http.get(url, params=PERIODO, headers=headers)
+        assert resposta.status_code == 503
+        assert resposta.json()['code'] == 'INSIGHT_INDISPONIVEL'
+    assert len(chamadas) == 1
+    # Vencido o prazo, os mesmos fatos voltam ao modelo.
+    async for chave in app.state.redis.scan_iter('insight:*:falha'):
+        await app.state.redis.delete(chave)
+    usar_modelo(app, da_visao_geral)
+    app.state.settings = app.state.settings.model_copy(update={'insights_por_minuto': 10})
+    assert (await http.get(url, params=PERIODO, headers=headers)).status_code == 200
+
+
+async def test_falha_passageira_do_provedor_nao_vai_para_o_cache(portal_insights):
+    app, http, headers = portal_insights
+    usar_modelo(app, ModelHTTPError(503, 'simulado', 'fora do ar'))
+    resposta = await http.get('/api/v1/insights/visao-geral', params=PERIODO, headers=headers)
+    assert resposta.json()['code'] == 'PROVEDOR_INDISPONIVEL'
     assert [chave async for chave in app.state.redis.scan_iter('insight:*')] == []
 
 
