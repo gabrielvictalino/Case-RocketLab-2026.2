@@ -295,7 +295,7 @@ export function formatarIntervaloPeriodo(
 }
 
 const formatoCompacto = new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 2 })
-const moedaCompacta = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', notation: 'compact', maximumFractionDigits: 2 })
+const moedaCompacta = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', notation: 'compact', minimumFractionDigits: 0, maximumFractionDigits: 2 })
 
 export function formatarNumeroCompacto(valor: ValorNumerico): string {
   const numero = converterNumero(valor)

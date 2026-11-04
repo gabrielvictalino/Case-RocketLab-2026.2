@@ -1,5 +1,7 @@
 # Gold `dim_uc` (`GOLD_DIM_UC_V1`)
 
+[Índice do dicionário da Gold](decisoes_silver_to_gold.md), domínio 5.
+
 | Item | Referência |
 | :--- | :--- |
 | **Notebook** | `data-engineering/silver_to_gold/silver-to-gold-dim-uc.ipynb` (autocontido; sem módulo `.py` e sem `%run`) |
@@ -85,6 +87,22 @@ As quatro fontes são lidas com `VERSION AS OF` da versão do início da execuç
 | `alimentador` | `string` | Não | `alimentador` | Alimentador (`ALM-<MUN>-<NNN>`), presente na `dim_alimentador` |
 | `flag_gd` | `boolean` | Não | `gd_uc` | UC com geração distribuída (seção 2.5) |
 | `flag_irregularidade_confirmada` | `boolean` | Não | `tb_inspecoes` | UC com irregularidade confirmada em inspeção (seção 2.6) |
+
+### 3.1. Fórmulas das flags e das contagens cadastrais
+
+| Campo / indicador | Fórmula / base | Decisões que afetam o cálculo |
+| :--- | :--- | :--- |
+| `flag_gd` | `EXISTS(gd_uc WHERE gd_uc.id_uc = dim_uc.id_uc)` | R4 confere a equivalência nos dois sentidos; é retrato cadastral |
+| `flag_irregularidade_confirmada` | Existência de ao menos uma inspeção da UC com `resultado = IRREGULARIDADE CONFIRMADA` | Resultado padronizado na Silver; inspeção posterior sem irregularidade não apaga o histórico |
+| UCs por município, bairro, classe ou alimentador | `COUNT(*)` na `dim_uc`, agrupado pelos recortes | Chave única e todas as UCs da Silver, sem descartar inativas ou sem leitura; bairro deve ser combinado com município |
+| UCs com GD / irregularidade / ambas | `COUNT(*)` filtrado por cada flag, ou pelo `AND` delas | As flags são independentes; somar os dois totais conta duas vezes UCs na interseção |
+
+As contagens são indicadores derivados em consulta, não novas tabelas Gold.
+A limpeza da [Silver de cadastro](../silver/silver_unidades_consumidoras.md)
+(duplicatas, cadastros de teste, classes e bairros padronizados) define a base
+das contagens e o denominador da continuidade. A Gold não refaz essa limpeza.
+Para receita por mês, use `grupo_uc` temporal do detalhe comercial: estas flags
+atuais não informam a situação da UC em todas as competências anteriores.
 
 ## 4. Validações
 

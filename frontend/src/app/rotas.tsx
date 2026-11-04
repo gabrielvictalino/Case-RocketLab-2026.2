@@ -1,8 +1,6 @@
-import {
-  createBrowserRouter,
-  Navigate,
-  type RouteObject,
-} from 'react-router'
+import { RedirecionarRotaUc } from './RedirecionarRotaUc'
+
+import { Navigate, createBrowserRouter, type RouteObject } from 'react-router'
 import { PaginaLogin } from '@/app/auth/PaginaLogin'
 import { RotaProtegida } from '@/app/auth/RotaProtegida'
 import { LayoutPrincipal } from '@/app/layout/LayoutPrincipal'
@@ -41,6 +39,10 @@ export const rotas: RouteObject[] = [
       {
         path: 'unidade-consumidora',
         element: <PaginaUnidadeConsumidora />,
+      },
+      {
+        path: 'ucs/:id',
+        element: <RedirecionarRotaUc />,
       },
       {
         path: 'perdas',
