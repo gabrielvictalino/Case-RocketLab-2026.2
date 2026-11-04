@@ -102,6 +102,23 @@ async def test_teto_de_tempo_cancela_a_consulta_sem_virar_erro_de_sql(executor):
     assert (await executor.executar('SELECT 1 AS um')).linhas == [[1]]
 
 
+async def test_cancelamentos_seguidos_nao_esgotam_o_pool(infrastructure):
+    # Uma conexão que não volta ao pool depois do cancelamento esgotaria as vagas: com
+    # uma vaga só e pool_timeout curto, a consulta final travaria no checkout.
+    engine = create_async_engine(
+        infrastructure['settings'].database_url_ai, pool_size=1, max_overflow=0, pool_timeout=2
+    )
+    try:
+        executor = ExecutorAiRead(engine)
+        for _ in range(3):
+            with pytest.raises(TimeoutError):
+                async with asyncio.timeout(0.2):
+                    await executor.executar('SELECT count(*) FROM generate_series(1, 400000000)')
+        assert (await executor.executar('SELECT 1 AS um')).linhas == [[1]]
+    finally:
+        await engine.dispose()
+
+
 async def test_consultas_de_referencia_da_avaliacao_rodam_na_ai_read(executor):
     from pathlib import Path
 
