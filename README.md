@@ -19,7 +19,15 @@ em [backend/README.md](backend/README.md). As pendências para a Gold real estã
 Comandos de desenvolvimento, testes, proxy e geração do cliente OpenAPI do portal
 web estão em [frontend/README.md](frontend/README.md).
 
-## Camada Gold de faturas
+## Dados
+
+O [dicionário de dados da Gold](docs/gold/decisoes_silver_to_gold.md) reúne as
+12 tabelas do contrato e as saídas analíticas por domínio, com notebook produtor,
+grão, fórmulas e decisões de limpeza que afetam os indicadores.
+Os layouts de exportação estão em [contracts/README.md](contracts/README.md);
+a auditoria das fontes está em [docs/overview_dados/README.md](docs/overview_dados/README.md).
+
+### Camada Gold de faturas
 
 O [guia de execução](data-engineering/README.md) descreve o notebook PySpark,
 a publicação Delta, a exportação CSV e o Job Databricks da Gold de faturas.

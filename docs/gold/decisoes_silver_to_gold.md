@@ -1,4 +1,4 @@
-# Decisões e Perguntas de Negócio — Silver to Gold (V-Energy Grid 360)
+# Dicionário de dados da Gold — índice, decisões e perguntas de negócio
 
 Documento vivo e compartilhado pela equipe de Engenharia de Dados para consolidar:
 1. **Quais tabelas Gold** compõem o schema `` `v-energy`.gold ``;
@@ -6,21 +6,82 @@ Documento vivo e compartilhado pela equipe de Engenharia de Dados para consolida
 3. **Quais perguntas de negócio das lideranças** (`case_final_rocketlab.md`, seções 4.2, 4.3 e 5.2) cada tabela responde;
 4. **Quais decisões de limpeza da Silver/Gold afetam os números finais** (requisito obrigatório do dicionário da Gold na seção 5.2.1 do case).
 
-> **Como contribuir (para a equipe):** ao desenvolver ou atualizar o notebook `silver_to_gold` do seu domínio, preencha a respectiva seção abaixo e adicione o link para o dicionário detalhado da sua entrega em `docs/gold/<dominio>.md`.
+Este é o ponto de entrada do dicionário exigido na seção 5.2.1 do case (#108).
+Os documentos de domínio abaixo definem colunas, métricas, fórmulas, nulidades
+e decisões de limpeza. Os [YAMLs do contrato](../../contracts/tabelas/) são a
+referência de layout, tipos e chaves para a exportação; a versão atual é
+`0.3.0-provisional`, ainda não aprovada como contrato completo.
+
+**Como manter:** ao integrar uma Gold, atualize sua linha no inventário e o doc
+do domínio no mesmo PR. Registre a fórmula, unidade, grão, comportamento sem
+base de cálculo, arredondamento e o tratamento Silver/Gold que muda o indicador.
+Os números das bases nos docs são evidências de execuções anteriores, não metas
+fixas nem uma verificação do estado atual do Databricks.
 
 ---
 
-## 1. Visão Consolidada: Domínios da Gold × Fontes Silver × Lideranças Atendidas
+## 1. Inventário por tabela
 
-| Domínio Gold | Notebook / Módulo | Tabelas Silver Cruzadas (`JOIN`) | Tabelas Gold Publicadas | Lideranças / Módulos Consumidores | Dicionário Detalhado |
+**Contrato** identifica cada uma das 12 tabelas de `contracts/tabelas/`. **Analítica** identifica saídas fora desse contrato.
+Implementada significa que há produtor na `dev`; não comprova publicação ou
+homologação de um lote real. Todos os destinos usam o schema padrão
+`` `v-energy`.gold ``, configurável nos notebooks.
+
+| Domínio | Tabela / saída lógica | Tipo | Grão | Notebook produtor | Dicionário / situação |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **1. Geração Distribuída (GD)** | `silver-to-gold-geracao-distribuida.ipynb` | • `tb_geracao_distribuida`<br>• `tb_unidades_consumidoras`<br>• `tb_leituras` | • `gd_uc`<br>• `tb_gd_uc`<br>• `tb_gd_consumo_mensal`<br>• `tb_gd_resumo_mensal` | • **Henrique Duarte** (Comercial)<br>• **Camila Barreto** (Atendimento)<br>• **Rafael Coutinho** (Perdas)<br>• **Patrícia Lins** (TI / Agente IA) | [`docs/gold/geracao_distribuida.md`](geracao_distribuida.md) |
-| **2. Faturamento e Receita** | `silver-to-gold-faturas.ipynb`<br>`gold_faturas.py` *(PR #67)* | • `tb_faturas`<br>• `tb_faturas_pendentes_cadastro`<br>• `tb_unidades_consumidoras`<br>• `tb_leituras` | • `tb_faturas`<br>• `tb_faturas_excluidas`<br>• `tb_faturamento_mensal`<br>• `uc_consumo_faturamento_mensal`<br>• `receita_volume_mensal` | • **Henrique Duarte** (Comercial)<br>• **Camila Barreto** (Atendimento)<br>• **Diretoria** (Visão Geral) | `docs/gold/faturas.md` *(em revisão no PR #67)* |
-| **3. Continuidade da Rede (DEC/FEC)** | `silver-to-gold-continuidade.ipynb` | • `tb_ocorrencias_rede`<br>• `tb_unidades_consumidoras` | • `continuidade_alimentador_mensal`<br>• `ocorrencias_uc`<br>• `dim_alimentador` | • **Beatriz Farias** (Operação)<br>• **Camila Barreto** (Atendimento) | [`docs/gold/continuidade.md`](continuidade.md) |
-| **4. Perdas e Fila de Inspeção** | `silver-to-gold-perdas.ipynb` | • `tb_inspecoes`<br>• `tb_leituras`<br>• `tb_unidades_consumidoras`<br>• `tb_medidores`<br>• `tb_faturas`<br>• `gd_uc` (Gold de GD) | • `inspecoes_historicas`<br>• `fila_inspecao` | • **Rafael Coutinho** (Perdas)<br>• **Henrique Duarte** (Comercial) | [`docs/gold/perdas.md`](perdas.md) |
-| **5. Cadastro 360, Medidores e Atendimentos** | Medidores: `silver-to-gold-medidores.ipynb`<br>Atendimentos: `silver-to-gold-atendimentos.ipynb`<br>Cadastro: `silver-to-gold-dim-uc.ipynb` | • `tb_unidades_consumidoras`<br>• `tb_medidores`<br>• `tb_atendimentos`<br>• `tb_inspecoes`<br>• `gd_uc` e `dim_alimentador` (Golds de GD e de continuidade) | • `dim_uc`<br>• `medidores_historico`<br>• `tb_medidores_historico`<br>• `atendimentos`<br>• `atendimentos_historico` | • **Camila Barreto** (Atendimento)<br>• **Rafael Coutinho** (Perdas)<br>• **Henrique Duarte** (Comercial)<br>• **Patrícia Lins** (TI / Agente IA) | Medidores: [`docs/gold/medidores.md`](medidores.md)<br>Atendimentos: [`docs/gold/atendimentos.md`](atendimentos.md)<br>Cadastro: [`docs/gold/dim_uc.md`](dim_uc.md) |
+| 1. GD | `gd_uc` | Contrato | UC | [GD](../../data-engineering/silver_to_gold/silver-to-gold-geracao-distribuida.ipynb) | [GD](geracao_distribuida.md) — implementada |
+| 1. GD | `tb_gd_uc` | Analítica | UC | [GD](../../data-engineering/silver_to_gold/silver-to-gold-geracao-distribuida.ipynb) | [GD](geracao_distribuida.md) — implementada |
+| 1. GD | `tb_gd_consumo_mensal` | Analítica | UC × competência com leitura | [GD](../../data-engineering/silver_to_gold/silver-to-gold-geracao-distribuida.ipynb) | [GD](geracao_distribuida.md) — implementada |
+| 1. GD | `tb_gd_resumo_mensal` | Analítica | competência × município × bairro × classe × modalidade | [GD](../../data-engineering/silver_to_gold/silver-to-gold-geracao-distribuida.ipynb) | [GD](geracao_distribuida.md) — implementada |
+| 2. Faturamento e receita | `uc_consumo_faturamento_mensal` | Contrato | UC × competência com leitura | [Faturas](../../data-engineering/silver_to_gold/silver-to-gold-faturas.ipynb) | [Faturas](faturas.md) — implementada |
+| 2. Faturamento e receita | `receita_volume_mensal` | Contrato | competência × município × bairro × classe × grupo de UC | [Faturas](../../data-engineering/silver_to_gold/silver-to-gold-faturas.ipynb) | [Faturas](faturas.md) — implementada |
+| 2. Faturamento e receita | `tb_faturas` → `faturas` | Analítica | fatura elegível | [Faturas](../../data-engineering/silver_to_gold/silver-to-gold-faturas.ipynb) | [Faturas](faturas.md) — implementada, revisão física |
+| 2. Faturamento e receita | `tb_faturas_excluidas` → `faturas_excluidas` | Analítica | fatura segregada | [Faturas](../../data-engineering/silver_to_gold/silver-to-gold-faturas.ipynb) | [Faturas](faturas.md) — implementada, revisão física |
+| 2. Faturamento e receita | `tb_faturamento_mensal` → `faturamento_mensal` | Analítica | competência × município × bairro × classe × referência | [Faturas](../../data-engineering/silver_to_gold/silver-to-gold-faturas.ipynb) | [Faturas](faturas.md) — implementada, revisão física |
+| 2. Faturamento e receita | `consumo_proveniencia` | Analítica de auditoria | UC × competência com leitura | [Faturas](../../data-engineering/silver_to_gold/silver-to-gold-faturas.ipynb) | [Faturas](faturas.md) — implementada, revisão física |
+| 2. Faturamento e receita | `complemento_proveniencia` | Analítica de auditoria | fatura elegível | [Faturas](../../data-engineering/silver_to_gold/silver-to-gold-faturas.ipynb) | [Faturas](faturas.md) — implementada, revisão física |
+| 2. Faturamento e receita | `cobertura_volume` | Analítica de auditoria | grão comercial × método de consumo × tipo de leitura | [Faturas](../../data-engineering/silver_to_gold/silver-to-gold-faturas.ipynb) | [Faturas](faturas.md) — implementada, revisão física |
+| 3. Continuidade | `continuidade_alimentador_mensal` | Contrato | alimentador × competência | [Continuidade](../../data-engineering/silver_to_gold/silver-to-gold-continuidade.ipynb) | [Continuidade](continuidade.md) — implementada |
+| 3. Continuidade | `ocorrencias_uc` | Contrato | ocorrência por UC | [Continuidade](../../data-engineering/silver_to_gold/silver-to-gold-continuidade.ipynb) | [Continuidade](continuidade.md) — implementada |
+| 3. Continuidade | `dim_alimentador` | Contrato | alimentador | [Continuidade](../../data-engineering/silver_to_gold/silver-to-gold-continuidade.ipynb) | [Continuidade](continuidade.md) — implementada |
+| 4. Perdas e inspeção | `inspecoes_historicas` | Contrato | inspeção | [Perdas](../../data-engineering/silver_to_gold/silver-to-gold-perdas.ipynb) | [Perdas](perdas.md) — implementada |
+| 4. Perdas e inspeção | `fila_inspecao` | Contrato | UC candidata | [Perdas](../../data-engineering/silver_to_gold/silver-to-gold-perdas.ipynb) | [Perdas](perdas.md) — implementada |
+| 5. Cadastro 360 | `dim_uc` | Contrato | UC | [Cadastro](../../data-engineering/silver_to_gold/silver-to-gold-dim-uc.ipynb) | [Cadastro](dim_uc.md) — implementada |
+| 5. Cadastro 360 | `medidores_historico` | Contrato | instalação de medidor | [Medidores](../../data-engineering/silver_to_gold/silver-to-gold-medidores.ipynb) | [Medidores](medidores.md) — implementada |
+| 5. Cadastro 360 | `tb_medidores_historico` | Analítica | instalação de medidor | [Medidores](../../data-engineering/silver_to_gold/silver-to-gold-medidores.ipynb) | [Medidores](medidores.md) — implementada |
+| 5. Cadastro 360 | `atendimentos` | Contrato | protocolo | [Atendimentos](../../data-engineering/silver_to_gold/silver-to-gold-atendimentos.ipynb) | [Atendimentos](atendimentos.md) — implementada |
+| 5. Cadastro 360 | `atendimentos_historico` | Contrato | protocolo × sequência | [Atendimentos](../../data-engineering/silver_to_gold/silver-to-gold-atendimentos.ipynb) | [Atendimentos](atendimentos.md) — implementada |
 
-**Nomes das tabelas Gold:** cada tabela do contrato do portal leva o nome do contrato, sem prefixo (`gd_uc`, `continuidade_alimentador_mensal`), o mesmo do `<tabela>.csv` que o importador espera (`contracts/tabelas/<tabela>.yaml`). As tabelas analíticas fora do contrato levam o prefixo `tb_` (`tb_gd_uc`, `tb_gd_consumo_mensal`).
+### 1.1. Nomes físicos e tabelas técnicas de faturas
+
+O nome sem prefixo do contrato é também o nome do CSV esperado pelo importador.
+O prefixo `tb_` distingue as analíticas de GD e medidores. Em faturas, os nomes
+`tb_faturas`, `tb_faturas_excluidas` e `tb_faturamento_mensal` são referências
+lógicas/legadas: o produtor atual não atualiza esses destinos fixos.
+O [notebook de faturas](../../data-engineering/silver_to_gold/silver-to-gold-faturas.ipynb)
+usa [gold_faturas.py](../../data-engineering/silver_to_gold/gold_faturas.py) e
+[gold_contrato_faturas.py](../../data-engineering/silver_to_gold/gold_contrato_faturas.py)
+para publicar as oito saídas de seu domínio como revisões:
+
+| Domínio | Tabela física | Tipo | Grão / finalidade | Notebook / módulo | Doc |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| 2. Faturamento e receita | `tb_gold_faturas_<nome_logico>_revisao_<uuid>` | Revisão técnica de saída contratual ou analítica | Mesmo grão da respectiva saída acima; oito nomes lógicos, UUID por execução | [Faturas](../../data-engineering/silver_to_gold/silver-to-gold-faturas.ipynb) / `publicar_revisoes` | [Faturas](faturas.md) |
+| 2. Faturamento e receita | `tb_gold_faturas_publicacao` | Técnica, fora do contrato | Uma linha por saída lógica confirmada, com fonte e versão Delta | [Faturas](../../data-engineering/silver_to_gold/silver-to-gold-faturas.ipynb) / `publicar_revisoes` | [Faturas](faturas.md) |
+| 2. Faturamento e receita | `tb_gold_faturas_retencao` | Técnica, fora do contrato | Uma linha por revisão aposentada, com primeira observação fora do marcador | [gold_faturas.py](../../data-engineering/silver_to_gold/gold_faturas.py) / `limpar_revisoes_gold` (manutenção explícita) | [Faturas](faturas.md) |
+
+Leia o marcador uma vez e consuma `fonte`/`versao_fonte`, conforme o protocolo
+do doc de faturas. As tabelas técnicas não são indicadores adicionais. A Gold
+não publica `tb_variacao_receita`; a decomposição é calculada pelo consumidor.
+
+### 1.2. Fontes e consumidores por domínio
+
+| Domínio | Fontes | Consumidores |
+| :--- | :--- | :--- |
+| 1. GD | Silver de GD, cadastro e leituras | Comercial, Atendimento, Perdas e Agente IA |
+| 2. Faturamento e receita | Marcador/revisões da Silver de faturas, cadastro, leituras, GD, inspeções e medidores; complemento opcional | Comercial, Atendimento e Visão Geral |
+| 3. Continuidade | Silver de ocorrências e cadastro | Operação, Atendimento e Visão Geral |
+| 4. Perdas e inspeção | Previstas: Silver de inspeções, leituras, cadastro, medidores e GD; Gold `gd_uc` | Perdas e Comercial |
+| 5. Cadastro 360 | Silver de cadastro, medidores, atendimentos e inspeções; Gold `gd_uc` e `dim_alimentador` | Atendimento, Perdas, Comercial e Agente IA |
 
 ---
 
@@ -86,15 +147,22 @@ Documento vivo e compartilhado pela equipe de Engenharia de Dados para consolida
 
 ---
 
-## 3. Domínio 2 — Faturamento e Receita (`GOLD_FATURAS_V2` — PR #67)
+## 3. Domínio 2 — Faturamento e Receita (`GOLD_FATURAS_V2`)
 
-*(Resumo de referência do PR #67 — dicionário completo em `docs/gold/faturas.md` quando integrado)*
+- **Notebook:** [silver-to-gold-faturas.ipynb](../../data-engineering/silver_to_gold/silver-to-gold-faturas.ipynb).
+- **Dicionário completo:** [faturas.md](faturas.md), com o detalhe das saídas comerciais, as fórmulas, a proveniência e o protocolo de publicação.
 
 - **Tabelas publicadas:** `tb_faturas`, `tb_faturas_excluidas`, `tb_faturamento_mensal` como auxiliares, além de `uc_consumo_faturamento_mensal` e `receita_volume_mensal` do contrato.
 - **Perguntas de negócio respondidas:**
   - *Evolução da receita nominal faturada, contas pagas e inadimplência (`valor_em_aberto`, `valor_vencido`, `dias_atraso`) por competência, município, bairro e classe.*
   - *Dados comerciais para a decomposição canônica R5 no consumidor (volume, reajuste, bandeira e mix), sobre o consumo analítico.*
-  - *Segregação auditável das 32.285 faturas órfãs (`PENDENTE_CADASTRO_SILVER`) e das faturas duplicadas no mesmo mês (`MULTIPLAS_FATURAS_UC_MES`) para não inflar a receita em +1,5%.*
+  - *Segregação auditável das faturas com pendência cadastral, UC ausente do cadastro, múltiplas faturas na UC/mês ou sem leitura, preservando a reconciliação com a fonte.*
+
+O volume comercial é o consumo analítico associado à fatura elegível; as
+auxiliares usam somente o volume utilizável observado. Tarifa derivada e
+arrecadação por status seguem a convenção provisória detalhada no doc. As
+revisões também guardam `consumo_proveniencia`, `complemento_proveniencia` e
+`cobertura_volume`, para auditar doadores, imputações e cobertura.
 
 ---
 

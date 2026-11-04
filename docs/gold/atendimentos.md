@@ -1,5 +1,7 @@
 # Gold de atendimentos
 
+[Índice do dicionário da Gold](decisoes_silver_to_gold.md), domínio 5.
+
 | | |
 | :--- | :--- |
 | **Notebook** | `data-engineering/silver_to_gold/silver-to-gold-atendimentos.ipynb` |
@@ -63,6 +65,27 @@ O contrato tem só o `assunto` (6 valores), que é o que o catálogo do agente (
 | `sequencia` | `int` | não | Ordem da etapa no protocolo, a partir de 1 |
 | `data` | `timestamp_ntz` | não | Data e hora da etapa |
 | `descricao` | `string` | não | Ação registrada na etapa |
+
+### 3.1. Métricas derivadas para consulta
+
+Os indicadores abaixo são calculados sobre as tabelas; não são novas colunas
+materializadas. Aplique o recorte temporal em `aberto_em` e conte protocolos em
+`atendimentos`, antes de juntar com as várias etapas do histórico.
+
+| Indicador | Fórmula / unidade | Decisões que afetam o cálculo |
+| :--- | :--- | :--- |
+| Atendimentos | `COUNT(*)` em `atendimentos` | Protocolo único; contar o JOIN com histórico multiplicaria os chamados |
+| Em aberto / encerrados | `COUNT(*)` filtrado pelo respectivo `status` | Status pela existência de fechamento, não por reconstrução histórica em uma data de corte |
+| Satisfação média | `SUM(nota) / COUNT(nota)`, escala de 1 a 5 | Nota decimal sem arredondar para inteiro; nulas ignoradas; sem avaliações, média nula |
+| Sem avaliação (%) | `100 × (COUNT(*) − COUNT(nota)) / COUNT(*)` | Nulo significa não avaliado, não zero; conjunto vazio não tem percentual definido |
+| Etapas por protocolo | `COUNT(*)` no histórico agrupado por `protocolo` | Expansão de cada elemento do array Silver; sequência preservada e validada |
+
+A [Silver de atendimentos](../silver/silver_atendimentos.md) padroniza os
+assuntos e preserva protocolos sem avaliação. Na Gold, conversão de timestamps
+com sessão UTC preserva o mês de abertura usado no recorte. O evento de
+julho/2025 permanece na série; retirar esse mês muda volume e satisfação e
+precisa ser um filtro explícito. Para reunir recortes, recalcule a média por
+soma e contagem de notas; não faça média simples das médias por assunto.
 
 ## 4. Validações
 

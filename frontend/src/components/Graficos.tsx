@@ -11,6 +11,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import type { TooltipContentProps } from 'recharts'
 import { EstadoIndisponivel } from '@/components/Estados'
 
 export interface PontoSerieComparativa {
@@ -77,6 +78,35 @@ export function GraficoSerieComparativa({
   )
 }
 
+export function ConteudoTooltipComparativo({
+  active,
+  payload,
+  label,
+  observacoes,
+  formatarValor,
+}: {
+  active?: boolean
+  payload?: TooltipContentProps<number | string, string | number>["payload"]
+  label?: string | number
+  observacoes: Record<string, string>
+  formatarValor?: (valor: number) => string
+}) {
+  if (!active || !payload?.length) return null
+
+  const observacao = observacoes[String(label)]
+
+  return (
+    <div className="rounded-md border bg-background p-3 text-sm shadow-md">
+      <p className="mb-1 font-medium">{String(label)}</p>
+      {payload.map((item, indice) => (
+        <p key={`${item.dataKey}-${indice}`}>
+          {item.name}: {formatarValor ? formatarValor(Number(item.value)) : item.value}
+        </p>
+      ))}
+      {observacao && <p className="mt-2 text-muted-foreground">{observacao}</p>}
+    </div>
+  )
+}
 export interface GraficoBarrasComparativasProps {
   dados: PontoSerieComparativa[]
   rotuloAtual: string
@@ -85,6 +115,8 @@ export interface GraficoBarrasComparativasProps {
   altura?: number
   indisponivel?: boolean
   formatarValor?: (valor: number) => string
+  observacoes?: Record<string, string>
+  marcadores?: Record<string, string>
 }
 
 export function GraficoBarrasComparativas({
@@ -95,21 +127,41 @@ export function GraficoBarrasComparativas({
   altura = 200,
   indisponivel = false,
   formatarValor,
+  observacoes,
+  marcadores,
 }: GraficoBarrasComparativasProps) {
   if (indisponivel) {
     return <EstadoIndisponivel compacto />
   }
 
   const fillAtual = corAtual === 'data-1' ? 'var(--data-1)' : 'var(--data-2)'
-
   return (
     <div className="ve-chart" style={{ height: `${altura}px` }}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={dados}>
           <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
-          <XAxis dataKey="rotulo" stroke="var(--ink-muted)" fontSize={11} />
+          <XAxis
+            dataKey="rotulo"
+            stroke="var(--ink-muted)"
+            fontSize={11}
+            tickFormatter={(rotulo: string) => {
+              const marcador = marcadores?.[rotulo]
+              return marcador ? `${rotulo} ${marcador}` : rotulo
+            }}
+          />
           <YAxis stroke="var(--ink-muted)" fontSize={11} tickFormatter={formatarValor} />
-          <Tooltip formatter={formatarValor ? (valor) => formatarValor(Number(valor)) : undefined} />
+          <Tooltip
+            formatter={formatarValor ? (valor) => formatarValor(Number(valor)) : undefined}
+            content={observacoes ? (props) => (
+              <ConteudoTooltipComparativo
+                active={props.active}
+                payload={props.payload}
+                label={props.label}
+                observacoes={observacoes}
+                formatarValor={formatarValor}
+              />
+            ) : undefined}
+          />
           <Bar dataKey="atual" name={rotuloAtual} fill={fillAtual} />
           {rotuloComparacao && (
             <Bar

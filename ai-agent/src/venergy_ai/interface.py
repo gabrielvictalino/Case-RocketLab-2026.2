@@ -35,6 +35,9 @@ class Troca(BaseModel):
     filtros: list[str] = Field(default_factory=list)
     periodo: PeriodoUsado | None = None
     sql: str | None = None
+    # O período da tela quando a troca foi feita. Se a tela mudou de período depois, a
+    # pergunta nova sem período usa o da tela, e não o desta troca. Não vai ao prompt.
+    periodo_da_tela: Periodo | None = None
 
 
 class Contexto(BaseModel):

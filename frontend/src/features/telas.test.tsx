@@ -206,7 +206,13 @@ describe('Telas do portal e PainelAgente', () => {
     expect(link.getAttribute('href')).toContain('comparacao=2024-07..2025-06')
     fireEvent.click(screen.getByRole('button', { name: 'Perguntar ao agente' }))
     expect(screen.getByRole('dialog', { name: 'Pergunte aos dados' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', {
+        name: 'Qual bairro mais perdeu volume residencial no último ano?',
+      }),
+    ).toBeInTheDocument()
     expect(screen.getByLabelText('Pergunte sobre os dados')).toBeEnabled()
+    // Sem texto, não há o que enviar.
     expect(screen.getByRole('button', { name: 'Enviar pergunta' })).toBeDisabled()
     fireEvent.click(link)
     await waitFor(() => expect(router.state.location.pathname).toBe('/receita'))

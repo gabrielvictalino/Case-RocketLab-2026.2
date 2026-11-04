@@ -74,6 +74,11 @@ também o importador e a suíte completa, use `--all-packages`.
    `0001` assume `cargas` já existente e cria usuários, ordens, eventos e inspeções.
    `0002` acrescenta a ordem de publicação de cargas e o schema `portal_read`.
    `0003` cria `agente_auditoria`, gravada e lida só pela role `portal`.
+   `0004` dá ao `importador` `SELECT` em `id_uc` e `status` das ordens e, num banco
+   já carregado, recria na hora a fila da IA (sem as UCs com ordem ativa) e as
+   inspeções da IA (tipo de irregularidade fechado), sem esperar outra importação.
+   Antes, desliga `portal_read.inspecoes` de `ai_read.inspecoes` (a `0002` a cria
+   sobre a da IA quando já houve carga), para o portal seguir com o texto do operador.
    Alterações futuras de `cargas` devem ser migrações; não reeditar o bootstrap
    esperando que ele rode num volume existente.
 3. O importador depende dessa migração, pois as views unem inspeções novas e
@@ -85,8 +90,10 @@ também o importador e a suíte completa, use `--all-packages`.
    desconhecida aborta a publicação e preserva todo o estado anterior.
 5. As views de `ai_read` são apagadas num único `DROP` e recriadas a cada carga, cada
    uma com seu `GRANT SELECT` só para `ai_read`. A IA lê só as que estão em
-   `importador/views.sql`, sem nome, documento e endereço do titular nem a descrição
-   das tratativas.
+   `importador/views.sql`, sem nome, documento e endereço do titular, sem a descrição
+   das tratativas e sem o texto livre do tipo de irregularidade (fora dos cinco tipos
+   da Silver, a IA vê `OUTRO`). A `ai_read.fila_inspecao` tira as UCs com ordem ativa,
+   lendo `id_uc` e `status` das ordens a cada consulta.
 
 Cada importação ganha um UUID distinto, mesmo para o mesmo `batch_id` de origem.
 O UUID é a versão da carga, também publicada na chave Redis `versao_carga`.
@@ -306,7 +313,8 @@ por FK: o snapshot precisa sobreviver a uma recarga ou à retirada da UC da Gold
 O assistente roda com um teto de 30 s (`ASSISTENTE_TIMEOUT_S`). Tempo esgotado,
 falha do provedor e banco da IA fora do ar respondem 503 (`ASSISTENTE_TEMPO_ESGOTADO`,
 `PROVEDOR_INDISPONIVEL`, `BANCO_INDISPONIVEL`). Toda pergunta fica na auditoria, também
-as que falham: o erro, o SQL que já rodou e os tokens já gastos. Uma consulta lenta da
+as que falham e as que o cliente abandona no meio (`CANCELADA_PELO_CLIENTE`): o erro, o
+SQL que já rodou e os tokens já gastos. Uma consulta lenta da
 `ai_read` é erro da consulta, com nova tentativa e "não sei", e não o 503. A `tela`
 aceita só as telas do portal, e os recortes, nomes e códigos sem aspas, quebras de
 linha, `<` nem `>`: os dois chegam às instruções do modelo. A pergunta só
@@ -322,8 +330,13 @@ do Nginx):
   `ASSISTENTE_PERGUNTAS_POR_MINUTO` perguntas (padrão 20). A pergunta barrada não entra
   na janela.
 - `cota:{usuario}:{AAAA-MM-DD}`: tokens do LLM gastos no dia, também os de perguntas
-  que falharam, até `ASSISTENTE_COTA_TOKENS_DIA` (padrão 500.000). O dia vira à
-  meia-noite de Recife.
+  que falharam, até `ASSISTENTE_COTA_TOKENS_DIA` (padrão 500.000). Antes do LLM, um
+  script confere o saldo e já reserva 20.000 tokens; no fim, a reserva vira o gasto
+  real. Perguntas simultâneas do mesmo usuário não passam com o mesmo saldo, também
+  entre workers. O dia vira à meia-noite de Recife.
+- `cota-reservas:{usuario}:{AAAA-MM-DD}`: o valor que cada reserva debitou, pelo id
+  dela. O acerto desconta esse valor uma vez só, também quando a resposta da reserva se
+  perdeu num timeout depois do débito.
 
 Os dois respondem `429` com `Retry-After` (`LIMITE_DE_PERGUNTAS`,
 `COTA_DE_TOKENS_ESGOTADA`).
@@ -340,11 +353,18 @@ acerto gera outro, sem invalidação manual. Só quem vai ao modelo gasta
 `rl:{usuario}:insights` (`INSIGHTS_POR_MINUTO`, padrão 30) e a cota diária de tokens.
 Sem Redis, o insight é gerado a cada pedido.
 
-Follow-up: `conversa:{id}` no Redis guarda a dona e as últimas 5 trocas (pergunta,
-métrica, filtros, período e SQL), com TTL de 2 h renovado a cada pergunta. O agente
+Follow-up: `conversa:v2:{id}` no Redis guarda a dona, e `conversa:v2:{id}:trocas`, a
+lista das últimas 5 trocas (pergunta, métrica, filtros, período, SQL e o período da tela),
+com TTL de 2 h renovado a cada pergunta, também nas que não gravam troca. O `v2` separa
+do formato anterior (`conversa:{id}` com um JSON só): uma conversa aberta antes do deploy
+segue como conversa nova. Uma troca que não se lê mais fica fora do histórico, sem
+derrubar a pergunta. A troca nova entra num script Lua que confere a dona, acrescenta e corta
+a lista no próprio Redis: duas perguntas ao mesmo tempo na mesma conversa guardam as duas
+trocas, sem uma gravar por cima da lista que a outra leu. O agente
 recebe esse estado estruturado, e não só a transcrição: "E em Olinda?" mantém a métrica
 e o período da troca anterior e troca o município. Sem período na pergunta, vale o da
-troca anterior, depois o da tela. Uma resposta sem métrica (fora do domínio) não muda o
+troca anterior, depois o da tela; se a tela mudou de período desde a troca anterior, vale
+o da tela, com a comparação dela. Uma resposta sem métrica (fora do domínio) não muda o
 estado. Sem Redis, a pergunta segue sem histórico; o histórico permanente fica na
 auditoria e sai em `GET /assistente/conversas/{id}`.
 

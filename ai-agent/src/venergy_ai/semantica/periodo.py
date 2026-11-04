@@ -21,15 +21,24 @@ class Periodo:
     def descricao(self) -> str:
         return f'{rotulo(self.inicio)} a {rotulo(self.fim)}'
 
+    @property
+    def meses(self) -> int:
+        """Quantas competências o período tem, contando o primeiro e o último mês."""
+        return (self.fim.year - self.inicio.year) * 12 + self.fim.month - self.inicio.month + 1
+
 
 def rotulo(competencia: date) -> str:
     return f'{MESES[competencia.month - 1]}/{competencia.year}'
 
 
-def periodo_padrao(competencia_mais_recente: date) -> Periodo:
-    """Últimos 12 meses, contados de trás para a frente a partir da competência mais recente."""
+def periodo_padrao(competencia_mais_recente: date, inicio_base: date | None = None) -> Periodo:
+    """Últimos 12 meses até a competência mais recente, sem começar antes da base: o
+    backend rejeitaria o período com PERIODO_FORA_DA_BASE."""
     fim = competencia_mais_recente.replace(day=1)
-    return Periodo(deslocar(fim, 1 - MESES_PERIODO_PADRAO), fim)
+    inicio = deslocar(fim, 1 - MESES_PERIODO_PADRAO)
+    if inicio_base is not None:
+        inicio = max(inicio, inicio_base.replace(day=1))
+    return Periodo(inicio, fim)
 
 
 def periodo_comparacao(periodo: Periodo, inicio_base: date | None = None) -> Periodo | None:
