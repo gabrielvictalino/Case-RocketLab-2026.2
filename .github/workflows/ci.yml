@@ -1,0 +1,165 @@
+name: Aplicação
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+permissions:
+  contents: read
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.paths.outputs.backend }}
+      frontend: ${{ steps.paths.outputs.frontend }}
+      faturas: ${{ steps.paths.outputs.faturas }}
+      gold: ${{ steps.paths.outputs.gold }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: paths
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          python - <<'PY'
+          import os
+          import subprocess
+          base = os.environ['BASE_SHA']
+          head = os.environ['HEAD_SHA']
+          args = ['git', 'diff', '--name-only', '--no-renames', base, head]
+          if not base or set(base) == {'0'}:
+              args = ['git', 'ls-files']
+          paths = subprocess.check_output(args, text=True).splitlines()
+          backend_prefixes = ('backend/', 'ai-agent/', 'importador/', 'contracts/',
+                              'infra/postgres/', 'tests/', 'scripts/')
+          backend_files = {'pyproject.toml', 'uv.lock', '.python-version', 'conftest.py',
+                           'docker-compose.yml', 'docker-compose.override.yml', '.dockerignore',
+                           '.github/workflows/ci.yml', '.env.example'}
+          frontend_prefixes = ('frontend/',)
+          frontend_files = {'.github/workflows/ci.yml'}
+          backend = any(p.startswith(backend_prefixes) or p in backend_files for p in paths)
+          frontend = any(p.startswith(frontend_prefixes) or p in frontend_files for p in paths)
+          faturas_prefixes = ('data-engineering/',)
+          faturas_files = {'tests/test_publicacao_faturas.py', 'tests/RegexFaturas.java',
+                           '.github/workflows/ci.yml', '.github/workflows/faturas.yml'}
+          faturas = any(p.startswith(faturas_prefixes) or p in faturas_files for p in paths)
+          gold = any(p.startswith(('data-engineering/', 'contracts/', 'importador/'))
+                     or p in {'pyproject.toml', '.github/workflows/ci.yml'} for p in paths)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'backend={str(backend).lower()}\n')
+              output.write(f'frontend={str(frontend).lower()}\n')
+              output.write(f'faturas={str(faturas).lower()}\n')
+              output.write(f'gold={str(gold).lower()}\n')
+          PY
+  backend:
+    needs: [changes]
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.23'
+          enable-cache: true
+      - run: uv sync --frozen --all-packages
+      - run: uv run ruff check backend ai-agent importador contracts conftest.py
+      - run: uv run ruff format --check backend ai-agent importador contracts conftest.py
+      - run: uv run pytest -q
+  frontend:
+    needs: [changes]
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+  faturas:
+    needs: [changes]
+    if: needs.changes.outputs.faturas == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: python -m unittest discover -s tests -p test_publicacao_faturas.py -v
+  gold:
+    needs: [changes]
+    if: needs.changes.outputs.gold == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: python -m pip install -r data-engineering/requirements-test.txt
+      - run: python -m ruff check data-engineering/silver_to_gold data-engineering/tests
+      - run: python -m ruff format --check data-engineering/silver_to_gold data-engineering/tests
+      - name: Testar Gold localmente
+        env:
+          SPARK_LOCAL_IP: 127.0.0.1
+        run: python -m unittest discover -s data-engineering/tests -v
+  ci:
+    name: CI
+    if: always()
+    needs: [changes, backend, frontend, faturas, gold]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Conferir resultado
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          BACKEND_CHANGED: ${{ needs.changes.outputs.backend }}
+          BACKEND_RESULT: ${{ needs.backend.result }}
+          FRONTEND_CHANGED: ${{ needs.changes.outputs.frontend }}
+          FRONTEND_RESULT: ${{ needs.frontend.result }}
+          FATURAS_CHANGED: ${{ needs.changes.outputs.faturas }}
+          FATURAS_RESULT: ${{ needs.faturas.result }}
+          GOLD_CHANGED: ${{ needs.changes.outputs.gold }}
+          GOLD_RESULT: ${{ needs.gold.result }}
+        run: |
+          failed=0
+          if [ "$CHANGES_RESULT" != "success" ]; then
+            echo "::error::Job 'changes': esperado 'success', obtido '$CHANGES_RESULT'."
+            failed=1
+          fi
+          check_module() {
+            local mod="$1"
+            local changed="$2"
+            local result="$3"
+            local expected="skipped"
+            if [ "$changed" = "true" ]; then
+              expected="success"
+            fi
+            if [ "$result" != "$expected" ]; then
+              echo "::error::Job '$mod' (changed=$changed): esperado '$expected', obtido '$result'."
+              failed=1
+            fi
+          }
+          check_module "backend" "$BACKEND_CHANGED" "$BACKEND_RESULT"
+          check_module "frontend" "$FRONTEND_CHANGED" "$FRONTEND_RESULT"
+          check_module "faturas" "$FATURAS_CHANGED" "$FATURAS_RESULT"
+          check_module "gold" "$GOLD_CHANGED" "$GOLD_RESULT"
+          exit "$failed"

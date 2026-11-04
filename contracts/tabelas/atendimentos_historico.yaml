@@ -1,0 +1,34 @@
+version: 0.3.0-provisional
+status: provisorio-nao-aprovado
+table: atendimentos_historico
+grain: protocolo × sequência
+primary_key:
+- protocolo
+- sequencia
+columns:
+  protocolo:
+    type: text
+    nullable: false
+    unit: —
+    references:
+    - atendimentos
+    - protocolo
+    description: Número do protocolo de atendimento ao qual a etapa pertence.
+  sequencia:
+    type: integer
+    nullable: false
+    unit: —
+    minimum: 1
+    description: Número de ordem cronológica da interação dentro do protocolo.
+  data:
+    type: timestamp
+    nullable: false
+    unit: —
+    description: Data e hora em que a interação ou tratativa foi registrada.
+  descricao:
+    type: text
+    nullable: false
+    unit: —
+    description: Descrição textual do andamento ou da tratativa realizada.
+description: Histórico detalhado de etapas e tratativas operacionais dos protocolos de atendimento.
+control_totals: []

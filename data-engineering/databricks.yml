@@ -1,0 +1,232 @@
+bundle:
+  name: venergy-pipeline
+
+# Os notebooks resolvem contracts/ ao lado de data-engineering/ no repositório.
+sync:
+  paths:
+    - .
+    - ../contracts
+
+variables:
+  data_referencia:
+    description: Data AAAA-MM-DD do retrato de status da extração; não é a competência.
+  diretorio_exportacao:
+    description: Pasta de um Volume (/Volumes/catalogo/schema/volume) para os lotes CSV.
+  tabela_faturas:
+    default: v-energy.silver.tb_faturas
+  tabela_pendentes:
+    default: v-energy.silver.tb_faturas_pendentes_cadastro
+  tabela_cadastro:
+    default: v-energy.silver.tb_unidades_consumidoras
+  tabela_leituras:
+    default: v-energy.silver.tb_leituras
+  tabela_publicacao:
+    default: v-energy.silver.tb_faturas_publicacao
+  tabela_gd:
+    default: v-energy.silver.tb_geracao_distribuida
+  tabela_inspecoes:
+    default: v-energy.silver.tb_inspecoes
+  tabela_medidores:
+    default: v-energy.silver.tb_medidores
+  tabela_complemento_faturamento:
+    description: Complemento explícito opcional; vazio deriva conforme decisão da #67.
+    default: ''
+  schema_gold:
+    default: v-energy.gold
+
+resources:
+  jobs:
+    pipeline:
+      name: V-Energy - Pipeline de dados
+      # Uma execução por vez: a exportação confere que nenhuma Gold mudou durante o lote.
+      max_concurrent_runs: 1
+      # Sem cron: a extração é mensal e pontual, com data_referencia informada em cada
+      # execução (docs/workflow_databricks.md, seção 3).
+      tasks:
+        # Landing → Bronze: as 8 fontes do Volume landing
+        - task_key: landing_to_bronze
+          timeout_seconds: 3600
+          notebook_task:
+            notebook_path: ./Landing_to_Bronze.ipynb
+
+        # Bronze → Silver: cada Silver lê a própria Bronze; atendimentos e inspeções leem
+        # também a Silver de cadastro, para conferir as UCs
+        - task_key: silver_unidades_consumidoras
+          depends_on:
+            - task_key: landing_to_bronze
+          timeout_seconds: 3600
+          notebook_task:
+            notebook_path: ./bronze_to_silver/bronze-to-silver-unidades-consumidoras.ipynb
+        - task_key: silver_geracao_distribuida
+          depends_on:
+            - task_key: landing_to_bronze
+          timeout_seconds: 3600
+          notebook_task:
+            notebook_path: ./bronze_to_silver/bronze-to-silver-geracao-distribuida.ipynb
+        - task_key: silver_leituras
+          depends_on:
+            - task_key: landing_to_bronze
+          timeout_seconds: 3600
+          notebook_task:
+            notebook_path: ./bronze_to_silver/bronze-to-silver-leituras.ipynb
+        - task_key: silver_medidores
+          depends_on:
+            - task_key: landing_to_bronze
+          timeout_seconds: 3600
+          notebook_task:
+            notebook_path: ./bronze_to_silver/bronze-to-silver-medidores.ipynb
+        - task_key: silver_ocorrencias_rede
+          depends_on:
+            - task_key: landing_to_bronze
+          timeout_seconds: 3600
+          notebook_task:
+            notebook_path: ./bronze_to_silver/bronze-to-silver-ocorrencias-rede.ipynb
+        - task_key: silver_atendimentos
+          depends_on:
+            - task_key: landing_to_bronze
+            - task_key: silver_unidades_consumidoras
+          timeout_seconds: 3600
+          notebook_task:
+            notebook_path: ./bronze_to_silver/bronze-to-silver-atendimentos.ipynb
+            base_parameters:
+              confirmar_publicacao: 'true'
+        - task_key: silver_faturas
+          depends_on:
+            - task_key: landing_to_bronze
+          timeout_seconds: 3600
+          notebook_task:
+            notebook_path: ./bronze-to-silver-faturas.ipynb
+            base_parameters:
+              confirmar_publicacao: 'true'
+        - task_key: silver_inspecoes
+          depends_on:
+            - task_key: silver_unidades_consumidoras
+          timeout_seconds: 3600
+          notebook_task:
+            notebook_path: ./bronze_to_silver/bronze-to-silver-inspecoes.ipynb
+            base_parameters:
+              confirmar_publicacao: 'true'
+
+        # Silver → Gold: cada Gold depende só do que lê, e todas publicam (modo=publicar) no
+        # mesmo schema_gold, que também é o das referências entre Golds (gd_uc, dim_alimentador)
+        - task_key: gold_geracao_distribuida
+          depends_on:
+            - task_key: silver_geracao_distribuida
+            - task_key: silver_unidades_consumidoras
+            - task_key: silver_leituras
+          timeout_seconds: 3600
+          notebook_task:
+            notebook_path: ./silver_to_gold/silver-to-gold-geracao-distribuida.ipynb
+            base_parameters:
+              modo: publicar
+              schema_gold: ${var.schema_gold}
+        - task_key: gold_continuidade
+          depends_on:
+            - task_key: silver_ocorrencias_rede
+            - task_key: silver_unidades_consumidoras
+          timeout_seconds: 3600
+          notebook_task:
+            notebook_path: ./silver_to_gold/silver-to-gold-continuidade.ipynb
+            base_parameters:
+              modo: publicar
+              schema_gold: ${var.schema_gold}
+        - task_key: gold_atendimentos
+          depends_on:
+            - task_key: silver_atendimentos
+            - task_key: silver_unidades_consumidoras
+          timeout_seconds: 3600
+          notebook_task:
+            notebook_path: ./silver_to_gold/silver-to-gold-atendimentos.ipynb
+            base_parameters:
+              modo: publicar
+              schema_gold: ${var.schema_gold}
+        - task_key: gold_medidores
+          depends_on:
+            - task_key: silver_medidores
+            - task_key: silver_unidades_consumidoras
+          timeout_seconds: 3600
+          notebook_task:
+            notebook_path: ./silver_to_gold/silver-to-gold-medidores.ipynb
+            base_parameters:
+              modo: publicar
+              schema_gold: ${var.schema_gold}
+        - task_key: gold_faturas
+          depends_on:
+            - task_key: silver_faturas
+            - task_key: silver_unidades_consumidoras
+            - task_key: silver_leituras
+            - task_key: silver_geracao_distribuida
+            - task_key: silver_inspecoes
+            - task_key: silver_medidores
+          timeout_seconds: 3600
+          notebook_task:
+            notebook_path: ./silver_to_gold/silver-to-gold-faturas.ipynb
+            base_parameters:
+              modo: publicar
+              data_referencia: ${var.data_referencia}
+              diretorio_exportacao: ${var.diretorio_exportacao}
+              tabela_faturas: ${var.tabela_faturas}
+              tabela_pendentes: ${var.tabela_pendentes}
+              tabela_cadastro: ${var.tabela_cadastro}
+              tabela_leituras: ${var.tabela_leituras}
+              tabela_publicacao: ${var.tabela_publicacao}
+              tabela_gd: ${var.tabela_gd}
+              tabela_inspecoes: ${var.tabela_inspecoes}
+              tabela_medidores: ${var.tabela_medidores}
+              tabela_complemento_faturamento: ${var.tabela_complemento_faturamento}
+              schema_gold: ${var.schema_gold}
+        - task_key: gold_perdas
+          depends_on:
+            - task_key: silver_leituras
+            - task_key: silver_unidades_consumidoras
+            - task_key: silver_medidores
+            - task_key: silver_inspecoes
+            - task_key: silver_faturas
+            - task_key: gold_geracao_distribuida
+          timeout_seconds: 3600
+          notebook_task:
+            notebook_path: ./silver_to_gold/silver-to-gold-perdas.ipynb
+            base_parameters:
+              modo: publicar
+              schema_gold: ${var.schema_gold}
+              tabela_gd_uc: ${var.schema_gold}.gd_uc
+        # A dim_uc confere a flag_gd contra a gd_uc e as UCs por alimentador contra a
+        # dim_alimentador, então espera as duas Golds (#145)
+        - task_key: gold_dim_uc
+          depends_on:
+            - task_key: silver_unidades_consumidoras
+            - task_key: silver_inspecoes
+            - task_key: gold_geracao_distribuida
+            - task_key: gold_continuidade
+          timeout_seconds: 3600
+          notebook_task:
+            notebook_path: ./silver_to_gold/silver-to-gold-dim-uc.ipynb
+            base_parameters:
+              modo: publicar
+              schema_gold: ${var.schema_gold}
+              tabela_gd_uc: ${var.schema_gold}.gd_uc
+              tabela_dim_alimentador: ${var.schema_gold}.dim_alimentador
+
+        # Exportação: as 12 tabelas do contrato num lote para o importador do portal
+        - task_key: gold_exportacao_portal
+          depends_on:
+            - task_key: gold_geracao_distribuida
+            - task_key: gold_continuidade
+            - task_key: gold_atendimentos
+            - task_key: gold_medidores
+            - task_key: gold_faturas
+            - task_key: gold_perdas
+            - task_key: gold_dim_uc
+          timeout_seconds: 3600
+          notebook_task:
+            notebook_path: ./silver_to_gold/gold-exportacao-portal.ipynb
+            base_parameters:
+              modo: exportar
+              data_referencia: ${var.data_referencia}
+              diretorio_exportacao: ${var.diretorio_exportacao}
+              schema_gold: ${var.schema_gold}
+
+targets:
+  dev:
+    default: true
+    mode: development

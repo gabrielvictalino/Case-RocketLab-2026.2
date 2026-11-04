@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Valida o evento do GitHub e o diff sem depender de pacotes externos."""
+
 import json
 import os
 import re
@@ -49,7 +50,9 @@ def validate(event, event_name, repository):
 if __name__ == '__main__':
     try:
         with open(os.environ['GITHUB_EVENT_PATH'], encoding='utf-8') as source:
-            validate(json.load(source), os.environ['GITHUB_EVENT_NAME'], os.environ['GITHUB_REPOSITORY'])
+            validate(
+                json.load(source), os.environ['GITHUB_EVENT_NAME'], os.environ['GITHUB_REPOSITORY']
+            )
     except (ValueError, subprocess.CalledProcessError, KeyError) as error:
         print(f'Fluxo Git: {error}', file=sys.stderr)
         sys.exit(1)

@@ -1,0 +1,206 @@
+# V-Energy Grid 360
+
+Plataforma que consolida cadastro, medição, faturamento, rede e atendimento da
+V-Energy em torno da unidade consumidora, para o portal, o agente de IA e o
+diagnóstico da receita.
+
+## Linguagem
+
+### Cadastro e rede
+
+**Unidade consumidora (UC)**:
+O ponto que recebe energia e tem um medidor; entidade central da plataforma. Um mesmo titular pode ter várias UCs.
+_Evitar_: cliente, consumidor, instalação
+
+**UC ativa**:
+Unidade consumidora com ao menos um registro mensal nas competências do período,
+inclusive quando não há fatura. Cada UC é contada uma vez no período.
+
+**Classe**:
+Categoria tarifária da UC: Residencial, Comercial, Industrial, Rural ou Poder Público.
+_Evitar_: tipo de cliente, segmento
+
+**Alimentador**:
+Circuito de média tensão que abastece um conjunto de UCs; unidade de análise da continuidade.
+_Evitar_: rede, linha, circuito
+
+### Medição
+
+**Consumo analítico**:
+Consumo (kWh) de uma competência usado nas análises e telas; igual ao original quando a leitura é utilizável. Leituras bloqueadas, incluindo trocas, são estimadas pela mediana da UC na mesma fase da GD, com fallback ao histórico utilizável da UC.
+_Evitar_: consumo corrigido, consumo tratado
+
+**Consumo original**:
+Consumo (kWh) da Silver após normalizações e correções de sinal comprovadas, preservado antes da imputação da Gold.
+_Evitar_: consumo bruto
+
+**Leitura estimada**:
+Leitura feita sem acesso ao medidor, com consumo estimado pela distribuidora.
+
+**Medidor atual**:
+Medidor instalado hoje na UC: o único dela sem data de retirada.
+
+**Troca de medidor**:
+Competência em que o medidor da UC foi substituído, e por isso o consumo original não representa o consumo real.
+
+### Tempo
+
+**Competência**:
+O mês de referência de uma leitura ou fatura, independentemente de quando foi emitida ou paga. É o eixo de tempo de toda a plataforma.
+_Evitar_: mês da fatura, mês de emissão, data
+
+**Período**:
+Intervalo contínuo de competências escolhido para análise.
+_Evitar_: intervalo, janela
+
+**Período de comparação**:
+O período contra o qual o período analisado é comparado; por padrão, o mesmo intervalo no ano anterior.
+_Evitar_: base, referência
+
+**Primeiro ano (P0)**:
+Competências de jul/2022 a jun/2023, a base usada pelo Diretor Comercial.
+
+**Últimos 12 meses (P1)**:
+Competências de jul/2025 a jun/2026, as mais recentes da base.
+_Evitar_: último ano, ano atual
+
+**Data de referência**:
+Data do instantâneo financeiro das faturas (AAAA-MM-DD), informada no manifesto da exportação. É usada para calcular dias de atraso de faturas em aberto e delimitar o status das contas na Visão 360.
+_Evitar_: data de corte, data da carga
+
+### Receita
+
+**Pendência cadastral**:
+Fatura cuja unidade consumidora não foi encontrada na versão do cadastro consultada.
+_Evitar_: fatura órfã
+
+**Receita**:
+Valor total faturado nas competências do período, com tributos. Sem qualificativo, receita é sempre a faturada.
+_Evitar_: faturamento, receita bruta
+
+**Receita arrecadada**:
+Parte da receita cujas faturas foram pagas.
+_Evitar_: receita recebida, caixa
+
+**Volume faturado**:
+Volume analítico (kWh) associado às faturas elegíveis nas competências do período, incluindo estimativas de consumo. Não comprova o volume registrado pelo sistema comercial.
+_Evitar_: consumo total, energia vendida
+
+**Efeito-volume**:
+Parte da variação de receita entre dois períodos explicada pela mudança na energia faturada, a preços do período de comparação.
+
+**Efeito-preço**:
+Parte da variação de receita explicada pela mudança de preço, dividida em reajuste (tarifa base derivada por subgrupo tarifário e competência) e bandeira. O que sobra é o efeito-mix.
+_Evitar_: efeito-tarifa
+
+**Grupo de UC**:
+Recorte temporal que classifica cada UC na competência: UCs com GD (a partir do mês de conexão), UCs com irregularidade confirmada (a partir do mês da primeira inspeção técnica com irregularidade confirmada) e demais UCs. A ordem de precedência estrita é GD > irregularidade confirmada > demais.
+_Evitar_: tipo de UC, cluster de cliente
+
+**Tarifa base**:
+Valor de referência por kWh de cada subgrupo tarifário e competência, calculado pela mediana da parcela de energia das faturas por consumo utilizável positivo, descontado o adicional da bandeira. Derivada das faturas do case, sem homologação regulatória. Os adicionais fixos do case não representam o histórico da ANEEL.
+
+**Tarifa média**:
+Receita dividida pelo volume faturado, em R$/kWh. É derivada; a base não tem tabela de tarifas.
+_Evitar_: preço, tarifa
+
+**Inadimplência**:
+Percentual da receita do período em faturas ainda em aberto, vencidas ou não.
+_Evitar_: calote, atraso (o valor vencido é a conta atrasada)
+
+**Conta em aberto**:
+Fatura ainda não paga (`ABERTA`), vencida ou não.
+_Evitar_: dívida
+
+**Conta atrasada**:
+Conta em aberto com vencimento anterior à data de referência da carga. Sem essa data, não dá para saber quais venceram.
+_Evitar_: inadimplência (que não olha o vencimento)
+
+**Explicação da conta**:
+Comparação da fatura de uma UC com a do mesmo mês do ano anterior, separando o que mudou em consumo, bandeira e tarifa. Responde à reclamação de "conta alta".
+
+### Continuidade
+
+**DEC / FEC**:
+Duração e frequência equivalentes de interrupção por UC de um alimentador no período. Comparáveis entre alimentadores e períodos, não com os limites regulatórios reais.
+
+**CHI**:
+Total de horas de interrupção somadas sobre todas as UCs interrompidas de um alimentador. Critério padrão para priorizar manutenção.
+_Evitar_: horas de falta
+
+**Evento atípico**:
+Período com interrupções muito acima do normal por causa excepcional (ex.: o evento climático de jul/2025), que pode ser excluído da análise de continuidade.
+_Evitar_: expurgo (termo regulatório que não se aplica aqui)
+
+### Perdas
+
+**Inspeção**:
+Vistoria de campo já realizada em uma UC, com resultado (irregularidade confirmada ou sem irregularidade), tipo de irregularidade e energia recuperada.
+_Evitar_: fiscalização, visita
+
+**Ordem de inspeção**:
+Pedido para vistoriar uma UC, criado no portal a partir da fila. Quando concluída, gera uma inspeção.
+_Evitar_: OS, chamado, tarefa
+
+**Ordem ativa**:
+Ordem de inspeção que ainda não foi concluída nem cancelada. Uma UC tem no máximo uma ordem ativa.
+
+**Fila de inspeção**:
+Lista de UCs suspeitas sem ordem ativa, ordenadas da mais para a menos promissora, com o motivo da suspeita e a energia estimada a recuperar.
+_Evitar_: lista de suspeitos, ranking de fraude
+
+**Reinspeção**:
+Nova ordem de inspeção para uma UC que já tem inspeção anterior.
+
+**Motivo da suspeita**:
+Os sinais que colocaram a UC na fila (queda de consumo, leituras estimadas, tipo de medidor, inspeção anterior), em linguagem do negócio.
+
+**Energia a recuperar**:
+Estimativa, em kWh, da energia não faturada que a inspeção pode recuperar se confirmar irregularidade.
+_Evitar_: kWh recuperado (esse é o valor real apurado na inspeção)
+
+**Tentativa sem acesso**:
+Ida a campo em que a vistoria não pôde ser feita (ex.: imóvel fechado). A ordem volta a aguardar nova ida; não é cancelada nem concluída.
+
+**Taxa de acerto**:
+Percentual das inspeções do período que confirmaram irregularidade.
+_Evitar_: precisão, assertividade
+
+### Atendimento
+
+**Atendimento**:
+Contato do titular de uma UC com a distribuidora, identificado por um protocolo.
+_Evitar_: chamado
+
+**Protocolo**:
+Identificador único de um atendimento, que reúne as etapas da sua linha do tempo.
+
+**Etapa do atendimento**:
+Cada registro da linha do tempo de um atendimento, em ordem cronológica pela
+sequência, independentemente da ação registrada.
+_Evitar_: tratativa, interação
+
+**Assunto**:
+Classificação temática do atendimento: `FALTA DE ENERGIA`, `FATURA`,
+`DANO ELETRICO`, `LIGACAO NOVA`, `GERACAO DISTRIBUIDA` ou `RELIGACAO`.
+Subassunto é um detalhamento do assunto presente na origem, mas não faz parte
+do contrato de atendimento.
+
+**Status do atendimento**:
+Situação do atendimento: `ENCERRADO` quando há data de fechamento, ou `EM ABERTO`
+quando não há.
+
+**Nota de satisfação**:
+Avaliação do atendimento atribuída pelo titular da UC, de 1 a 5, com uma casa
+decimal. Nota nula significa que o titular não avaliou; não é zero e não entra
+na média de satisfação.
+
+### Portal
+
+**Insight**:
+Texto gerado por IA que interpreta os números exibidos numa tela, citando apenas esses números.
+_Evitar_: análise, resumo, recomendação
+
+**Cargo**:
+Papel do usuário no portal (diretoria, comercial, atendimento, perdas, operação), que define as telas que ele vê.
+_Evitar_: perfil, permissão

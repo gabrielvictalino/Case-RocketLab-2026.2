@@ -1,0 +1,67 @@
+version: 0.3.0-provisional
+status: provisorio-nao-aprovado
+table: ocorrencias_uc
+grain: ocorrência por UC
+primary_key:
+- id_ocorrencia
+columns:
+  id_ocorrencia:
+    type: text
+    nullable: false
+    unit: —
+    pattern: ^OC\d{8}$
+    description: Código identificador único da ocorrência ou evento de interrupção.
+  id_uc:
+    type: text
+    nullable: false
+    unit: —
+    pattern: ^UC\d{6}$
+    references:
+    - dim_uc
+    - id_uc
+    description: Identificador da unidade consumidora afetada pela interrupção.
+  alimentador:
+    type: text
+    nullable: false
+    unit: —
+    pattern: ^ALM-[A-Z]{3}-\d{3}$
+    references:
+    - dim_alimentador
+    - alimentador
+    description: Alimentador associado ao circuito onde a interrupção ocorreu.
+  data_abertura:
+    type: timestamp
+    nullable: false
+    unit: —
+    description: Data e hora de início da interrupção do fornecimento.
+  data_encerramento:
+    type: timestamp
+    nullable: false
+    unit: —
+    description: Data e hora de restabelecimento do fornecimento.
+  duracao_min:
+    type: numeric(18,2)
+    nullable: false
+    unit: min
+    minimum: 0
+    description: Duração total da ocorrência calculada em minutos.
+  duracao_efetiva_min:
+    type: numeric(18,2)
+    nullable: false
+    unit: min
+    minimum: 0
+    description: Duração em minutos sem os trechos em que a UC já estava sem energia por outra ocorrência.
+  causa:
+    type: text
+    nullable: false
+    unit: —
+    description: Causa apurada da interrupção na rede elétrica.
+  flag_sobreposicao:
+    type: boolean
+    nullable: false
+    unit: —
+    description: Indica que a ocorrência começou com a UC já sem energia por outra ocorrência; só a que começou depois é marcada, e ela não conta como interrupção no FEC.
+description: Registro individualizado das interrupções de fornecimento de energia percebidas por unidade consumidora.
+control_totals:
+- duracao_min
+- duracao_efetiva_min

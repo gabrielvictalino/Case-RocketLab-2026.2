@@ -1,0 +1,29 @@
+version: 0.3.0-provisional
+status: provisorio-nao-aprovado
+table: gd_uc
+grain: UC com GD
+primary_key:
+- id_uc
+columns:
+  id_uc:
+    type: text
+    nullable: false
+    unit: —
+    pattern: ^UC\d{6}$
+    references:
+    - dim_uc
+    - id_uc
+    description: Identificador da unidade consumidora com geração distribuída.
+  potencia_kw:
+    type: numeric(18,2)
+    nullable: false
+    unit: kW
+    minimum: 0
+    description: Potência instalada de geração em quilowatts (kW).
+  data_conexao:
+    type: date
+    nullable: false
+    unit: —
+    description: Data de conexão e entrada em operação da geração distribuída.
+description: Registro das unidades consumidoras com micro ou minigeração distribuída conectada.
+control_totals: []

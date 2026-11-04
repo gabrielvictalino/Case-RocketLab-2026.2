@@ -1,0 +1,128 @@
+version: 0.3.0-provisional
+status: provisorio-nao-aprovado
+table: uc_consumo_faturamento_mensal
+grain: UC × competência
+primary_key:
+- id_uc
+- competencia
+columns:
+  id_uc:
+    type: text
+    nullable: false
+    unit: —
+    pattern: ^UC\d{6}$
+    references:
+    - dim_uc
+    - id_uc
+    description: Identificador da unidade consumidora.
+  competencia:
+    type: date
+    nullable: false
+    unit: —
+    month: true
+    description: Primeiro dia do mês de referência do faturamento e consumo.
+  consumo_kwh_original:
+    type: numeric(18,2)
+    nullable: false
+    unit: kWh
+    description: Consumo da Silver após suas normalizações de sinal; preservado antes da imputação analítica da Gold.
+  consumo_kwh_analitico:
+    type: numeric(18,2)
+    nullable: false
+    unit: kWh
+    minimum: 0
+    description: Consumo utilizável da Silver ou mediana da própria UC na fase da GD, com fallback histórico. Obrigatório; sem doadores, a exportação é bloqueada com contagem.
+  metodo_consumo:
+    type: text
+    nullable: false
+    unit: —
+    enum:
+    - LEITURA_UTILIZAVEL
+    - MEDIANA_FASE_UC
+    - MEDIANA_HISTORICA_UC
+    description: Origem do consumo analítico. LEITURA_UTILIZAVEL usa o consumo original sem ajuste; MEDIANA_FASE_UC e MEDIANA_HISTORICA_UC estimam o mês bloqueado, como o da troca de medidor, pela mediana da UC na mesma fase da GD ou em todo o histórico.
+  tipo_leitura:
+    type: text
+    nullable: false
+    unit: —
+    enum:
+    - REAL
+    - ESTIMADA
+    description: Tipo da leitura realizada no ciclo (REAL ou ESTIMADA).
+  flag_troca_medidor:
+    type: boolean
+    nullable: false
+    unit: —
+    description: Indica se houve substituição física de medidor no período de faturamento.
+  id_fatura:
+    type: text
+    nullable: true
+    unit: —
+    description: Código identificador da fatura emitida. Nulo caso a competência não tenha fatura emitida.
+  volume_faturado_kwh:
+    type: numeric(18,2)
+    nullable: false
+    unit: kWh
+    minimum: 0
+    description: Volume analítico associado à fatura elegível no case, igual a consumo_kwh_analitico, observado ou estimado conforme metodo_consumo. Não comprova volume do sistema comercial. Zero sem fatura; faturas sem leitura são segregadas.
+  valor_total:
+    type: numeric(18,2)
+    nullable: false
+    unit: R$
+    minimum: 0
+    description: Valor financeiro total cobrado na fatura emitida (zero quando não há fatura).
+  valor_arrecadado:
+    type: numeric(18,2)
+    nullable: false
+    unit: R$
+    minimum: 0
+    description: Valor financeiro efetivamente pago e arrecadado referente à fatura da competência.
+  tarifa_base:
+    type: numeric(18,6)
+    nullable: true
+    unit: R$/kWh
+    minimum: 0
+    description: Tarifa base derivada das faturas por subgrupo e competência, mediana de valor_energia dividido pelo consumo utilizável positivo menos o adicional de bandeira. Não homologada. Nulo sem fatura.
+  adicional_bandeira:
+    type: numeric(18,6)
+    nullable: true
+    unit: R$/kWh
+    minimum: 0
+    description: Adicional fixo dos dados do case (Verde 0, Amarela 0.01885, Vermelha P1 0.04463, P2 0.07877 R$/kWh); não representa o histórico regulatório da ANEEL. Nulo sem fatura.
+  bandeira:
+    type: text
+    nullable: true
+    unit: —
+    enum:
+    - VERDE
+    - AMARELA
+    - VERMELHA_P1
+    - VERMELHA_P2
+    description: Bandeira tarifária vigente na competência de faturamento. Nulo quando não há fatura emitida.
+  status_pagamento:
+    type: text
+    nullable: true
+    unit: —
+    enum:
+    - PAGA
+    - ABERTA
+    description: Situação de pagamento da fatura da competência (PAGA ou ABERTA). Nulo quando não há fatura emitida.
+  data_vencimento:
+    type: date
+    nullable: true
+    unit: —
+    description: Data limite de vencimento da fatura. Nulo quando não há fatura emitida na competência.
+  grupo_uc:
+    type: text
+    nullable: false
+    unit: —
+    enum:
+    - GD
+    - IRREGULARIDADE_CONFIRMADA
+    - DEMAIS
+    description: Classificação do grupo da UC no ciclo segundo as regras temporais de GD e perdas.
+description: Série mensal detalhada de consumo, faturamento, leitura e cobrança por unidade consumidora e competência.
+control_totals:
+- volume_faturado_kwh
+- valor_total
+- valor_arrecadado

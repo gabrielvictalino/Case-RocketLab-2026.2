@@ -1,0 +1,46 @@
+version: 0.3.0-provisional
+status: provisorio-nao-aprovado
+table: atendimentos
+grain: protocolo
+primary_key:
+- protocolo
+columns:
+  protocolo:
+    type: text
+    nullable: false
+    unit: —
+    description: Número de protocolo identificador único do atendimento.
+  id_uc:
+    type: text
+    nullable: false
+    unit: —
+    pattern: ^UC\d{6}$
+    references:
+    - dim_uc
+    - id_uc
+    description: Identificador da unidade consumidora vinculada ao atendimento.
+  aberto_em:
+    type: timestamp
+    nullable: false
+    unit: —
+    description: Data e hora de abertura do protocolo no sistema de atendimento.
+  assunto:
+    type: text
+    nullable: false
+    unit: —
+    description: Assunto ou classificação temática do atendimento.
+  status:
+    type: text
+    nullable: false
+    unit: —
+    description: 'Situação atual do atendimento (ex.: ENCERRADO, EM ABERTO).'
+  nota:
+    type: numeric(2,1)
+    nullable: true
+    unit: —
+    minimum: 1
+    maximum: 5
+    description: Nota de satisfação atribuída ao atendimento pelo titular da UC (escala de 1 a 5,
+      uma casa decimal); nulo significa que o titular não avaliou.
+description: Registro consolidado dos protocolos de atendimento das UCs da distribuidora.
+control_totals: []

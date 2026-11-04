@@ -82,22 +82,42 @@ Não habilita exclusão automática de branches para preservar `dev`.
 Confira as regras em Settings → Rules → Rulesets; disponibilidade de proteção
 em repositórios privados depende do plano GitHub.
 
-### CI da aplicação: pendente de definição da stack
+### CI da aplicação
 
-Neste momento o repositório contém apenas documentação e templates, sem
-backend, frontend, manifests ou comandos de build/teste/lint. O check atual
-valida o processo Git; ele não certifica uma aplicação compilada ou testada.
+O workflow `.github/workflows/ci.yml` (`Aplicação`) roda em todas as PRs e pushes
+para `dev` e `main`, sem filtros de caminho no evento (`on:`). Um detector
+(`changes`) compara `base` e `head` (usando `git ls-files` quando a base é vazia
+ou zerada) e define se cada módulo precisa rodar:
 
-No PR que introduzir cada aplicação, adicione ao GitHub Actions:
+- **`backend`**: dispara quando mudam `backend/`, `ai-agent/`, `importador/`,
+  `contracts/`, `infra/postgres/`, `tests/`, `scripts/` ou arquivos compartilhados
+  da raiz (`pyproject.toml`, `uv.lock`, `.python-version`, `conftest.py`,
+  `docker-compose.yml`, `docker-compose.override.yml`, `.dockerignore`,
+  `.github/workflows/ci.yml`, `.env.example`). Executa `uv sync --frozen --all-packages`,
+  Ruff (`check` e `format --check`) e `pytest` com Python 3.12 e PostgreSQL 17 /
+  Redis 7 reais via Testcontainers, incluindo os testes do fluxo Git.
+- **`frontend`**: dispara quando mudam `frontend/` ou `.github/workflows/ci.yml`.
+  Usa a versão do Node.js de `frontend/.nvmrc` (Node 24) com cache do `npm` sobre
+  `frontend/package-lock.json` e executa `npm ci`, `npm run lint` (ESLint),
+  `npm run typecheck` (`tsc --noEmit`), `npm test` (Vitest) e `npm run build`
+  (`tsc -b && vite build`).
 
-- Build e lint de backend e frontend.
-- Testes unitários de backend e frontend com lógica de negócio.
-- Testes de integração com Postgres real via Testcontainers assim que a
-  estratégia de testes for definida.
+O agregador `CI` (`if: always()`, `needs: [changes, backend, frontend, faturas, gold]`) sempre
+executa e avalia os módulos antes de terminar: exige `changes == success` e,
+para cada módulo, exige `success` quando houve mudança relevante (`changed == true`)
+ou `skipped` quando não houve (`changed != true`). Qualquer `failure`, `cancelled`
+ou `skipped` indevido emite `::error::` indicando o módulo, o valor esperado e o
+obtido, e reprova o check.
 
-Inclua os novos checks obrigatórios em ambos os rulesets e reaplique o script
-no mesmo ciclo de configuração. Evite checks filtrados por caminho sem um
-check agregador que sempre execute. Este documento deve acompanhar essas decisões.
+Os rulesets versionados (`dev.json` e `main.json`) exigem `Fluxo Git` e `CI`;
+`fluxo-git.yml` permanece independente e obrigatório. A aplicação ou reaplicação
+dos rulesets no GitHub continua sendo tarefa administrativa via
+`bash scripts/configurar-github.sh`. Ficam como pendências de evolução da CI o job
+`e2e` com Playwright (previsto para o M4) e a verificação automatizada de drift de
+`frontend/src/lib/api/schema.d.ts` contra o OpenAPI do backend (`npm run gen:api`,
+que requer o ambiente Python junto ao Node). Comandos locais estão no
+[README do backend](../backend/README.md) e no
+[README do frontend](../frontend/README.md).
 
 ## Verificação local
 
@@ -105,3 +125,14 @@ Execute `python3 -m unittest discover -s tests -v` e
 `bash -n scripts/configurar-github.sh`. Os testes usam um repositório temporário
 e verificam eventos de PR/push, rejeição de commits e branches inválidos,
 promoção somente da `dev` local e rejeição de whitespace.
+
+### Dados no agregador CI
+
+O job `faturas` preserva a suíte da publicação Silver em
+`tests/test_publicacao_faturas.py`. O job `gold` executa lint, formatação e testes
+em `data-engineering/tests`, incluindo marcadores, interrupções simuladas,
+R2/R3, exportação, montagem de lote e o próprio detector/agregador. Dispara para
+`data-engineering/`, `contracts/`, `importador/`, `pyproject.toml` e `ci.yml`.
+`gold-faturas.yml` foi removido para evitar repetir a suíte Gold. O agregador
+exige `success` quando o detector aciona o job e `skipped` quando o dispensa;
+falha, cancelamento e skip indevido reprovam o check obrigatório.

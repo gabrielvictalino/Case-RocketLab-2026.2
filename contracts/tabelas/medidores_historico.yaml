@@ -1,0 +1,39 @@
+version: 0.3.0-provisional
+status: provisorio-nao-aprovado
+table: medidores_historico
+grain: instalação de medidor
+primary_key:
+- id_medidor
+- data_instalacao
+columns:
+  id_medidor:
+    type: text
+    nullable: false
+    unit: —
+    description: Número de série ou patrimônio do medidor de energia.
+  id_uc:
+    type: text
+    nullable: false
+    unit: —
+    pattern: ^UC\d{6}$
+    references:
+    - dim_uc
+    - id_uc
+    description: Identificador da unidade consumidora onde o medidor esteve instalado.
+  data_instalacao:
+    type: date
+    nullable: false
+    unit: —
+    description: Data de instalação e início de operação do medidor no ponto de entrega.
+  data_retirada:
+    type: date
+    nullable: true
+    unit: —
+    description: Data de retirada do medidor por substituição ou desativação. Nulo se ativo.
+  tipo_medidor:
+    type: text
+    nullable: false
+    unit: —
+    description: Modelo tecnológico ou padrão de medição do equipamento.
+description: Histórico de instalação, ativação e substituição física de medidores nas unidades consumidoras.
+control_totals: []
