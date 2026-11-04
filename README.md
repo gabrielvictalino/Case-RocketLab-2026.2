@@ -27,6 +27,10 @@ grão, fórmulas e decisões de limpeza que afetam os indicadores.
 Os layouts de exportação estão em [contracts/README.md](contracts/README.md);
 a auditoria das fontes está em [docs/overview_dados/README.md](docs/overview_dados/README.md).
 
+O pipeline roda de ponta a ponta num [Workflow do Databricks](docs/workflow_databricks.md),
+da landing ao lote do portal. O Job não tem cron: a carga é mensal e pontual, com a
+data de referência de cada extração.
+
 ### Camada Gold de faturas
 
 O [guia de execução](data-engineering/README.md) descreve o notebook PySpark,

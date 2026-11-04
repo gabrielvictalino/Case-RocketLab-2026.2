@@ -547,9 +547,9 @@ falha, cancelamento ou skip indevido reprovam. Backend, frontend e `faturas`
 O bundle sincroniza também `../contracts`, necessário para carregar os YAMLs e
 VERSION a partir do módulo. Essa configuração foi conferida localmente; CLI e
 imports do runtime ainda precisam de validação no workspace.
-O nome do bundle continua `venergy-gold-faturas`: só há esta tarefa no bundle,
-e renomeá-lo sem migração pode criar outra identidade de deployment. A ampliação
-organizacional poderá acompanhar a integração das demais tarefas.
+O bundle passou a se chamar `venergy-pipeline` quando ganhou as demais tarefas do
+Workflow (#97, [`docs/workflow_databricks.md`](../workflow_databricks.md)); a Gold de
+faturas é a tarefa `gold_faturas` do Job `pipeline`, com os mesmos parâmetros.
 
 As evidências anteriores fornecidas pelo usuário comprovam 45.000 UCs Silver,
 201 em quarentena, 2.152.336 leituras e uma execução anterior da Gold em `validar`
