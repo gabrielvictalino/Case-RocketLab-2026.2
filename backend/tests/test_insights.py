@@ -232,6 +232,34 @@ async def test_redis_fora_do_ar_gera_sem_cache(portal_insights):
     assert len(chamadas) == 2
 
 
+class RedisQueEstouraNoLimite:
+    """O Redis da suíte, mas o pipeline do limite por minuto estoura com o TimeoutError
+    nativo, que não vem embrulhado em RedisError."""
+
+    def __init__(self, redis):
+        self.redis = redis
+
+    def __getattr__(self, nome):
+        return getattr(self.redis, nome)
+
+    def pipeline(self, *args, **kwargs):
+        raise TimeoutError('timeout de conexão do redis')
+
+
+async def test_timeout_do_redis_no_limite_nao_derruba_o_insight(portal_insights):
+    # Antes, o TimeoutError do limite caía no ramo do teto de tempo e lia o `limite`
+    # antes de ele existir (UnboundLocalError, 500). O limite é fail-open.
+    app, http, headers = portal_insights
+    usar_modelo(app, da_visao_geral)
+    original = app.state.redis
+    app.state.redis = RedisQueEstouraNoLimite(original)
+    try:
+        resposta = await http.get('/api/v1/insights/visao-geral', params=PERIODO, headers=headers)
+    finally:
+        app.state.redis = original
+    assert resposta.status_code == 200, resposta.text
+
+
 async def test_parametros_validados_como_na_tela(portal_insights):
     app, http, headers = portal_insights
     usar_modelo(app, da_visao_geral)

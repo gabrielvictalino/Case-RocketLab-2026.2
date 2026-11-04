@@ -8,11 +8,12 @@
   simultâneas do mesmo usuário não passam com o mesmo saldo. O dia vira à meia-noite
   de Recife.
 
-Os dois são fail-open: se o Redis cair, a pergunta segue, e o limite por IP do Nginx
-continua valendo. Quem tem cache (os insights) chama `consumir` e reserva a cota só
-quando vai ao LLM: um cache hit não gasta o limite.
+Os dois são fail-open: se o Redis cair ou não responder a tempo, a pergunta segue, e o
+limite por IP do Nginx continua valendo. Quem tem cache (os insights) chama `consumir` e
+reserva a cota só quando vai ao LLM: um cache hit não gasta o limite.
 """
 
+import asyncio
 import logging
 import math
 import time
@@ -29,15 +30,36 @@ JANELA_S = 60
 FUSO = timezone(timedelta(hours=-3))
 TTL_COTA_S = 2 * 24 * 60 * 60
 
+# Uma falha do Redis, inclusive o TimeoutError nativo que não vem embrulhado em RedisError
+# (TimeoutError herda de OSError), deixa o limite aberto, em vez de responder 500.
+FALHAS_DO_REDIS = (RedisError, OSError)
+
 # Confere o saldo e debita a reserva no mesmo passo: uma segunda pergunta já vê o saldo
-# da primeira, ainda em andamento. Devolve -1 quando a cota do dia acabou.
+# da primeira, ainda em andamento. Devolve {1, usados} quando reservou e {0, usados}
+# quando a cota do dia acabou: o status vem separado do contador. Um contador negativo
+# (a chave apagada à mão, ou perdida entre a reserva e o acerto) conta como zero.
 RESERVAR = """
 local usados = tonumber(redis.call('GET', KEYS[1]) or '0')
+if usados < 0 then
+  usados = 0
+  redis.call('SET', KEYS[1], 0, 'EX', ARGV[3])
+end
 if usados >= tonumber(ARGV[1]) then
-  return -1
+  return {0, usados}
 end
 redis.call('INCRBY', KEYS[1], ARGV[2])
 redis.call('EXPIRE', KEYS[1], ARGV[3])
+return {1, usados}
+"""
+
+# Troca a reserva pelo gasto real sem deixar o contador negativo: se a chave sumiu entre
+# a reserva e o acerto, a diferença negativa não vira crédito para o dia.
+ACERTAR = """
+local usados = redis.call('INCRBY', KEYS[1], ARGV[1])
+if usados < 0 then
+  redis.call('SET', KEYS[1], 0)
+end
+redis.call('EXPIRE', KEYS[1], ARGV[2])
 return usados
 """
 
@@ -79,7 +101,7 @@ async def consumir(
         if total <= limite:
             return
         await redis.zrem(chave, membro)
-    except RedisError:
+    except FALHAS_DO_REDIS:
         logger.warning('rota=%s redis indisponível; limite por usuário não aplicado', rota)
         return
     espera = max(1, math.ceil(mais_antiga + JANELA_S - agora))
@@ -99,11 +121,11 @@ async def reservar_cota(
     agora = time.time() if agora is None else agora
     chave = _chave_cota(usuario_id, agora)
     try:
-        usados = await redis.eval(RESERVAR, 1, chave, cota, reserva, TTL_COTA_S)
-    except RedisError:
+        reservou, _ = await redis.eval(RESERVAR, 1, chave, cota, reserva, TTL_COTA_S)
+    except FALHAS_DO_REDIS:
         logger.warning('redis indisponível; cota de tokens não conferida')
         return Reserva(chave, 0)
-    if usados >= 0:
+    if reservou:
         return Reserva(chave, reserva)
     hoje = datetime.fromtimestamp(agora, FUSO)
     amanha = datetime.combine(hoje.date() + timedelta(days=1), datetime.min.time(), FUSO)
@@ -117,16 +139,22 @@ async def reservar_cota(
 
 
 async def acertar_cota(redis, reserva: Reserva, gastos: int):
-    """Troca a reserva pelos tokens que a pergunta gastou de fato."""
+    """Troca a reserva pelos tokens que a pergunta gastou de fato.
+
+    Roda blindado: quem chama costuma estar num `finally` de uma pergunta cancelada, e o
+    cancel scope do middleware HTTP (anyio) cancela de novo a cada `await`. Sem a
+    blindagem, o acerto morreria no primeiro `await` e a reserva ficaria cobrada até a
+    meia-noite: umas 25 perguntas abandonadas esgotariam a cota do dia."""
     diferenca = gastos - reserva.tokens
     if diferenca == 0:
         return
+    await asyncio.shield(_acertar(redis, reserva.chave, diferenca))
+
+
+async def _acertar(redis, chave: str, diferenca: int):
     try:
-        async with redis.pipeline(transaction=True) as pipe:
-            pipe.incrby(reserva.chave, diferenca)
-            pipe.expire(reserva.chave, TTL_COTA_S)
-            await pipe.execute()
-    except RedisError:
+        await redis.eval(ACERTAR, 1, chave, diferenca, TTL_COTA_S)
+    except FALHAS_DO_REDIS:
         logger.warning('redis indisponível; cota não acertada em %s tokens', diferenca)
 
 
