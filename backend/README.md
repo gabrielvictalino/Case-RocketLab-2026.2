@@ -77,6 +77,8 @@ também o importador e a suíte completa, use `--all-packages`.
    `0004` dá ao `importador` `SELECT` em `id_uc` e `status` das ordens e, num banco
    já carregado, recria na hora a fila da IA (sem as UCs com ordem ativa) e as
    inspeções da IA (tipo de irregularidade fechado), sem esperar outra importação.
+   Antes, desliga `portal_read.inspecoes` de `ai_read.inspecoes` (a `0002` a cria
+   sobre a da IA quando já houve carga), para o portal seguir com o texto do operador.
    Alterações futuras de `cargas` devem ser migrações; não reeditar o bootstrap
    esperando que ele rode num volume existente.
 3. O importador depende dessa migração, pois as views unem inspeções novas e
@@ -273,9 +275,13 @@ Insights (`GET /insights/{tela}`): os fatos saem dos mesmos serviços da tela
 (`kpis` na Visão Geral; uma só consulta de `receita.dados` para a cascata, os grupos e
 os locais na Receita), numa sessão curta do portal, e o modelo só redige. Os recortes da
 URL só valem com valores que existem na carga (senão, `422 RECORTE_INVALIDO`). Todo
-número de uma observação precisa estar nos fatos e na mesma unidade (% com percentual,
-pp com variação de um fato em %, R$, kWh e h com fatos nessas unidades); a que cita um
-número de fora é descartada e, com menos de 3 válidas, a rota responde
+número de uma observação precisa estar nos fatos, na mesma unidade (% com percentual,
+pp com variação de um fato em %, R$, kWh e h com fatos nessas unidades) e na métrica que
+a frase nomeia antes dele ("a inadimplência foi de 41,2%" não sai da taxa de acerto). Os
+fatos em % não são lidos como razão ("742%" não sai de 7,42%), a escala escrita vale
+sempre ("R$ 1,2 milhão" não sai de R$ 1,20) e um ano só fica livre em contexto de tempo
+("em 2025"; "São 2025 UCs" é conferido). A observação que cita um número de fora é
+descartada e, com menos de 3 válidas, a rota responde
 `503 INSIGHT_INDISPONIVEL`. Cada valor citado traz `inicio` e `fim` no texto. Provedor
 fora do ar e tempo esgotado também são 503 (`PROVEDOR_INDISPONIVEL`,
 `INSIGHT_TEMPO_ESGOTADO`). O insight fica 24 h em
@@ -286,14 +292,18 @@ sem invalidação manual. Só quem vai ao modelo gasta `rl:{usuario}:insights`
 (`INSIGHTS_POR_MINUTO`, padrão 30, `429 LIMITE_DE_INSIGHTS`) e a cota diária de tokens.
 Sem Redis, o insight é gerado a cada pedido.
 
-Follow-up: `conversa:{id}` no Redis guarda a dona, e `conversa:{id}:trocas`, a lista
-das últimas 5 trocas (pergunta, métrica, filtros, período e SQL), com TTL de 2 h renovado
-a cada pergunta. A troca nova entra num script Lua que confere a dona, acrescenta e corta
+Follow-up: `conversa:v2:{id}` no Redis guarda a dona, e `conversa:v2:{id}:trocas`, a
+lista das últimas 5 trocas (pergunta, métrica, filtros, período, SQL e o período da tela),
+com TTL de 2 h renovado a cada pergunta, também nas que não gravam troca. O `v2` separa
+do formato anterior (`conversa:{id}` com um JSON só): uma conversa aberta antes do deploy
+segue como conversa nova. Uma troca que não se lê mais fica fora do histórico, sem
+derrubar a pergunta. A troca nova entra num script Lua que confere a dona, acrescenta e corta
 a lista no próprio Redis: duas perguntas ao mesmo tempo na mesma conversa guardam as duas
 trocas, sem uma gravar por cima da lista que a outra leu. O agente
 recebe esse estado estruturado, e não só a transcrição: "E em Olinda?" mantém a métrica
 e o período da troca anterior e troca o município. Sem período na pergunta, vale o da
-troca anterior, depois o da tela. Uma resposta sem métrica (fora do domínio) não muda o
+troca anterior, depois o da tela; se a tela mudou de período desde a troca anterior, vale
+o da tela, com a comparação dela. Uma resposta sem métrica (fora do domínio) não muda o
 estado. Sem Redis, a pergunta segue sem histórico; o histórico permanente fica na
 auditoria e sai em `GET /assistente/conversas/{id}`.
 

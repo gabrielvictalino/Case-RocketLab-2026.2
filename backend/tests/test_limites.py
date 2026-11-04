@@ -1,6 +1,7 @@
 import asyncio
 from uuid import uuid4
 
+import anyio
 import pytest
 from httpx import ASGITransport, AsyncClient
 from pydantic_ai import ModelHTTPError
@@ -9,6 +10,8 @@ from redis.asyncio import Redis
 from app.core import limites
 from app.core.errors import APIError
 from app.main import create_app
+from app.modules.assistente import service
+from app.modules.assistente.schemas import Pergunta
 from test_assistente import PLANO, TEXTO, URL, entrar, usar_modelo
 
 pytestmark = pytest.mark.integration
@@ -155,3 +158,62 @@ async def test_sem_redis_os_limites_ficam_abertos(portal_limitado):
     finally:
         await app.state.redis.aclose()
         app.state.redis = redis_original
+
+
+async def test_contador_negativo_nao_trava_o_usuario(redis):
+    # A chave pode sumir entre a reserva e o acerto (DEL manual, Redis sem persistência):
+    # o acerto com diferença negativa não pode deixar o contador abaixo de zero, e um
+    # contador negativo não pode responder 429 depois de já ter debitado a reserva.
+    usuario, agora = uuid4(), 1793674800.0
+    reserva = await limites.reservar_cota(redis, usuario, 100_000, 20_000, agora=agora)
+    await redis.delete(reserva.chave)
+    await limites.acertar_cota(redis, reserva, 1_000)
+    assert int(await redis.get(reserva.chave)) == 0
+    seguinte = await limites.reservar_cota(redis, usuario, 100_000, 20_000, agora=agora)
+    assert seguinte.tokens == 20_000 and int(await redis.get(reserva.chave)) == 20_000
+    # Um contador que já está negativo conta como zero.
+    await redis.set(reserva.chave, -19_000)
+    await limites.reservar_cota(redis, usuario, 100_000, 20_000, agora=agora)
+    assert int(await redis.get(reserva.chave)) == 20_000
+
+
+class AgenteQueEspera:
+    async def responder(self, pergunta, contexto, andamento=None):
+        # Já gastou o plano quando o cliente fecha o painel.
+        andamento.uso.input_tokens = 1_000
+        await asyncio.sleep(10)
+
+
+class RedisQueEsperaAConexao:
+    """O Redis da suíte, mas cada comando espera antes por uma conexão do pool, como num
+    connect ou num checkout disputado: é nesse await que o cancelamento pega o acerto."""
+
+    def __init__(self, redis):
+        self.redis = redis
+
+    def __getattr__(self, nome):
+        return getattr(self.redis, nome)
+
+    async def eval(self, *args):
+        await asyncio.sleep(0.01)
+        return await self.redis.eval(*args)
+
+
+async def test_pergunta_abandonada_troca_a_reserva_pelo_gasto(portal_limitado, db, redis):
+    # O cancel scope do middleware HTTP (anyio) cancela de novo a cada await. Sem a
+    # blindagem, o acerto do finally morria no primeiro await e os 20 mil tokens da
+    # reserva ficavam cobrados até a meia-noite.
+    app, http = portal_limitado
+    app.state.assistente = AgenteQueEspera()
+    await entrar(http, 'perdas')
+    usuario = {'id': await db.fetchval("SELECT id FROM operations.usuarios WHERE login = 'perdas'")}
+    original = app.state.redis
+    app.state.redis = RedisQueEsperaAConexao(original)
+    try:
+        with anyio.move_on_after(0.3):
+            await service.perguntar(app.state, Pergunta(pergunta='Abandonei'), usuario)
+        await asyncio.sleep(0.3)
+    finally:
+        app.state.redis = original
+    [chave] = [c async for c in redis.scan_iter('cota:*')]
+    assert int(await redis.get(chave)) == 1_000

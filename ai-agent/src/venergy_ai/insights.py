@@ -2,14 +2,17 @@
 
 O backend calcula os fatos com os serviços da tela e os manda aqui. O modelo devolve
 de 3 a 5 observações, cada uma ligada a um fato. Cada número do texto precisa estar nos
-fatos, com as mesmas regras da resposta do agente (`numeros`), e com a unidade certa: um
-número com % só casa com um percentual dos fatos, um com R$ só com um valor em reais.
-A observação com um número sem lastro é descartada; com menos de 3 observações válidas,
-o insight fica indisponível.
+fatos, com as mesmas regras da resposta do agente (`numeros`), com a unidade certa (um
+número com % só casa com um percentual dos fatos, um com R$ só com um valor em reais) e
+com a métrica que a frase nomeia: em "a inadimplência foi de 41,2%", o 41,2 precisa ser
+da inadimplência, e não da taxa de acerto. A observação com um número sem lastro é
+descartada; com menos de 3 observações válidas, o insight fica indisponível.
 """
 
 import hashlib
+import re
 import time
+import unicodedata
 
 import pydantic_ai
 from pydantic import BaseModel, Field
@@ -108,6 +111,7 @@ def validar(rascunhos: list[Rascunho], pedido: PedidoInsight) -> tuple[list[Obse
     anos = {ano for p in periodos for ano in (p.inicio.year, p.fim.year)}
     meses = {p.meses for p in periodos}
     nomes = _nomes(pedido)
+    apelidos = _apelidos(pedido.fatos)
     observacoes, descartadas, textos = [], [], set()
     for n, rascunho in enumerate(rascunhos, 1):
         texto = rascunho.texto.strip()
@@ -119,7 +123,7 @@ def validar(rascunhos: list[Rascunho], pedido: PedidoInsight) -> tuple[list[Obse
             descartadas.append(f'{n}ª vazia ou repetida')
             continue
         citadas = [
-            _na_unidade(citada, alvos)
+            _da_metrica_nomeada(_na_unidade(citada, alvos), alvos, texto, apelidos)
             for citada in citacoes(texto, [valor for _, _, valor in alvos], anos, meses, nomes)
         ]
         if sem_lastro := [citada.trecho for citada in citadas if not citada.lastros]:
@@ -189,6 +193,54 @@ def _mesma_unidade(escrita: str | None, fato: Fato, campo: CampoDoFato) -> bool:
     if escrita == 'h':
         return unidade.startswith('h')
     return True
+
+
+def _da_metrica_nomeada(
+    citada: Citacao, alvos: list[Alvo], texto: str, apelidos: dict[str, set[str]]
+) -> Citacao:
+    """Fica só com os fatos da métrica que a frase nomeia antes do número. Filtrar pela
+    unidade não basta: a taxa de acerto de 41,2% não sustenta "inadimplência de 41,2%".
+    Sem métrica nomeada na frase, valem todos os fatos na unidade certa."""
+    chaves = _metrica_antes(texto, citada.inicio, apelidos)
+    if chaves is None:
+        return citada
+    return citada._replace(lastros=[i for i in citada.lastros if alvos[i][0].chave in chaves])
+
+
+def _metrica_antes(texto: str, posicao: int, apelidos: dict[str, set[str]]) -> set[str] | None:
+    """As chaves dos fatos da última métrica nomeada antes da posição, na mesma frase.
+    Entre dois nomes que terminam no mesmo ponto, vale o mais longo: "volume das UCs com
+    GD", e não "UCs com GD"."""
+    trecho = _sem_acento(texto[:posicao]).lower()
+    inicio_da_frase = max((m.end() for m in re.finditer(r'[.;!?](?=\s)', trecho)), default=0)
+    frase = trecho[inicio_da_frase:]
+    melhor = None
+    for apelido, chaves in apelidos.items():
+        for achado in re.finditer(rf'\b{re.escape(apelido)}\b', frase):
+            chave_de_ordem = (achado.end(), len(apelido))
+            if melhor is None or chave_de_ordem > melhor[0]:
+                melhor = (chave_de_ordem, chaves)
+    return None if melhor is None else melhor[1]
+
+
+def _apelidos(fatos: list[Fato]) -> dict[str, set[str]]:
+    """Como cada fato pode ser nomeado no texto: a etiqueta inteira ("taxa de acerto"),
+    a primeira palavra dela ("receita", que vale para todas as receitas) e, num local, o
+    nome dele ("boa viagem (recife)" e "boa viagem")."""
+    apelidos: dict[str, set[str]] = {}
+    for fato in fatos:
+        etiqueta, _, local = fato.metrica.partition(' · ')
+        nomes = {etiqueta, etiqueta.split()[0]}
+        if local:
+            nomes |= {local, local.split(' (', 1)[0]}
+        for nome in nomes:
+            apelidos.setdefault(_sem_acento(nome).lower().strip(), set()).add(fato.chave)
+    return apelidos
+
+
+def _sem_acento(texto: str) -> str:
+    # Letra a letra, para as posições continuarem as do texto original.
+    return ''.join(unicodedata.normalize('NFD', letra)[0] for letra in texto)
 
 
 def _nomes(pedido: PedidoInsight) -> list[str]:

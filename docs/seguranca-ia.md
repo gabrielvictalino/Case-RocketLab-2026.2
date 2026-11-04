@@ -17,7 +17,7 @@ usuário → Nginx → POST /api/v1/assistente/perguntas → plano do LLM → gu
 
 | # | Camada | Onde | O que bloqueia |
 |---|---|---|---|
-| 1 | Fronteira da API | `backend/app/modules/assistente/schemas.py`, `app/core/limites.py`, Nginx | Pergunta sem token, vazia ou com mais de 1.000 caracteres; `tela` fora das telas do portal; recortes fora da lista ou com aspas, quebras de linha, `<` e `>`; mais de 20 perguntas por minuto ou a cota diária de tokens por usuário; o limite por IP do Nginx |
+| 1 | Fronteira da API | `backend/app/modules/assistente/schemas.py`, `backend/app/core/limites.py`, Nginx | Pergunta sem token, vazia ou com mais de 1.000 caracteres; `tela` fora das telas do portal; recortes fora da lista ou com aspas, quebras de linha, `<` e `>`; mais de 20 perguntas por minuto ou a cota diária de tokens por usuário; o limite por IP do Nginx |
 | 2 | Instruções | `ai-agent/src/venergy_ai/instrucoes.py` | A pergunta vai entre `<pergunta>` e `</pergunta>`, limpa até não sobrar tag. O contexto da tela (`<contexto>`) e a conversa (`<conversa>`) vão como JSON com `<` e `>` escapados. As instruções mandam tratar esses blocos e os textos dos dados como dado. É a camada mais fraca, e por isso nenhuma das seguintes depende dela |
 | 3 | Guarda de SQL | `ai-agent/src/venergy_ai/guarda_sql.py` | Tudo que não é um único `SELECT` (com ou sem `WITH`): escrita, DDL, `SET`, `COPY`, várias instruções. Tabelas fora das views de `ai_read` do catálogo, como `operations` e `analytics`. Funções fora da lista permitida, como `set_config`, `pg_sleep` e os advisory locks. `SELECT INTO`, `FOR UPDATE`. Garante `LIMIT 1000`. Executa-se o SQL regenerado da árvore conferida, nunca o texto do modelo |
 | 4 | Executor | `ai-agent/src/venergy_ai/executor.py` | Cada consulta roda numa transação encerrada com `ROLLBACK`: um `SET` não sobrevive na conexão do pool. O driver aceita uma instrução por vez. Banco fora do ar vira `503`, sem nova tentativa |
@@ -33,8 +33,9 @@ serviços da tela e o modelo só redige. Valem as camadas 1 (limite por usuário
 só o que vai ao modelo, e a cota diária de tokens), 2 (os fatos e os recortes vão como
 JSON escapado num bloco `<fatos>`, tratado como dado, e o recorte da URL só vale com
 valores da carga) e 7 (cada número da observação precisa estar nos fatos, na mesma
-unidade; a observação com número de fora é descartada, e com menos de 3 válidas não há
-insight). Testes:
+unidade e na métrica que a frase nomeia, sem ler percentual como razão nem tirar a escala
+escrita, e um ano só vale em contexto de tempo; a observação com número de fora é
+descartada, e com menos de 3 válidas não há insight). Testes:
 `ai-agent/tests/test_redator_insights.py` e `backend/tests/test_insights.py`.
 
 ## Testes
