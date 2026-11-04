@@ -55,9 +55,10 @@ def gerar_manifesto(
     if len(partes) != 2:
         raise ValueError(f'Período inválido: {periodo}. Formato esperado: AAAA-MM..AAAA-MM')
     start, end = partes
-    versao = (ROOT / 'VERSION').read_text().strip()
+    versao = (ROOT / 'VERSION').read_text(encoding='utf-8').strip()
     specs = {
-        p.stem: yaml.safe_load(p.read_text()) for p in sorted((ROOT / 'tabelas').glob('*.yaml'))
+        p.stem: yaml.safe_load(p.read_text(encoding='utf-8'))
+        for p in sorted((ROOT / 'tabelas').glob('*.yaml'))
     }
     manifest = {
         'batch_id': batch_id,
@@ -78,7 +79,9 @@ def gerar_manifesto(
             'sha256': digest,
             'totals': totais,
         }
-    (origem / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n')
+    (origem / 'manifest.json').write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2) + '\n', encoding='utf-8', newline='\n'
+    )
     return manifest
 
 

@@ -23,7 +23,8 @@ def gerar(out=OUT):
     manifesto_spec.loader.exec_module(manifesto_mod)
     gerar_manifesto = manifesto_mod.gerar_manifesto
     specs = {
-        p.stem: yaml.safe_load(p.read_text()) for p in sorted((ROOT / 'tabelas').glob('*.yaml'))
+        p.stem: yaml.safe_load(p.read_text(encoding='utf-8'))
+        for p in sorted((ROOT / 'tabelas').glob('*.yaml'))
     }
     data = {name: [] for name in specs}
     municipios = ['Recife', 'Jaboatão', 'Olinda']
