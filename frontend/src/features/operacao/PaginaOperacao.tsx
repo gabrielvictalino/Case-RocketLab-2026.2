@@ -65,7 +65,7 @@ const colunasRanking: ColunaTabela<AlimentadorContinuidade, unknown>[] = [
 
 export function PaginaOperacao() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const { periodo, comparacao, parametros } = usePeriodo()
+  const { periodo, comparacao, parametros, carga } = usePeriodo()
   const filtrosMeta = useFiltrosMeta()
   const recortes = lerRecortesUrl(searchParams)
 
@@ -79,8 +79,8 @@ export function PaginaOperacao() {
     comEventoAtipico: recortes.atipico,
   }
 
-  const serie = useSerieContinuidade(parametros, filtros)
-  const ranking = useRankingContinuidade(parametros, filtros, ordem)
+  const serie = useSerieContinuidade(parametros, filtros, carga?.batch_id)
+  const ranking = useRankingContinuidade(parametros, { ...filtros, alimentador: undefined }, ordem, carga?.batch_id)
 
   const rotuloPeriodo = periodo ? formatarIntervaloPeriodo(periodo) : null
   const rotuloComparacao = comparacao ? formatarIntervaloPeriodo(comparacao) : null
@@ -176,7 +176,7 @@ export function PaginaOperacao() {
           sentidoFavoravel="baixa"
           dica="Duração Equivalente de Interrupção por Unidade Consumidora."
           carregando={serie.isLoading}
-          semDados={!serie.isLoading && numeroContinuidade(totais?.dec) === null}
+          semDados={serie.isSuccess && numeroContinuidade(totais?.dec) === null}
           valor={formatarContinuidade(totais?.dec)}
           variacao={variacaoContinuidade(totais?.dec, totaisComparacao?.dec)}
           valorComparado={totaisComparacao
@@ -191,7 +191,7 @@ export function PaginaOperacao() {
           sentidoFavoravel="baixa"
           dica="Frequência Equivalente de Interrupção por Unidade Consumidora."
           carregando={serie.isLoading}
-          semDados={!serie.isLoading && numeroContinuidade(totais?.fec) === null}
+          semDados={serie.isSuccess && numeroContinuidade(totais?.fec) === null}
           valor={formatarContinuidade(totais?.fec)}
           variacao={variacaoContinuidade(totais?.fec, totaisComparacao?.fec)}
           valorComparado={totaisComparacao
@@ -246,7 +246,7 @@ export function PaginaOperacao() {
                 dados={dadosDec}
                 rotuloAtual={rotuloPeriodo ?? 'Período atual'}
                 rotuloComparacao={rotuloComparacao ?? undefined}
-                indisponivel={!serie.isLoading && dadosDec.length === 0}
+                indisponivel={serie.isSuccess && !dadosDec.some((ponto) => ponto.atual !== null || ponto.comparacao !== null)}
               />
             </div>
             <div>
@@ -255,7 +255,7 @@ export function PaginaOperacao() {
                 dados={dadosFec}
                 rotuloAtual={rotuloPeriodo ?? 'Período atual'}
                 rotuloComparacao={rotuloComparacao ?? undefined}
-                indisponivel={!serie.isLoading && dadosFec.length === 0}
+                indisponivel={serie.isSuccess && !dadosFec.some((ponto) => ponto.atual !== null || ponto.comparacao !== null)}
               />
             </div>
           </div>

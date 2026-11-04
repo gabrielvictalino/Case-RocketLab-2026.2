@@ -138,6 +138,37 @@ function renderizarOperacao(caminho = '/operacao') {
 }
 
 describe('Tela Operação', () => {
+  it('seleciona alimentador na serie sem filtrar o ranking', async () => {
+    const router = renderizarOperacao('/operacao?periodo=2026-01:2026-06')
+
+    const tabela = await screen.findByRole('table', { name: 'Ranking de alimentadores' })
+    await waitFor(() => expect(tabela).toHaveTextContent('AL-01'))
+    fireEvent.click(tabela.querySelector('tbody tr')!)
+
+    await waitFor(() => {
+      expect(new URLSearchParams(router.state.location.search).get('alimentador')).toBe('AL-01')
+    })
+
+    await waitFor(() => {
+      const chamadas = vi.mocked(fetch).mock.calls.map(([requisicao]) =>
+        typeof requisicao === 'string'
+          ? requisicao
+          : requisicao instanceof URL
+            ? requisicao.href
+            : requisicao.url,
+      )
+      expect(chamadas.some((url) =>
+        url.includes('/api/v1/continuidade/serie') &&
+        new URL(url).searchParams.get('alimentador') === 'AL-01',
+      )).toBe(true)
+      expect(chamadas.filter((url) =>
+        url.includes('/api/v1/continuidade/ranking'),
+      ).every((url) => !new URL(url).searchParams.has('alimentador'))).toBe(true)
+    })
+
+    expect(screen.getByRole('table', { name: 'Ranking de alimentadores' })).toHaveTextContent('AL-01')
+  })
+
   it('exibe os indicadores, o aviso regulatório e o ranking', async () => {
     renderizarOperacao('/operacao?periodo=2026-01:2026-06&comparacao=2025-01:2025-06')
 

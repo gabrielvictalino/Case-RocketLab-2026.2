@@ -23,11 +23,13 @@ export interface FiltrosOperacao {
 export function useSerieContinuidade(
   parametros: ParametrosPeriodoApi | null,
   filtros: FiltrosOperacao,
+  batchId?: string,
 ) {
   return useQuery({
     queryKey: [
       'operacao',
       'serie',
+      batchId,
       parametros?.periodo,
       parametros?.comparacao,
       filtros.municipio,
@@ -56,11 +58,13 @@ export function useRankingContinuidade(
   parametros: ParametrosPeriodoApi | null,
   filtros: FiltrosOperacao,
   ordem: OrdemContinuidade,
+  batchId?: string,
 ) {
   return useQuery({
     queryKey: [
       'operacao',
       'ranking',
+      batchId,
       parametros?.periodo,
       parametros?.comparacao,
       filtros.municipio,

@@ -22,7 +22,7 @@ export function variacaoContinuidade(
     return null
   }
 
-  return ((valorAtual - valorAnterior) / Math.abs(valorAnterior)) * 100
+  return (valorAtual - valorAnterior) / Math.abs(valorAnterior)
 }
 
 export function montarSerieContinuidade(
