@@ -283,7 +283,7 @@ async def load(origin, database_url, redis_url=None, *, verify_only=False):
                 for name in specs:
                     await db.execute(f'GRANT SELECT ON analytics."{name}" TO portal')
                 # Views pertencem ao importador; não há dependência reversa de migração.
-                await db.execute(VIEWS.read_text())
+                await db.execute(VIEWS.read_text(encoding='utf-8'))
                 # Remove FKs internas antes das tabelas, sem CASCADE.
                 constraints = await db.fetch("""SELECT c.conname, t.relname FROM pg_constraint c
                     JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace

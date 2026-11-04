@@ -19,20 +19,20 @@ class ContractError(ValueError):
 
 def specifications():
     return {
-        p.stem: yaml.safe_load(p.read_text())
+        p.stem: yaml.safe_load(p.read_text(encoding='utf-8'))
         for p in sorted((CONTRACTS / 'tabelas').glob('*.yaml'))
     }
 
 
 def manifest_for(origin):
-    manifest = json.loads((origin / 'manifest.json').read_text())
-    schema = json.loads((CONTRACTS / 'manifest.schema.json').read_text())
+    manifest = json.loads((origin / 'manifest.json').read_text(encoding='utf-8'))
+    schema = json.loads((CONTRACTS / 'manifest.schema.json').read_text(encoding='utf-8'))
     errors = list(
         Draft202012Validator(schema, format_checker=FormatChecker()).iter_errors(manifest)
     )
     if errors:
         raise ContractError('Manifesto inválido: ' + errors[0].message)
-    if manifest['contract_version'] != (CONTRACTS / 'VERSION').read_text().strip():
+    if manifest['contract_version'] != (CONTRACTS / 'VERSION').read_text(encoding='utf-8').strip():
         raise ContractError('Versão do contrato incompatível')
     if manifest['period']['start'] > manifest['period']['end']:
         raise ContractError('Período invertido no manifesto')
