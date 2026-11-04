@@ -139,6 +139,10 @@ class Leitura(NamedTuple):
     # A leitura sem a escala escrita ("351,2" de "351,2 MWh"): a família da escala, que a
     # coluna precisa ter no nome. None nas leituras comuns.
     sem_escala: str | None = None
+    # A leitura com a escala aplicada ("351.200" de "351,2 MWh"): a família da escala. Ela
+    # não vale contra uma coluna que já está nessa escala (volume_mwh), em que o 351.200
+    # seria mil vezes maior que o escrito. None nas leituras sem escala escrita.
+    escala: str | None = None
 
 
 class Valor(NamedTuple):
@@ -305,6 +309,7 @@ def _leituras(citado: re.Match, alta: bool = False, baixa: bool = False) -> list
                     baixa,
                     significativos,
                     sem_escala,
+                    familia if sem_escala is None else None,
                 )
             )
     return leituras
@@ -315,6 +320,8 @@ def _tem_lastro(leitura: Leitura, valores: list[Valor]) -> bool:
     fatores = (Decimal(1), Decimal(100)) if leitura.percentual else (Decimal(1),)
     for valor, de_queda, escalas in valores:
         if leitura.sem_escala is not None and leitura.sem_escala not in escalas:
+            continue
+        if leitura.escala is not None and leitura.escala in escalas:
             continue
         if leitura.sinal and valor and (valor > 0) != (leitura.sinal > 0):
             continue
