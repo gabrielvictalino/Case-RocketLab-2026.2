@@ -161,6 +161,8 @@ Rotas implementadas:
 | `GET /meta/filtros` | Municípios, bairros por município, classes e alimentadores |
 | `GET /kpis?periodo=AAAA-MM..AAAA-MM` | Oito cards com valor, comparação e variações |
 | `GET /kpis/serie?periodo=AAAA-MM..AAAA-MM` | Receita e volume por competência, em ordem cronológica |
+| `GET /continuidade/serie?periodo=AAAA-MM..AAAA-MM` | CHI, DEC e FEC por competência e totais reagregados do período |
+| `GET /continuidade/ranking?periodo=AAAA-MM..AAAA-MM&ordem=chi` | Alimentadores por CHI (padrão), DEC ou FEC, com UCs e ocorrências por causa |
 | `GET /ordens-inspecao?status=&page=1&size=25` | Listagem com snapshot, máximo 100 por página |
 | `POST /ordens-inspecao` | Lote `{ucs: [...]}`, criadas e rejeitadas; não aborta por UC repetida |
 | `POST /ordens-inspecao/{id}/despachar` | `{inspetor: "INSP-001"}` |
@@ -232,6 +234,71 @@ recortes por município e alimentador; o repositório de totais também tem seus
 componentes de tarifa e bandeira conferidos contra o detalhe por UC.
 As métricas usam o contrato vigente `0.3.0-provisional`; esta implementação não
 homologa uma exportação real nem altera a Gold.
+
+### Continuidade (#57)
+
+As rotas `/continuidade/serie` e `/continuidade/ranking` exigem autenticação e
+`periodo=AAAA-MM..AAAA-MM`. Aceitam `municipio`, `bairro`, `classe` e
+`alimentador`, combinados por interseção, e `sem_evento_atipico=true` (padrão
+`false`). `comparacao` é opcional e segue a validação compartilhada; por padrão usa o mesmo período no ano anterior
+quando há cobertura. A série inclui `dados_comparacao: {totais, serie}` e o ranking
+inclui `ranking_comparacao`, calculados com os mesmos filtros e ordenação. Sem um
+ano anterior disponível, esses campos e `comparacao` são `null`. As respostas
+incluem `periodo`, `comparacao`, `carga` e `sem_evento_atipico`.
+
+A série retorna `serie: [{competencia, chi, interrupcoes, numero_ucs, dec, fec}]`
+em ordem cronológica e `totais` com os mesmos indicadores reagregados para todo o
+período. O ranking retorna `ordem` e `ranking`, com `alimentador`, `municipio`,
+os indicadores e `causas: [{causa, ocorrencias, interrupcoes}]`. `ordem` aceita
+`chi`, `dec` e `fec`, sempre decrescente, com código do alimentador como desempate.
+A ordenação usa as razões antes do arredondamento. CHI, DEC e FEC são strings
+decimais; contagens são inteiros. CHI/DEC/FEC usam duas casas e arredondamento meio
+para cima.
+
+CHI e interrupções somam os numeradores mensais; o denominador conta as UCs de
+cada alimentador com cobertura na Gold uma única vez no período, usando
+`max(numero_ucs)`. Excluir evento atípico filtra as linhas alimentador × competência
+marcadas antes de somar, conforme a Gold. Um alimentador sem linhas restantes
+também sai do denominador. Os demais alimentadores do mesmo mês continuam no
+cálculo. Em julho/2025 na amostra, Recife sem evento tem CHI = 1 e 60 UCs:
+DEC = 0,02. Em um período maior, um alimentador com outra competência válida
+continua no denominador do período.
+
+Com `bairro` ou `classe`, os numeradores são reagregados de `ocorrencias_uc`
+somente para as UCs selecionadas e as competências com cobertura Gold não
+excluída. O CHI é arredondado por alimentador × competência antes da soma,
+como o `chi_horas` da Gold. O denominador conta essas UCs por alimentador uma
+vez no período. A série calcula os meses e totais em uma consulta, materializando
+as observações uma vez por período.
+O cálculo é compartilhado com `/kpis`, que também aceita `sem_evento_atipico`
+para DEC/FEC, inclusive no período de comparação, e devolve a opção na resposta.
+A UC 360 também aceita essa opção: aplica-a à lista de ocorrências e ao resumo
+do alimentador, que usa a mesma agregação. Sem cobertura válida, o resumo traz
+DEC e interrupções nulos. O bloco `interrupcoes` informa `sem_evento_atipico`.
+Quando o cache de métricas for implementado, sua chave deverá incluir
+`sem_evento_atipico`, além do período, filtros e versão da carga.
+
+Um mês sem cobertura ou com todas as linhas marcadas fica com indicadores `null`;
+uma linha Gold válida sem ocorrências mantém os indicadores zerados. Um recorte
+sem observações válidas retorna ranking vazio e totais nulos. No ranking, cada
+alimentador sem nenhuma observação válida é omitido. A soma dos índices mensais
+pode diferir do índice do período por arredondamento em centésimos ou por
+variação dos alimentadores com cobertura após a exclusão; os totais são
+sempre calculados diretamente dos numeradores e do denominador fixo.
+
+As causas são contadas em `ocorrencias_uc`, pela competência de abertura e com
+a mesma cobertura e exclusão do agregado. `ocorrencias` conta todos os registros;
+`interrupcoes` conta apenas os sem sobreposição, como no FEC. A causa principal
+mensal e o valor `SEM OCORRENCIA` são aceitos como atributos da Gold, sem usá-los
+para inferir as contagens de causas. Essa decisão não altera o status provisório
+do contrato nem homologa uma exportação real.
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  'http://localhost:8000/api/v1/continuidade/serie?periodo=2025-07..2026-06&alimentador=ALM-REC-001&sem_evento_atipico=true'
+curl -H "Authorization: Bearer $TOKEN" \
+  'http://localhost:8000/api/v1/continuidade/ranking?periodo=2025-07..2026-06&ordem=dec'
+```
 
 Criar uma ordem congela o score, os motivos e os valores sintéticos da fila.
 Transições usam bloqueio da linha e gravam eventos na mesma transação. O índice
