@@ -4,6 +4,8 @@ Escopo: faturamento e situação das contas, conforme as seções 3.2, 4.1, 4.2 
 5.2 do case. A modelagem da Gold é decisão do time. A implementação não muda os
 tratamentos Silver nem implementa DEC/FEC, GD, inspeções ou atendimento.
 
+[Índice do dicionário da Gold](decisoes_silver_to_gold.md).
+
 ## Fontes e decisões
 
 | Fonte padrão | Uso |
@@ -108,6 +110,7 @@ Não possui as métricas derivadas do cruzamento com leituras.
 | PENDENTE_CADASTRO_SILVER | `flag_uc_sem_cadastro = true` na Silver |
 | UC_AUSENTE_CADASTRO_SILVER | Nenhuma correspondência no cadastro Silver informado |
 | MULTIPLAS_FATURAS_UC_MES | Mais de um ID de fatura na mesma UC/competência |
+| FATURA_SEM_LEITURA | Fatura elegível nas regras anteriores, mas sem leitura da UC na competência; segregada pelo adaptador comercial |
 
 Detalhe + exclusões reproduzem integralmente os campos de negócio e a multiplicidade
 da entrada. Um prefixo FTX não é critério de exclusão. Os totais publicados devem
@@ -139,6 +142,30 @@ Para recortes de bandeira ou status, consulte `tb_faturas`. Para vários meses,
 some valores/contagens; recalcule percentuais a partir das somas. Não some UCs
 mensais para obter UCs distintas do período nem tire média simples de tarifas.
 
+### Fórmulas das métricas auxiliares
+
+No grão de `tb_faturamento_mensal`, `COUNT_IF(p)` significa contar as linhas que
+satisfazem `p`. `SUM` ignora nulos; as somas monetárias e de volume do agregado
+viram zero quando não há parcela válida. Isso não altera o nulo no detalhe.
+
+| Métrica | Fórmula / regra | Limpeza que afeta o resultado |
+| --- | --- | --- |
+| `quantidade_faturas`, `quantidade_ucs_faturadas` | `COUNT(*)`, `COUNT(DISTINCT id_uc)` do detalhe elegível | Cadastro válido, segregação de multiplicidade e de faturas sem leitura |
+| `valor_energia`, `tributos`, `valor_total` | `SUM` da respectiva coluna do detalhe; por fatura, `valor_total = valor_energia + tributos` | Valores decimais e reconciliação Silver; exclusões não compõem receita |
+| `valor_faturas_pagas`, `valor_em_aberto` | `SUM(valor_total)` onde `status = PAGA` e `EM ABERTO`, respectivamente; zero no outro status | Sentinela de pagamento nula e status consistente; referência explícita |
+| `quantidade_em_aberto`, `quantidade_vencidas` | `COUNT_IF(status = EM ABERTO)`; `COUNT_IF(flag_vencida_em_aberto)` | Vencida exige conta aberta e `data_vencimento < data_referencia`; vencer na referência não conta |
+| `valor_vencido` | `SUM(valor_total)` somente nas vencidas em aberto | Mesma regra de vencimento; não inclui conta já paga com atraso |
+| `dias_atraso` (detalhe) | Aberta: `max(datediff(data_referencia, data_vencimento), 0)`; paga: `max(datediff(data_pagamento, data_vencimento), 0)` | Datas interpretadas na Silver; não mede atraso histórico de uma conta hoje aberta |
+| `volume_analise_kwh` | Detalhe: leitura não negativa e sem flags impeditivas; agregado: `SUM(volume_analise_kwh)` | Troca, ausência de anterior ou sinal não confirmado anulam o proxy; não há imputação nesta métrica |
+| `preco_efetivo_total_rs_kwh` (detalhe) | `valor_total / volume_analise_kwh`, somente se volume > 0; senão nulo | Mesmas flags; inclui tributos e não é tarifa base |
+| `quantidade_com_volume_positivo`, `quantidade_sem_volume` | `COUNT_IF(volume_analise_kwh > 0)`; `COUNT_IF(volume_analise_kwh IS NULL)` | Zero medido não é desconhecido nem volume positivo |
+| `receita_com_volume_positivo`, `receita_sem_volume_positivo` | `SUM(valor_total)` com volume utilizável > 0 e nas demais contas, respectivamente | A segunda inclui zero medido e volume nulo; as parcelas fecham com `valor_total` |
+| `cobertura_volume_pct` | `round(100 × quantidade_com_volume_positivo / quantidade_faturas, 2)` | Mede cobertura de contas com volume positivo, não a participação de consumo imputado; agregado só existe com faturas |
+
+Para preço efetivo agregado, use `SUM(receita_com_volume_positivo) /
+SUM(volume_analise_kwh)` quando o denominador for positivo. Esse cálculo pareia
+receita com o volume observado e não inclui a receita sem volume positivo.
+
 ## Decomposição da receita
 
 A Gold não publica `tb_variacao_receita` nem uma decomposição auxiliar baseada
@@ -158,6 +185,79 @@ As saídas comerciais são `uc_consumo_faturamento_mensal` e
 em `contracts/tabelas/`. O adaptador fica em
 [`gold_contrato_faturas.py`](../../data-engineering/silver_to_gold/gold_contrato_faturas.py).
 Acrescenta o gate de volume igual ao analítico no importador; auxiliares não substituem o contrato.
+
+### Dicionário de `uc_consumo_faturamento_mensal` (contrato)
+
+**Grão/chave:** `id_uc × competencia`, nas leituras das UCs presentes no cadastro.
+Tipos e ordem vêm do [YAML](../../contracts/tabelas/uc_consumo_faturamento_mensal.yaml).
+As regras de limpeza e de estimativa são detalhadas em R2 e na decisão da #67 abaixo.
+
+| Coluna | Tipo / unidade | Nulo? | Definição / fórmula |
+| --- | --- | :---: | --- |
+| `id_uc` | string | não | UC da leitura, presente no cadastro |
+| `competencia` | date | não | Primeiro dia do mês de `mes_referencia` |
+| `consumo_kwh_original` | decimal(18,2), kWh | não | `consumo_kwh` da Silver, após suas correções de sinal, inclusive negativos preservados |
+| `consumo_kwh_analitico` | decimal(18,2), kWh | não | `coalesce(leitura_utilizavel, mediana_fase_kwh, mediana_historica_kwh)`; sem doadores, carga bloqueada |
+| `metodo_consumo` | string | não | `LEITURA_UTILIZAVEL`, `MEDIANA_FASE_UC` ou `MEDIANA_HISTORICA_UC`, conforme a primeira parcela disponível acima |
+| `tipo_leitura` | string | não | `REAL` ou `ESTIMADA`, preservado da Silver; leitura estimada na origem continua identificada mesmo com método `LEITURA_UTILIZAVEL` |
+| `flag_troca_medidor` | boolean | não | Flag Silver ou evidência cadastral de troca no mês da retirada do anterior |
+| `id_fatura` | string | sim | ID da fatura elegível; nulo se ausente ou se todas as faturas da UC/mês foram segregadas |
+| `volume_faturado_kwh` | decimal(18,2), kWh | não | `consumo_kwh_analitico` com fatura elegível; zero sem fatura |
+| `valor_total` | decimal(18,2), R$ | não | Total nominal da fatura elegível; zero sem fatura |
+| `valor_arrecadado` | decimal(18,2), R$ | não | `valor_total` se `PAGA`; zero se `ABERTA` ou sem fatura; convenção por status, não medição independente de caixa |
+| `tarifa_base` | decimal(18,6), R$/kWh | sim | Mediana exata (`percentile(..., 0.5)`) da tarifa líquida não negativa por subgrupo × competência, convertida para seis casas; ou complemento explícito validado |
+| `adicional_bandeira` | decimal(18,6), R$/kWh | sim | Adicional fixo do case por bandeira, ou complemento explícito validado |
+| `bandeira` | string | sim | Normalização para `VERDE`, `AMARELA`, `VERMELHA_P1`, `VERMELHA_P2` |
+| `status_pagamento` | string | sim | `PAGA` ou `ABERTA` (`EM ABERTO` na Silver) |
+| `data_vencimento` | date | sim | Vencimento da fatura elegível |
+| `grupo_uc` | string | não | `GD`, `IRREGULARIDADE_CONFIRMADA` ou `DEMAIS`, pela precedência temporal R3 |
+
+Sem fatura, as cinco colunas tarifárias/de cobrança anuláveis (`tarifa_base`,
+`adicional_bandeira`, `bandeira`, `status_pagamento`, `data_vencimento`) ficam
+nulas juntas. Original, analítico, método, tipo de leitura e grupo permanecem.
+
+### Dicionário de `receita_volume_mensal` (contrato)
+
+**Grão/chave:** `competencia × municipio × bairro × classe × grupo_uc`. O
+agregado junta o detalhe contratual ao cadastro por `id_uc`, com atributos
+atuais, e segue o [YAML](../../contracts/tabelas/receita_volume_mensal.yaml).
+Todas as colunas são obrigatórias. As exclusões de faturas, a imputação de
+consumo, o grupo temporal e a derivação da tarifa afetam as somas abaixo.
+
+| Coluna | Tipo / unidade | Definição / fórmula no grão |
+| --- | --- | --- |
+| `competencia` | date | Primeiro dia do mês |
+| `municipio`, `bairro`, `classe` | string | Recortes da Silver de cadastro, coerentes com `dim_uc` |
+| `grupo_uc` | string | Grupo temporal do detalhe; não usa as flags atuais do cadastro para todo o histórico |
+| `volume_faturado_kwh` | decimal(18,2), kWh | `SUM(detalhe.volume_faturado_kwh)` |
+| `receita` | decimal(18,2), R$ | `SUM(detalhe.valor_total)`, com tributos |
+| `receita_arrecadada` | decimal(18,2), R$ | `SUM(detalhe.valor_arrecadado)`, sob a mesma convenção por status |
+| `componente_tarifa_reais` | decimal(18,2), R$ | `round(SUM(volume_faturado_kwh × coalesce(tarifa_base, 0)), 2)` |
+| `componente_bandeira_reais` | decimal(18,2), R$ | `round(SUM(volume_faturado_kwh × coalesce(adicional_bandeira, 0)), 2)` |
+
+Os produtos são somados antes de arredondar, com meio afastando de zero. Os
+componentes não precisam fechar com a receita nominal: tributos e composição
+são tratados pelo fator e pelo resíduo da R5. Para vários meses ou recortes,
+some os valores e recalcule razões; não use média simples de preços.
+
+### Auxiliares de proveniência e cobertura
+
+As três saídas abaixo são publicadas como revisões físicas no mesmo conjunto
+das tabelas comerciais. Não fazem parte das 12 tabelas do portal.
+
+| Saída lógica | Grão | Campos / fórmulas auditáveis |
+| --- | --- | --- |
+| `consumo_proveniencia` | UC × competência | Campos da leitura e flags, `consumo_kwh_original`, `consumo_kwh_analitico`, `metodo_consumo`, `fase_gd`, `data_conexao`, `primeira_inspecao_irregular`, `grupo_uc`; `mediana_fase_kwh = percentile_approx(leitura_utilizavel, 0.5)` por UC/fase, `mediana_historica_kwh` por UC; `doadores_fase` e `doadores_historico` contam leituras utilizáveis nas respectivas janelas |
+| `complemento_proveniencia` | fatura elegível | Quando derivado: `id_fatura`, `competencia`, `subgrupo_tarifario`, `tarifa_base`, `adicional_bandeira`, `proveniencia`; `doadores_tarifa` conta tarifas líquidas ≥ 0, `doadores_tarifa_negativa_excluidos` conta as < 0, por subgrupo/mês, somente em faturas com método `LEITURA_UTILIZAVEL` e consumo > 0. Complemento explícito exige ID, tarifas e proveniência, e pode não trazer as contagens |
+| `cobertura_volume` | competência × município × bairro × classe × grupo_uc × metodo_consumo × tipo_leitura | Somente linhas com fatura: `quantidade_faturas = COUNT(*)`, `volume_faturado_kwh = SUM(volume_faturado_kwh)`, `receita = SUM(valor_total)` |
+
+Contagens de doadores de tarifa repetem-se em cada fatura do grupo/mês: use uma
+linha distinta por subgrupo/competência ao auditá-las. Para medir a participação
+de volume imputado, divida a soma de `volume_faturado_kwh` dos métodos de mediana
+pelo volume total em `cobertura_volume` e multiplique por 100; com volume total
+zero, o percentual é indefinido. Para distinguir medição real de estimativa na
+origem, preserve também o recorte `tipo_leitura`. Isso é diferente da cobertura
+de contas com volume positivo da auxiliar `tb_faturamento_mensal`.
 
 ### R2: consumo e faturamento
 
@@ -266,6 +366,28 @@ duas casas (`round` Spark, empate afastando de zero); validam-se os resultados
 com `exceptAll` nos dois sentidos. O cálculo dos quatro efeitos fica no consumidor, em
 `backend/app/core/decomposicao.py`.
 
+Para auditar os quatro efeitos no doc do domínio, considere as somas por
+`municipio × bairro × classe × grupo_uc` em cada período: `Q` é
+`volume_faturado_kwh`, `R` é `receita`, `T` é `componente_tarifa_reais` e `B`
+é `componente_bandeira_reais`. Com `p₀ = R₀/Q₀`, `tᵢ = Tᵢ/Qᵢ`,
+`bᵢ = Bᵢ/Qᵢ` e `k₀ = R₀/(T₀+B₀)`:
+
+| Efeito (R$) | Fórmula |
+| --- | --- |
+| Volume | `(Q₁ − Q₀) × p₀` |
+| Reajuste | `Q₁ × (t₁ − t₀) × k₀` |
+| Bandeira | `Q₁ × (b₁ − b₀) × k₀` |
+| Mix | `(R₁ − R₀) − volume − reajuste − bandeira` |
+
+Se `Q₀ = 0` ou `T₀+B₀ = 0`, volume recebe `R₁−R₀` e os outros efeitos são
+zero. Caso contrário, se `Q₁ = 0`, volume é `−R₀`, mix é `R₁` e os demais
+são zero. Volume, reajuste e bandeira são arredondados uma vez por subgrão
+para centavos com `ROUND_HALF_UP`; mix absorve o resíduo, fechando exatamente
+com a variação da receita. Some os efeitos dos subgrãos para obter totais,
+sem decompor novamente o agregado. A exclusão de faturas, a imputação do
+volume, os doadores de tarifa e a classificação temporal R3 mudam as entradas
+dessa decomposição; suas decisões de limpeza estão nas seções anteriores.
+
 ## Consistência das fontes e data de referência
 
 A Gold materializa `v-energy.silver.tb_faturas_publicacao` uma única vez. Exige
@@ -309,6 +431,13 @@ ou implementar o mesmo protocolo: materializar o marcador uma vez, validar seu
 conjunto e ler cada fonte/versionAsOf. Consultar nomes fixos diretamente pode
 observar dados legados ou incoerentes; não há promessa de atomicidade para eles.
 O pipeline não atualiza esses nomes. Migre consumidores antes de usar a nova Gold.
+
+No marcador `tb_gold_faturas_publicacao`, `id_execucao` e `metadados` são comuns
+ao conjunto; `nome` identifica a saída lógica, `fonte` a tabela física da revisão
+e `versao_fonte` a versão Delta a ler. A tabela técnica
+`tb_gold_faturas_retencao` guarda `nome` (identificador físico normalizado) e
+`aposentada_em` (primeira observação fora do marcador), sem reiniciar o prazo
+em uma nova tentativa de manutenção. Nenhuma das duas compõe métricas comerciais.
 
 | Interrupção/falha | Estado recuperável |
 | --- | --- |
