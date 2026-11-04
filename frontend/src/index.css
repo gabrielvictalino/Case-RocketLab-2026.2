@@ -1244,6 +1244,13 @@
 .ve-agent-form .ve-btn {
   height: 40px;
 }
+.ve-agent-aviso {
+  flex: none;
+  margin: 0;
+  padding: var(--space-2) var(--space-4) 0;
+  font-size: 12px;
+  line-height: 16px;
+}
 .ve-agent-context {
   font-size: 12px;
   line-height: 16px;
