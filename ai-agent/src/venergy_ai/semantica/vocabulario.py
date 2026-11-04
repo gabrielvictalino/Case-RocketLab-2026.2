@@ -44,7 +44,8 @@ VOCABULARIO = (
     ),
     Termo(
         ('inadimplência',),
-        'Indicador do portal: receita em aberto ÷ receita do período, sem olhar o vencimento. '
+        'Indicador do portal: receita em aberto ÷ receita do período × 100, em %, sem olhar o '
+        'vencimento. '
         'Para o valor atrasado de fato, use conta atrasada.',
         ('receita_volume_mensal.receita', 'receita_volume_mensal.receita_arrecadada'),
     ),
@@ -110,8 +111,7 @@ VOCABULARIO = (
     ),
     Termo(
         ('suspeitos', 'quem inspecionar'),
-        'Fila de inspeção da última carga, da UC mais para a menos promissora. Ela não desconta '
-        'as ordens abertas no portal depois da carga.',
+        'Fila de inspeção: UCs suspeitas sem ordem ativa, da mais para a menos promissora.',
         ('fila_inspecao.score',),
     ),
     Termo(
@@ -137,15 +137,16 @@ VOCABULARIO = (
     ),
 )
 
-# A cobertura da base vem da carga: `descrever_semantica` a escreve antes destes limites.
+# A cobertura da base vem da carga: `descrever_semantica` a escreve na seção da carga.
+# Nada aqui cita mês: uma exportação nova pode cobrir outros meses.
 LIMITES = (
     Limite(
-        'As inspeções históricas são só de ago a dez/2025. Antes disso não há taxa de acerto.',
-        ('inspecoes.origem',),
+        'As inspeções históricas cobrem só parte da base. Fora dessa cobertura não há taxa de '
+        "acerto: ela sai de MIN(data) e MAX(data) de inspecoes com origem = 'historica'.",
+        ('inspecoes.origem', 'inspecoes.data'),
     ),
     Limite(
-        'As conexões de GD começam em jan/2024. Não há geração nem injeção de energia da GD: '
-        'só a potência instalada e a data de conexão.',
+        'Não há geração nem injeção de energia da GD: só a potência instalada e a data de conexão.',
         ('gd_uc',),
     ),
     Limite(

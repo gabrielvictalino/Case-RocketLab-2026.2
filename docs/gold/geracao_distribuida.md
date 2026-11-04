@@ -1,5 +1,7 @@
 # Dicionário e Decisões — Camada Gold de Geração Distribuída (`GOLD_GD_V1`)
 
+[Índice do dicionário da Gold](decisoes_silver_to_gold.md).
+
 | Item | Referência |
 | :--- | :--- |
 | **Notebook** | `data-engineering/silver_to_gold/silver-to-gold-geracao-distribuida.ipynb` (autocontido; sem módulo `.py` e sem `%run`) |
@@ -60,7 +62,8 @@ O quadro abaixo conecta cada uma das 4 tabelas geradas às lideranças da V-Ener
 
 ### 4.2. Tratamento de leituras com flags impeditivas (troca de medidor e negativas não confirmadas)
 Na Silver de leituras (PR #18), os consumos negativos com `flag_sinal_corrigido = true` já tiveram o sinal invertido, mas os registros com `flag_troca_medidor` (6.215 na base, sendo 465 em UCs com GD), `flag_sem_leitura_anterior` (9 em UCs com GD) e `flag_sinal_nao_confirmado` (25 em UCs com GD) permanecem negativos para não mascarar o dado original.
-Para conciliar a diretriz da Gold de faturas (PR #67, que não estima consumo oculto) com o requisito da Visão 360 e do Diagnóstico da Receita (que imputam a troca de medidor pela mediana da própria UC), a Gold de GD publica **ambas as métricas lado a lado**:
+Como as auxiliares de faturas usam apenas volume utilizável e as saídas comerciais
+também publicam consumo analítico, a Gold de GD publica **as métricas lado a lado**:
 
 1. **`consumo_kwh_silver` (`decimal(18,2)`):** valor exato vindo da Silver de leituras (inclusive negativo nos meses de troca), preservado para auditoria.
 2. **`volume_analise_kwh` (`decimal(18,2)`, anulável):** igual a `consumo_kwh` somente quando `consumo_kwh >= 0` e nenhuma das três flags impeditivas (`flag_troca_medidor`, `flag_sem_leitura_anterior`, `flag_sinal_nao_confirmado`) está ativa; caso contrário, `NULL`. É 100% compatível com a definição de `volume_analise_kwh` da Gold de faturas (`GOLD_FATURAS_V1`).
@@ -88,6 +91,47 @@ Conexões novas e estoque ativo **não** são calculados só a partir das leitur
 Na base completa (3.510 UCs com GD, potência instalada corrigida total de **31.865,60 kWp**, sendo **3.127 Residenciais** e **383 Comerciais**):
 - **Volume em `P0` (`jul/2022–jun/2023`):** **18,30 GWh** (`18.295.246 kWh` utilizável; `18.298.228 kWh` analítico).
 - **Volume em `P1` (`jul/2025–jun/2026`):** **7,01 GWh** considerando apenas leituras utilizáveis (−61,7%, −11,3 GWh) ou **7,09 GWh** com a imputação analítica dos meses de troca (−61,2%, −11,2 GWh). O Diagnóstico da Receita chega à mesma queda de ~61% medindo volume faturado (leituras com fatura na competência): 18,3 GWh → 7,2 GWh, −11,1 GWh.
+
+### 4.6. Fórmulas, nulos e agregação das métricas
+
+As fórmulas abaixo seguem o notebook. Medianas usam `percentile_approx(..., 0.5)`
+do Spark, ignorando valores nulos, e todo o histórico do snapshot. A imputação
+é retrospectiva; pode usar competências posteriores ao mês estimado.
+
+| Tabela / métricas | Fórmula e unidade | Base e limites |
+| :--- | :--- | :--- |
+| `gd_uc.potencia_kw` / `tb_gd_uc.potencia_kwp` | Potência Silver corrigida, em kWp; o nome `potencia_kw` atende ao contrato | Não é geração mensal; não somar a potência repetida em cada leitura |
+| `tb_gd_uc.kwh_por_kwp_mes` | `energia_injetada_kwh_media_mensal / potencia_kwp`, duas casas | Derivada na Silver; mede excedente declarado, não geração bruta nem medição de cada mês |
+| `tb_gd_uc.qtd_competencias_*` | `COUNT(*)` das leituras da UC, total ou na fase antes/após | Não inclui meses sem leitura; UC sem série recebe zero nas contagens |
+| `tb_gd_uc.qtd_leituras_utilizaveis_*` | Contagem de `volume_analise_kwh IS NOT NULL` em cada fase | Zero medido é utilizável; flags impeditivas retiram a leitura dessa base |
+| Médias e medianas antes/após | `round(AVG(volume_analise_kwh), 2)` e `percentile_approx(volume_analise_kwh, 0.5)` na fase | Não usam consumo imputado; fase sem doadores produz nulo |
+| `queda_consumo_media_kwh`, `queda_consumo_pct` | `media_antes − media_apos` (kWh); `round(100 × (media_antes − media_apos) / media_antes, 2)` (%) | Exigem médias antes/após presentes e média antes > 0; senão ambas nulas |
+| `flag_queda_acima_30_pct` | `queda_consumo_pct > 30`, após arredondar o percentual | Nula sem base comparável; não transforma ausência de base em ausência de queda |
+| `razao_queda_sobre_injecao` | `round(queda_consumo_media_kwh / energia_injetada_kwh_media_mensal, 4)` | Exige a mesma base comparável e injeção > 0; senão nula |
+| `volume_p0_*`, `volume_p1_*` | `SUM(volume_analise_kwh)` ou `SUM(consumo_kwh_analitico)` dentro do período fixo P0/P1 da seção 4.5 | Duas casas; soma sem parcela vira zero, inclusive para UC sem série |
+| `tb_gd_consumo_mensal.consumo_kwh_analitico` | `coalesce(volume_analise_kwh, mediana_da_UC_na_fase, mediana_historica_da_UC)`, kWh | Sem doadores, nulo e método `INDISPONIVEL`; a saída contratual de faturas bloqueia esse caso |
+| `tb_gd_resumo_mensal.quantidade_ucs_gd_cadastradas` / `potencia_cadastrada_kwp` | `COUNT(*)` / `SUM(potencia_kwp)` na grade cadastro × calendário | Estoque de toda a coorte por mês, inclusive antes da conexão |
+| `quantidade_ucs_gd_ativas` / `potencia_instalada_ativa_kwp` / `energia_injetada_estimada_ativa_kwh` | Contagem de UCs / soma da potência / soma da injeção média declarada, onde `competencia >= competencia_conexao` | Estoque ativo por mês; a injeção é estimada pelo cadastro, não uma série de medição |
+| `quantidade_novas_conexoes_mes` | Contagem de UCs com `competencia = competencia_conexao` | Fluxo mensal, inclui UC sem leitura no mês |
+| `quantidade_leituras_utilizaveis` / `quantidade_leituras_bloqueadas` | Contagem de `volume_analise_kwh` não nulo / nulo nas leituras | UC sem leitura não é leitura bloqueada |
+| `volume_utilizavel_*` / `volume_analitico_*` | `SUM(volume_analise_kwh)` / `SUM(consumo_kwh_analitico)`, total ou filtrado pela fase | Nulos ignorados; grupo sem parcela recebe zero; os sufixos separam antes e após a conexão |
+
+As somas de volume e potência usam `decimal(28,2)`. Estoques de UCs e potência
+podem ser somados entre recortes de uma competência; somá-los entre meses conta
+a mesma UC várias vezes. Conexões novas e volumes são aditivos no tempo.
+Recalcule a queda percentual pelas médias de interesse; não some percentuais.
+
+### 4.7. Decisões de limpeza que mudam os indicadores
+
+| Tratamento | Métricas afetadas | Efeito auditável |
+| :--- | :--- | :--- |
+| [Silver de GD](../silver/silver_geracao_distribuida.md): vírgula decimal e potência em Wp dividida por 1.000 nas linhas identificadas | Potência, faixa e produtividade | Sem corrigir escala, o estoque de potência sobe de cerca de 31,87 para 242 MWp; `fl_correcao_escala` identifica as correções |
+| Silver de GD: deduplicação e validação de chave | Todas as contagens e somas | Evita multiplicar UCs no cruzamento; conflitos bloqueiam o pipeline |
+| [Silver de leituras](../silver/silver_leituras.md): sinal só corrigido com evidência; bloqueios preservados | Volumes, médias, medianas, queda e imputação | Não aplica valor absoluto ao negativo de troca; original e método permitem reconstituir o cálculo |
+| Gold: mediana da própria fase antes do fallback histórico | Consumo analítico e volumes P0/P1 | Evita imputar consumo pré-solar em mês pós-conexão quando há doadores nessa fase |
+| Gold: data de conexão mantida mesmo com `fl_data_inconsistente` | Comparação antes/após e conexões novas | As 5 UCs sem base anterior permanecem no cadastro; quedas sem base ficam nulas |
+| Gold: cadastro × calendário para estoque | UCs ativas, potência e novas conexões | Não exige leitura para contar a UC conectada |
+| [Silver de cadastro](../silver/silver_unidades_consumidoras.md): atributos padronizados | Todos os recortes geográficos e tarifários | Município/bairro/classe vêm de uma fonte única; atributos são retrato atual, não histórico cadastral |
 
 ---
 

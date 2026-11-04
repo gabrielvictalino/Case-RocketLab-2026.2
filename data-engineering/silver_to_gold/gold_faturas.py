@@ -376,7 +376,7 @@ def exportar_csv(tabelas: dict[str, DataFrame], diretorio: str, metadados: dict)
         if not nome.isidentifier():
             raise ValueError(f'Nome de tabela inválido: {nome}')
         pasta_tabela = pasta_lote / nome
-        df.write.mode('errorifexists').option('header', 'true').option('escape', '"').option(
+        df.write.mode('error').option('header', 'true').option('escape', '"').option(
             'ignoreLeadingWhiteSpace', 'false'
         ).option('ignoreTrailingWhiteSpace', 'false').option('dateFormat', 'yyyy-MM-dd').option(
             'nullValue', ''

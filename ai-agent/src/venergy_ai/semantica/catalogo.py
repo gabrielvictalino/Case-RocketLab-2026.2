@@ -2,8 +2,10 @@
 
 As views ficam em `importador/views.sql`. O teste de integração compara este catálogo
 com as colunas reais das views, nos dois sentidos, e falha quando uma muda sem a outra.
-Os valores possíveis e as faixas vêm do contrato (`contracts/tabelas/*.yaml`), e um teste
-compara os dois. As datas que cobrem a base vêm da carga, não deste arquivo.
+Grão, chave, valores possíveis e faixas vêm do contrato (`contracts/tabelas/*.yaml`), e
+um teste compara os dois. Onde o contrato não tem `enum`, os valores vêm da limpeza
+documentada em `docs/`, e outro teste confere cada um. As datas que cobrem a base vêm
+da carga, não deste arquivo.
 """
 
 from dataclasses import dataclass
@@ -56,6 +58,16 @@ GRUPO_UC = Coluna(
 )
 # A cobertura da base vem da carga, e o agente a recebe no prompt.
 BASE = 'Todas as competências da base.'
+# Limpeza da Silver: causa ausente vira NAO INFORMADA, separada de NAO IDENTIFICADA.
+CAUSAS = (
+    'CLIMATICA',
+    'VEGETACAO',
+    'TERCEIROS',
+    'SOBRECARGA',
+    'FALHA DE EQUIPAMENTO',
+    'NAO IDENTIFICADA',
+    'NAO INFORMADA',
+)
 
 VISOES = (
     Visao(
@@ -77,7 +89,10 @@ VISOES = (
         ),
         coluna_tempo=None,
         periodo='Retrato do cadastro na carga mais recente.',
-        regras=('Para recortar outra view por município, bairro ou classe, junte por id_uc.',),
+        regras=(
+            'Para recortar outra view por município, bairro ou classe, junte por id_uc. '
+            'continuidade_alimentador_mensal não tem id_uc: veja as regras dela.',
+        ),
     ),
     Visao(
         nome='uc_consumo_faturamento_mensal',
@@ -94,13 +109,16 @@ VISOES = (
             ),
             Coluna(
                 'consumo_kwh_analitico',
-                'Consumo analítico, o usado em todas as análises: igual ao original, exceto '
-                'na troca de medidor, quando é estimado pela mediana da UC.',
+                'Consumo analítico, o usado em todas as análises: igual ao original quando a '
+                'leitura é utilizável; no mês bloqueado (a troca de medidor é um caso, não o '
+                'único), estimado pela mediana da UC, como diz metodo_consumo.',
                 'kWh',
             ),
             Coluna(
                 'metodo_consumo',
-                'Origem do consumo analítico.',
+                'Origem do consumo analítico: LEITURA_UTILIZAVEL é o original sem ajuste; '
+                'MEDIANA_FASE_UC e MEDIANA_HISTORICA_UC estimam o mês bloqueado pela mediana da '
+                'UC na mesma fase da GD ou em todo o histórico.',
                 valores=('LEITURA_UTILIZAVEL', 'MEDIANA_FASE_UC', 'MEDIANA_HISTORICA_UC'),
             ),
             Coluna(
@@ -187,7 +205,8 @@ VISOES = (
         regras=(
             'Para receita e volume de um recorte, some as linhas; não tire média de segmentos.',
             'Tarifa média = SUM(receita) ÷ SUM(volume_faturado_kwh).',
-            'Inadimplência = (receita − receita arrecadada) ÷ receita do período.',
+            'Inadimplência = (receita − receita arrecadada) ÷ receita do período × 100, em %, '
+            'como no card do portal.',
         ),
     ),
     Visao(
@@ -201,8 +220,9 @@ VISOES = (
             Coluna('data_conexao', 'Data de conexão da GD.'),
         ),
         coluna_tempo='data_conexao',
-        periodo='Conexões desde jan/2024.',
+        periodo='Conexões registradas na carga; a primeira pode vir bem depois do início da base.',
         regras=(
+            'Antes de dizer que não houve conexão num período, confira MIN(data_conexao).',
             'Antes × depois da GD de uma UC: compare as competências anteriores e posteriores '
             'ao mês de data_conexao.',
         ),
@@ -217,7 +237,11 @@ VISOES = (
             ID_UC,
             Coluna('data_instalacao', 'Data de instalação do medidor na UC.'),
             Coluna('data_retirada', 'Data de retirada. Nula se o medidor está instalado.'),
-            Coluna('tipo_medidor', 'Tecnologia do medidor: ELETRONICO, ELETROMECANICO ou SMART.'),
+            Coluna(
+                'tipo_medidor',
+                'Tecnologia do medidor.',
+                valores=('ELETRONICO', 'ELETROMECANICO', 'SMART'),
+            ),
         ),
         coluna_tempo='data_instalacao',
         periodo='Instalações ao longo de toda a base.',
@@ -225,7 +249,10 @@ VISOES = (
     ),
     Visao(
         nome='continuidade_alimentador_mensal',
-        descricao='CHI, interrupções, DEC e FEC de cada alimentador em cada competência.',
+        descricao=(
+            'CHI, interrupções, DEC e FEC de cada alimentador em cada competência. Serve para '
+            'alimentador e município, não para bairro nem classe.'
+        ),
         grao='alimentador × competência',
         chave=('alimentador', 'competencia'),
         colunas=(
@@ -253,11 +280,11 @@ VISOES = (
                 'causa',
                 'Causa principal do mês (a de mais minutos); SEM OCORRENCIA no mês sem '
                 'interrupção.',
+                valores=(*CAUSAS, 'SEM OCORRENCIA'),
             ),
             Coluna(
                 'flag_evento_atipico',
-                'A competência é de evento atípico para o alimentador (ex.: o evento climático '
-                'de jul/2025).',
+                'A competência é de evento atípico para o alimentador (ex.: um evento climático).',
             ),
         ),
         coluna_tempo='competencia',
@@ -267,6 +294,10 @@ VISOES = (
             'numero_ucs. FEC de um período: SUM(interrupcoes) ÷ numero_ucs. O numero_ucs entra '
             'uma vez por alimentador, nunca somado sobre as competências. Para vários '
             'alimentadores, divida pela soma do numero_ucs de cada um, contado uma vez.',
+            'Município: todo alimentador fica num só município. Filtre alimentador IN (SELECT '
+            'alimentador FROM ai_read.ucs WHERE municipio = ...).',
+            'Bairro ou classe: não use esta view, que cobraria do recorte todos os eventos do '
+            'alimentador. Calcule com ocorrencias_uc, como diz a regra dela.',
             'Critério padrão para os piores alimentadores: CHI.',
             'Sem o evento atípico: filtre NOT flag_evento_atipico antes de somar.',
             'Por causa, use ocorrencias_uc: causa aqui é só a principal do mês.',
@@ -291,8 +322,9 @@ VISOES = (
             ),
             Coluna(
                 'causa',
-                'Causa: CLIMATICA, VEGETACAO, TERCEIROS, SOBRECARGA, FALHA DE EQUIPAMENTO, '
-                'NAO IDENTIFICADA ou NAO INFORMADA.',
+                'Causa apurada. NAO IDENTIFICADA é a investigada sem causa encontrada; NAO '
+                'INFORMADA, a que veio sem registro.',
+                valores=CAUSAS,
             ),
             Coluna(
                 'flag_sobreposicao',
@@ -304,6 +336,13 @@ VISOES = (
         regras=(
             'Tempo sem energia: SUM(duracao_efetiva_min). Número de interrupções: linhas com '
             'NOT flag_sobreposicao.',
+            'DEC e FEC de bairro ou classe, como no portal: parta das UCs do recorte em ucs '
+            '(todas, não só as interrompidas) e junte as ocorrências delas por id_uc. DEC = '
+            'SUM(duracao_efetiva_min) / 60 ÷ número de UCs do recorte; FEC = ocorrências com NOT '
+            'flag_sobreposicao ÷ o mesmo número.',
+            'Sem o evento atípico: esta view não tem a marcação. Exclua as ocorrências cujo '
+            "alimentador e mês (date_trunc('month', data_abertura)) têm flag_evento_atipico em "
+            'continuidade_alimentador_mensal.',
         ),
     ),
     Visao(
@@ -317,8 +356,15 @@ VISOES = (
             Coluna('aberto_em', 'Abertura do protocolo, hora local.'),
             Coluna(
                 'assunto',
-                'Assunto: FALTA DE ENERGIA, FATURA, DANO ELETRICO, LIGACAO NOVA, '
-                'GERACAO DISTRIBUIDA ou RELIGACAO.',
+                'Assunto do protocolo.',
+                valores=(
+                    'FALTA DE ENERGIA',
+                    'FATURA',
+                    'DANO ELETRICO',
+                    'LIGACAO NOVA',
+                    'GERACAO DISTRIBUIDA',
+                    'RELIGACAO',
+                ),
             ),
             Coluna('status', 'Situação do protocolo (ex.: ENCERRADO, EM ABERTO).'),
             Coluna(
@@ -365,14 +411,29 @@ VISOES = (
             ),
             Coluna(
                 'tipo_irregularidade',
-                'Tipo da irregularidade confirmada (texto livre). Nulo sem irregularidade.',
+                'Tipo da irregularidade confirmada; nulo sem irregularidade. OUTRO é um tipo '
+                'escrito no portal fora dos cinco da base: o texto livre não chega aqui.',
+                # Os cinco tipos da Silver de inspeções, mais o OUTRO da view.
+                valores=(
+                    'BY-PASS',
+                    'DESVIO DIRETO',
+                    'LACRE VIOLADO',
+                    'LIGACAO CLANDESTINA',
+                    'MEDIDOR ADULTERADO',
+                    'OUTRO',
+                ),
             ),
             Coluna('kwh_recuperado', 'Energia recuperada apurada na inspeção.', 'kWh'),
             Coluna('origem', 'historica (base da Gold) ou portal (concluída no portal).'),
         ),
         coluna_tempo='data',
-        periodo='Históricas de ago a dez/2025, mais as concluídas no portal.',
+        periodo=(
+            'As históricas cobrem só parte da base; as concluídas no portal podem ser de depois '
+            'da carga.'
+        ),
         regras=(
+            'Antes de dizer que não houve inspeção num período, confira MIN(data) e MAX(data) '
+            "com origem = 'historica'.",
             'Taxa de acerto = inspeções com IRREGULARIDADE CONFIRMADA ÷ inspeções do período.',
             'É a fonte padrão de irregularidade (gato, fraude): inclui as confirmadas no portal '
             'depois da carga, que ucs.flag_irregularidade_confirmada ainda não tem.',
@@ -381,7 +442,7 @@ VISOES = (
     Visao(
         nome='fila_inspecao',
         descricao=(
-            'Fila de inspeção da carga mais recente: UCs suspeitas, com score, motivos e '
+            'Fila de inspeção: UCs suspeitas sem ordem ativa no portal, com score, motivos e '
             'energia a recuperar.'
         ),
         grao='UC candidata',
@@ -398,13 +459,10 @@ VISOES = (
             Coluna('energia_recuperar_reais', 'Valor estimado da energia a recuperar.', 'R$'),
         ),
         coluna_tempo=None,
-        periodo='Retrato da fila na carga mais recente.',
+        periodo='Score da carga mais recente, sem as UCs que têm ordem ativa agora.',
         regras=(
-            'A fila é a da carga e não desconta as UCs que ganharam ordem aberta ou em campo '
-            'no portal depois dela: a view não vê as ordens. Ao responder sobre a fila, diga '
-            'que é a da última carga.',
-            'Para tirar as UCs já inspecionadas no portal, exclua as id_uc de inspecoes com '
-            "origem = 'portal'.",
+            'A view já tira as UCs com ordem aberta ou em campo, como a fila do portal. A UC com '
+            'ordem concluída ou cancelada volta à fila: reinspeção é permitida.',
             'Energia a recuperar é estimativa; kwh_recuperado de inspecoes é o apurado.',
         ),
     ),

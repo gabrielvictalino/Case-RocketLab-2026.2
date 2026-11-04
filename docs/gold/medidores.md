@@ -1,5 +1,7 @@
 # Gold de medidores (`GOLD_MEDIDORES_V1`)
 
+[Índice do dicionário da Gold](decisoes_silver_to_gold.md), domínio 5.
+
 | Item | Referência |
 | :--- | :--- |
 | **Notebook** | `data-engineering/silver_to_gold/silver-to-gold-medidores.ipynb` (autocontido; sem módulo `.py` e sem `%run`) |
@@ -126,6 +128,25 @@ As 5 colunas acima e mais:
 As descrições também ficam gravadas como comentários das colunas no Unity Catalog.
 
 ---
+
+### 4.1. Fórmulas das flags e dos indicadores de parque e troca
+
+| Campo / indicador | Fórmula / base | Decisões que afetam o cálculo |
+| :--- | :--- | :--- |
+| `flag_medidor_atual` | `status = ATIVO`, validado como equivalente a `data_retirada IS NULL` | Sentinela `9999-12-31` anulada na Silver; exatamente um atual por UC |
+| `ordem_na_uc` | `row_number()` por UC, ordenado por instalação, retirada (nula por último) e `id_medidor` | Datas tipadas na Silver; cadeia do medidor anterior validada |
+| `flag_instalado_em_troca` | `id_medidor_anterior IS NOT NULL`, validado como equivalente a `ordem_na_uc > 1` | A deduplicação e a validação da cadeia evitam trocas artificiais |
+| `competencia_instalacao`, `competencia_retirada` | `trunc(data_instalacao, 'month')`, `trunc(data_retirada, 'month')` | Quatro formatos de data tratados; retirada nula mantém competência nula |
+| `competencia_troca` | `trunc(data_retirada_do_medidor_anterior, 'month')` | A lacuna entre retirada e nova instalação não desloca a troca para o mês seguinte |
+| Medidores atuais por tecnologia | `COUNT(*)` onde `flag_medidor_atual`, agrupado por `tipo_medidor` | 10 grafias padronizadas para três tecnologias; não inclui retirados |
+| Trocas por mês / tecnologia substituída | `COUNT(*)` onde `flag_instalado_em_troca`, por `competencia_troca` / `tipo_medidor_anterior` | Conta o medidor que entrou na troca, uma vez; não soma as duas linhas da substituição |
+
+As contagens são consultas derivadas, não colunas adicionais. O parque atual é
+um retrato da extração, não um estoque histórico reconstruído mês a mês.
+As duas tabelas têm as mesmas instalações: uni-las ou somar suas contagens
+duplicaria o parque. A remoção das 513 duplicatas exatas na
+[Silver](../silver/silver_medidores.md) evita inflar parque e trocas; nenhuma
+tecnologia ou data é corrigida novamente na Gold.
 
 ## 5. Validações
 

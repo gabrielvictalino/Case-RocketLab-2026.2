@@ -105,8 +105,16 @@ Receita dividida pelo volume faturado, em R$/kWh. É derivada; a base não tem t
 _Evitar_: preço, tarifa
 
 **Inadimplência**:
-Percentual da receita do período em faturas ainda em aberto.
-_Evitar_: calote, atraso
+Percentual da receita do período em faturas ainda em aberto, vencidas ou não.
+_Evitar_: calote, atraso (o valor vencido é a conta atrasada)
+
+**Conta em aberto**:
+Fatura ainda não paga (`ABERTA`), vencida ou não.
+_Evitar_: dívida
+
+**Conta atrasada**:
+Conta em aberto com vencimento anterior à data de referência da carga. Sem essa data, não dá para saber quais venceram.
+_Evitar_: inadimplência (que não olha o vencimento)
 
 **Explicação da conta**:
 Comparação da fatura de uma UC com a do mesmo mês do ano anterior, separando o que mudou em consumo, bandeira e tarifa. Responde à reclamação de "conta alta".
@@ -145,7 +153,7 @@ _Evitar_: lista de suspeitos, ranking de fraude
 Nova ordem de inspeção para uma UC que já tem inspeção anterior.
 
 **Motivo da suspeita**:
-Os sinais que colocaram a UC na fila (queda de consumo, leituras estimadas, localização, tipo de medidor), em linguagem do negócio.
+Os sinais que colocaram a UC na fila (queda de consumo, leituras estimadas, tipo de medidor, inspeção anterior), em linguagem do negócio.
 
 **Energia a recuperar**:
 Estimativa, em kWh, da energia não faturada que a inspeção pode recuperar se confirmar irregularidade.

@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date
 
 import pytest
@@ -92,3 +93,39 @@ async def test_consultas_de_referencia_da_avaliacao_rodam_na_ai_read(executor):
         if caso.sql:
             resultado = await executor.executar(caso.sql)
             assert resultado.linhas, caso.id
+
+
+async def test_intervalo_vira_horas_e_o_nome_diz_isso(executor):
+    resultado = await executor.executar(
+        "SELECT interval '2 days' AS tempo_dias, interval '90 minutes' AS duracao_horas"
+    )
+    # "2 dias" chegaria ao redator como 48 numa coluna de dias.
+    assert resultado.colunas == ['tempo_dias_em_horas', 'duracao_horas']
+    assert resultado.linhas == [[48.0, 1.5]]
+
+
+async def test_teto_de_tempo_cancela_a_consulta_sem_virar_erro_de_sql(executor):
+    # O cancelamento no meio da consulta não pode virar ConsultaFalhou: o agente pediria
+    # outra consulta ao modelo e o 503 por tempo esgotado não viria.
+    with pytest.raises(TimeoutError):
+        async with asyncio.timeout(0.3):
+            await executor.executar('SELECT count(*) FROM generate_series(1, 400000000)')
+    # A conexão do pool continua servindo.
+    assert (await executor.executar('SELECT 1 AS um')).linhas == [[1]]
+
+
+async def test_cancelamentos_seguidos_nao_esgotam_o_pool(infrastructure):
+    # Uma conexão que não volta ao pool depois do cancelamento esgotaria as vagas: com
+    # uma vaga só e pool_timeout curto, a consulta final travaria no checkout.
+    engine = create_async_engine(
+        infrastructure['settings'].database_url_ai, pool_size=1, max_overflow=0, pool_timeout=2
+    )
+    try:
+        executor = ExecutorAiRead(engine)
+        for _ in range(3):
+            with pytest.raises(TimeoutError):
+                async with asyncio.timeout(0.2):
+                    await executor.executar('SELECT count(*) FROM generate_series(1, 400000000)')
+        assert (await executor.executar('SELECT 1 AS um')).linhas == [[1]]
+    finally:
+        await engine.dispose()

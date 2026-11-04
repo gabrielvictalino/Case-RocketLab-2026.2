@@ -11,7 +11,11 @@ Mede a qualidade das respostas do agente com o modelo real, de forma automatizad
 O esperado de cada pergunta é o **resultado** de uma consulta de referência, rodada
 como `ai_read` no mesmo banco. A avaliação não compara o texto nem o SQL literal. Ela
 confere também o período declarado e se o texto cita algum número que não está nas
-linhas.
+linhas. Essa conferência é própria da avaliação, mais estrita que a do agente e
+independente dela: só arredondamento, a escala escrita sempre aplicada e os metadados
+(linhas, meses, anos, números da pergunta) só na posição de metadado. Assim, um furo do
+validador do agente aparece como "número sem lastro" no relatório, em vez de passar
+pelas duas conferências iguais.
 
 O relatório traz:
 
