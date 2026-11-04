@@ -380,6 +380,35 @@ async def test_metrica_e_filtros_com_numero_fora_do_sql_nao_chegam_a_tela():
     assert resposta.filtros == ['município = Recife', 'LIMIT 1000']
 
 
+async def test_metrica_e_filtros_com_os_meses_do_periodo_padrao_ficam():
+    # Sem período na pergunta, o SQL filtra por datas, e o 12 de "últimos 12 meses" não
+    # aparece nele. A métrica e o filtro com esse 12 continuam valendo.
+    plano = PLANO | {
+        'metrica': 'Receita nos últimos 12 meses (R$)',
+        'filtros': ['município = Recife', 'últimos 12 meses'],
+    }
+    modelo, chamadas = modelo_simulado(plano, TEXTO)
+    resposta = await AgenteTextoSQL(modelo, ExecutorFalso(RESULTADO)).responder(
+        'Qual a receita de Recife?', CONTEXTO
+    )
+    assert resposta.metrica == 'Receita nos últimos 12 meses (R$)'
+    assert resposta.filtros == ['município = Recife', 'últimos 12 meses']
+
+
+async def test_redator_recebe_a_metrica_e_os_filtros_ja_conferidos():
+    plano = PLANO | {
+        'metrica': 'Receita faturada (R$ 5,2 milhões)',
+        'filtros': ['município = Recife', 'receita acima de R$ 9.999'],
+    }
+    modelo, chamadas = modelo_simulado(plano, TEXTO)
+    await AgenteTextoSQL(modelo, ExecutorFalso(RESULTADO)).responder(
+        'Qual a receita de Recife?', CONTEXTO
+    )
+    pedido = texto_das_mensagens(chamadas[1][0])
+    assert '5,2 milhões' not in pedido and '9.999' not in pedido
+    assert 'município = Recife' in pedido
+
+
 async def test_consulta_so_em_retrato_nao_declara_periodo():
     plano = PLANO | {
         'metrica': 'UCs no cadastro',

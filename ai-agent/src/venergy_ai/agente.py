@@ -152,8 +152,11 @@ class AgenteTextoSQL:
             )
         periodo = _periodo(plano, padrao, views)
         # A métrica e os filtros também são texto do modelo e vão para a tela: um número
-        # deles precisa estar no SQL que rodou (ou ser um ano ou um número da pergunta).
-        do_sql = [*anos, *numeros_citados(consulta.sql_executado)]
+        # deles precisa estar no SQL que rodou, ou ser um ano, um número da pergunta, os
+        # meses do período ("últimos 12 meses", que o SQL filtra por datas) ou o número de
+        # linhas do resultado.
+        meses = [periodo.meses] if periodo else []
+        do_sql = [*anos, *meses, len(consulta.linhas), *numeros_citados(consulta.sql_executado)]
         metrica = _sem_numero_inventado(plano.metrica, do_sql, da_pergunta, 'a métrica')
         filtros = [
             filtro
@@ -168,7 +171,9 @@ class AgenteTextoSQL:
             return _nao_sei(f'A consulta não encontrou dados{de_que}{onde}.', alternativa, **usados)
         try:
             redacao = await self.redator.run(
-                pedido_de_redacao(pergunta, plano.metrica, plano.filtros, periodo, consulta),
+                # A métrica e os filtros já conferidos: um número descartado não volta pelo
+                # texto do redator.
+                pedido_de_redacao(pergunta, metrica, filtros, periodo, consulta),
                 usage=uso,
             )
         except UnexpectedModelBehavior:
