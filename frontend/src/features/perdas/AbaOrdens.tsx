@@ -26,16 +26,11 @@ import {
   type Valores,
 } from './ordens'
 import { FormularioAcaoOrdem } from './FormularioAcaoOrdem'
+import { rotulosOrdem } from './rotulosOrdem'
 
 type Ordem = components['schemas']['Ordem']
 type Status = Ordem['status']
 type Pagina = components['schemas']['PaginaOrdens']
-const rotulos: Record<Status, string> = {
-  ABERTA: 'Aberta',
-  EM_CAMPO: 'Em campo',
-  CONCLUIDA: 'Concluída',
-  CANCELADA: 'Cancelada',
-}
 const variantes: Record<Status, VarianteEtiqueta> = {
   ABERTA: 'atencao',
   EM_CAMPO: 'marca',
@@ -164,7 +159,7 @@ export function AbaOrdens(props: Props) {
       cell: ({ row }) => (
         <>
           <Etiqueta variante={variantes[row.original.status]} ponto>
-            {rotulos[row.original.status]}
+            {rotulosOrdem[row.original.status]}
           </Etiqueta>
           {row.original.status === 'CONCLUIDA' && (
             <div>
@@ -247,7 +242,7 @@ export function AbaOrdens(props: Props) {
         <Selecao
           rotulo="Status"
           valor={props.status ?? ''}
-          opcoes={Object.entries(rotulos).map(([valor, rotulo]) => ({
+          opcoes={Object.entries(rotulosOrdem).map(([valor, rotulo]) => ({
             valor,
             rotulo,
           }))}
