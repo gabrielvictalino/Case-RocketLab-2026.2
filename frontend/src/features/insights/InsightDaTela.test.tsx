@@ -207,7 +207,7 @@ describe('InsightDaTela', () => {
     renderizarApp(`/visao-geral?${PERIODOS}`)
     const bloco = await blocoDoInsight()
     expect(
-      await within(bloco).findByText('Insight indisponível para esta combinação de períodos'),
+      await within(bloco).findByText('Insight indisponível no momento'),
     ).toBeInTheDocument()
     expect(within(bloco).getByText('Os demais dados da tela seguem válidos.')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Visão Geral' })).toBeInTheDocument()
@@ -259,9 +259,22 @@ describe('InsightDaTela', () => {
     renderizarApp(`/visao-geral?${PERIODOS}`)
     const bloco = await blocoDoInsight()
     expect(
-      await within(bloco).findByText('Insight indisponível para esta combinação de períodos'),
+      await within(bloco).findByText('Insight indisponível no momento'),
     ).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Visão Geral' })).toBeInTheDocument()
+  })
+
+  it.each([
+    [{ code: 'COTA_DE_TOKENS_ESGOTADA' }, 429, 'Cota diária de IA esgotada'],
+    [{ code: 'LIMITE_DE_INSIGHTS' }, 429, 'Limite de insights atingido'],
+    [{ code: 'PROVEDOR_INDISPONIVEL' }, 503, 'Insight indisponível no momento'],
+    [{ code: 'RECORTE_INVALIDO' }, 422, 'Insight indisponível para este recorte'],
+    [{ code: 'PERIODO_FORA_DA_BASE' }, 422, 'Insight indisponível para esta combinação de períodos'],
+  ])('o título diz a causa do erro %j', async (erro, status, titulo) => {
+    roteiro = () => json({ detail: 'falhou', ...erro }, status)
+    renderizarApp(`/visao-geral?${PERIODOS}`)
+    const bloco = await blocoDoInsight()
+    expect(await within(bloco).findByText(titulo)).toBeInTheDocument()
   })
 
   it('explica a cota diária esgotada, que só volta à meia-noite', async () => {

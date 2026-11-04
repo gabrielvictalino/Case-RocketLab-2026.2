@@ -2,11 +2,11 @@ import { useSearchParams } from 'react-router'
 import { usePeriodo } from '@/app/periodo/usePeriodo'
 import { BlocoInsight } from '@/components/BlocoInsight'
 import {
-  INSIGHT_INDISPONIVEL,
   insightValido,
   motivoIndisponivel,
   parametrosDoInsight,
   rodapeDoInsight,
+  tituloIndisponivel,
 } from '@/features/insights/insight'
 import { useInsight, type TelaInsight } from '@/features/insights/useInsight'
 import { lerRecortesUrl } from '@/lib/recortes'
@@ -15,7 +15,7 @@ export function InsightDaTela({ tela }: { tela: TelaInsight }) {
   const [searchParams] = useSearchParams()
   const { carga, parametros, carregando, erro } = usePeriodo()
   const pedido = parametrosDoInsight(tela, parametros, lerRecortesUrl(searchParams))
-  const insight = useInsight(tela, pedido, carga?.id ?? null)
+  const insight = useInsight(tela, pedido, carga?.batch_id ?? null)
 
   if (carregando || (!erro && insight.isPending)) {
     return <BlocoInsight carregando mensagemCarregando="Gerando insight" />
@@ -25,7 +25,7 @@ export function InsightDaTela({ tela }: { tela: TelaInsight }) {
     return (
       <BlocoInsight
         indisponivel
-        tituloIndisponivel={INSIGHT_INDISPONIVEL}
+        tituloIndisponivel={tituloIndisponivel(insight.error)}
         mensagemIndisponivel={motivoIndisponivel(insight.error)}
       />
     )

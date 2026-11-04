@@ -14,7 +14,8 @@ export function useInsight(
 ): UseQueryResult<Insight, ErroApi> {
   return useQuery<Insight, ErroApi>({
     // A carga, o período, a comparação e os recortes estão na chave: mudar qualquer um
-    // pede outro insight. A versão é o id da importação, novo a cada carga.
+    // pede outro insight. A versão é o batch_id da carga, a mesma chave das outras
+    // queries da tela.
     queryKey: ['insights', tela, versaoCarga, parametros],
     queryFn: () =>
       desembrulhar(
