@@ -461,7 +461,7 @@ def exportar_comerciais(tabelas, diretorio, metadados, raiz=CONTRATOS):
         df = validar_tabela_contratual(tabelas[nome], specs[nome])
         temporaria = pasta / f'_{nome}'
         (
-            df.write.mode('errorifexists')
+            df.write.mode('error')
             .option('header', 'true')
             .option('escape', '"')
             .option('ignoreLeadingWhiteSpace', 'false')
