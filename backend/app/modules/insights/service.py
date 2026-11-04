@@ -7,7 +7,7 @@ concluída que muda a taxa de acerto muda os fatos, e o próximo pedido gera out
 sem invalidação manual.
 
 O módulo não tem `repository`: não há SQL próprio. Os fatos vêm dos serviços de `kpis` e
-`receita`, e os recortes válidos, das dimensões de `meta`.
+`receita`, e os recortes válidos, do serviço de `meta`, que confere a carga publicada.
 """
 
 import asyncio
@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 
 from pydantic import ValidationError
 from pydantic_ai import RunUsage
-from redis.exceptions import RedisError
+from app.core.limites import FALHAS_DO_REDIS
 from venergy_ai.insights import RedatorDeInsights
 from venergy_ai.interface import InsightIndisponivel, PedidoInsight, ProvedorIndisponivel, Redator
 from venergy_ai.semantica import Periodo as PeriodoDoAgente
@@ -29,7 +29,7 @@ from app.modules.assistente.service import modelo_configurado
 from app.modules.insights import fatos
 from app.modules.insights.schemas import TELAS, Insight
 from app.modules.kpis import service as kpis
-from app.modules.meta import repository as meta
+from app.modules.meta import service as meta
 from app.modules.receita import service as receita
 
 TTL_S = 24 * 60 * 60
@@ -139,18 +139,25 @@ async def _montar(db, tela, periodo, comparacao, recorte):
 
 
 async def _conferir_recorte(db, recorte):
-    """O recorte vem da URL e vai ao prompt: só valem valores que existem na carga."""
-    dimensoes = await meta.dimensoes(db)
-    bairros = dimensoes['bairros']
+    """O recorte vem da URL e vai ao prompt: só valem valores que existem na carga.
+
+    Sem recorte (a Visão Geral nunca manda), não há o que conferir nem consulta a fazer.
+    Com recorte, as dimensões vêm do serviço de `meta`, que confere antes a carga
+    publicada: sem carga, a resposta é 503 `BASE_INDISPONIVEL`, como nas outras rotas."""
+    parametros = recorte.parametros()
+    if not parametros:
+        return
+    dimensoes = await meta.filtros(db)
+    bairros = dimensoes.bairros
     validos = {
-        'municipio': set(dimensoes['municipios']),
+        'municipio': set(dimensoes.municipios),
         'bairro': set(bairros.get(recorte.municipio, ()))
         if recorte.municipio
         else {bairro for lista in bairros.values() for bairro in lista},
-        'classe': set(dimensoes['classes']),
-        'alimentador': set(dimensoes['alimentadores']),
+        'classe': set(dimensoes.classes),
+        'alimentador': set(dimensoes.alimentadores),
     }
-    for campo, valor in recorte.parametros().items():
+    for campo, valor in parametros.items():
         if valor not in validos[campo]:
             raise APIError(422, f'{campo} fora da carga publicada', 'RECORTE_INVALIDO')
 
@@ -163,7 +170,7 @@ def _do_agente(texto: str) -> PeriodoDoAgente:
 async def _ler(redis, chave) -> Insight | None:
     try:
         guardado = await redis.get(chave)
-    except RedisError:
+    except FALHAS_DO_REDIS:
         logger.warning('redis indisponível; insight gerado sem cache')
         return None
     if guardado is None:
@@ -178,5 +185,5 @@ async def _ler(redis, chave) -> Insight | None:
 async def _guardar(redis, chave, resposta: Insight):
     try:
         await redis.set(chave, resposta.model_dump_json(), ex=TTL_S)
-    except RedisError:
+    except FALHAS_DO_REDIS:
         logger.warning('redis indisponível; insight não guardado')

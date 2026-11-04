@@ -9,6 +9,8 @@ from pydantic_ai.models.function import FunctionModel
 from redis.asyncio import Redis
 from venergy_ai.insights import RedatorDeInsights
 
+from app.modules.meta import repository as meta_repository
+
 pytestmark = pytest.mark.integration
 
 PERIODO = dict(periodo='2025-07..2026-06')
@@ -319,3 +321,64 @@ async def test_receita_e_consultada_uma_vez_por_pedido(portal_insights, monkeypa
     resposta = await http.get('/api/v1/insights/receita', params=PERIODO, headers=headers)
     assert resposta.status_code == 200, resposta.text
     assert len(consultas) == 1
+
+
+class RedisQueNaoRespondeNoCache:
+    """O Redis da suíte, mas a leitura e a gravação do cache estouram com o TimeoutError
+    nativo."""
+
+    def __init__(self, redis):
+        self.redis = redis
+
+    def __getattr__(self, nome):
+        return getattr(self.redis, nome)
+
+    async def get(self, *args, **kwargs):
+        raise TimeoutError('timeout de conexão do redis')
+
+    async def set(self, *args, **kwargs):
+        raise TimeoutError('timeout de conexão do redis')
+
+
+async def test_timeout_do_redis_no_cache_gera_o_insight(portal_insights):
+    app, http, headers = portal_insights
+    chamadas = usar_modelo(app, da_visao_geral)
+    original = app.state.redis
+    app.state.redis = RedisQueNaoRespondeNoCache(original)
+    try:
+        resposta = await http.get('/api/v1/insights/visao-geral', params=PERIODO, headers=headers)
+    finally:
+        app.state.redis = original
+    assert resposta.status_code == 200, resposta.text
+    assert len(chamadas) == 1
+
+
+async def test_sem_carga_publicada_responde_503_e_nao_500(portal_insights, monkeypatch):
+    # Com um recorte para conferir, a carga é conferida antes das dimensões: sem carga, a
+    # dim_uc pode nem existir.
+    app, http, headers = portal_insights
+    chamadas = usar_modelo(app, da_receita)
+
+    async def sem_carga(db):
+        return None
+
+    monkeypatch.setattr(meta_repository, 'carga_atual', sem_carga)
+    resposta = await http.get(
+        '/api/v1/insights/receita',
+        params=PERIODO | {'comparacao': '2024-07..2025-06', 'municipio': 'Recife'},
+        headers=headers,
+    )
+    assert resposta.status_code == 503 and resposta.json()['code'] == 'BASE_INDISPONIVEL'
+    assert chamadas == []
+
+
+async def test_sem_recorte_nao_consulta_as_dimensoes(portal_insights, monkeypatch):
+    app, http, headers = portal_insights
+    usar_modelo(app, da_visao_geral)
+
+    async def nao_chamar(db):
+        raise AssertionError('as dimensões não deviam ser consultadas sem recorte')
+
+    monkeypatch.setattr(meta_repository, 'dimensoes', nao_chamar)
+    resposta = await http.get('/api/v1/insights/visao-geral', params=PERIODO, headers=headers)
+    assert resposta.status_code == 200, resposta.text
