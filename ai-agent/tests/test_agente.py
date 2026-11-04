@@ -7,7 +7,7 @@ from pydantic_ai.exceptions import ModelConnectionError, ModelTimeoutError
 from pydantic_ai.models.function import FunctionModel
 from sqlalchemy.exc import InterfaceError
 
-from venergy_ai.agente import MOTIVO_SEM_DADO, AgenteTextoSQL
+from venergy_ai.agente import CONSULTA_INTERROMPIDA, MOTIVO_SEM_DADO, AgenteTextoSQL
 from venergy_ai.executor import ConsultaFalhou, ExecutorAiRead, ResultadoSQL
 from venergy_ai.interface import (
     Andamento,
@@ -304,6 +304,82 @@ async def test_nao_sei_pode_citar_os_anos_da_pergunta_e_do_periodo():
     assert resposta.alternativa == 'Qual a receita de Recife em 2026?'
 
 
+async def test_nao_sei_pode_citar_o_primeiro_ano_da_base():
+    # "A base começa em 2022" é a explicação que mais ajuda numa pergunta sobre 2021.
+    contexto = CONTEXTO.model_copy(update={'competencia_inicial': date(2022, 7, 1)})
+    plano = {'tipo': 'sem_dado', 'motivo': 'A base começa em 2022.'}
+    modelo, _ = modelo_simulado(plano)
+    resposta = await AgenteTextoSQL(modelo, ExecutorFalso()).responder(
+        'Qual a receita de 2021?', contexto
+    )
+    assert resposta.motivo == 'A base começa em 2022.'
+
+
+async def test_alternativa_pode_repetir_o_numero_da_pergunta_no_mesmo_papel():
+    plano = {
+        'tipo': 'sem_dado',
+        'motivo': 'A base não tem a geração das placas solares.',
+        'alternativa': 'Quais as 5 UCs com maior potência instalada?',
+    }
+    modelo, _ = modelo_simulado(plano)
+    resposta = await AgenteTextoSQL(modelo, ExecutorFalso()).responder(
+        'Quais as 5 UCs que mais geraram energia solar?', CONTEXTO
+    )
+    assert resposta.alternativa == 'Quais as 5 UCs com maior potência instalada?'
+
+
+@pytest.mark.parametrize(
+    'pergunta,texto,linhas,tipo',
+    [
+        (
+            'Quais os 10 bairros com maior queda de receita?',
+            'Dos 10 bairros pedidos, só 7 têm dado; o primeiro caiu R$ 1.234.',
+            [[-1234]] * 7,
+            'resposta',
+        ),
+        (
+            'Quantas UCs têm 3 ou mais interrupções?',
+            'Há 42 UCs com 3 ou mais interrupções.',
+            [[42]],
+            'resposta',
+        ),
+        (
+            'Qual a receita dos últimos 3 anos?',
+            'Nos últimos 3 anos, a receita foi de R$ 1.234.567,89.',
+            [[1234567.89]],
+            'resposta',
+        ),
+        # O número que a pergunta afirma não vira limiar na resposta.
+        (
+            'A receita de Recife foi R$ 9.876.543,21, certo?',
+            'A receita foi de mais de R$ 9.876.543,21.',
+            [[1234567.89]],
+            'nao_sei',
+        ),
+    ],
+)
+async def test_numeros_da_pergunta_valem_no_papel_que_tinham(pergunta, texto, linhas, tipo):
+    modelo, _ = modelo_simulado(PLANO, texto)
+    executor = ExecutorFalso(ResultadoSQL(['receita_reais'], linhas, 5))
+    resposta = await AgenteTextoSQL(modelo, executor).responder(pergunta, CONTEXTO)
+    assert resposta.tipo == tipo, resposta.motivo
+
+
+async def test_metrica_e_filtros_com_numero_fora_do_sql_nao_chegam_a_tela():
+    plano = PLANO | {
+        'metrica': 'Receita faturada (R$ 5,2 milhões)',
+        'filtros': ['município = Recife', 'receita acima de R$ 9.999', 'LIMIT 1000'],
+    }
+    modelo, _ = modelo_simulado(plano, TEXTO)
+    resposta = await AgenteTextoSQL(modelo, ExecutorFalso(RESULTADO)).responder(
+        'Qual a receita de Recife?', CONTEXTO
+    )
+    assert resposta.tipo == 'resposta'
+    assert resposta.metrica is None
+    # O 1000 está no SQL que rodou (o LIMIT da guarda); o 9.999 não está.
+    assert resposta.filtros == ['município = Recife', 'LIMIT 1000']
+
+
 async def test_consulta_so_em_retrato_nao_declara_periodo():
     plano = PLANO | {
         'metrica': 'UCs no cadastro',
@@ -451,19 +527,33 @@ class TransacaoQueRecusaORollback:
 
 
 class ConexaoLenta:
+    def __init__(self):
+        self.invalidada = False
+        self.fechada = False
+
     async def begin(self):
         return TransacaoQueRecusaORollback()
 
     async def exec_driver_sql(self, sql):
         await asyncio.sleep(10)
 
+    async def invalidate(self):
+        self.invalidada = True
+
     async def close(self):
-        raise InterfaceError('close', {}, Exception('another operation is in progress'))
+        # Enquanto a consulta cancelada não acabou, o close também é recusado; invalidada,
+        # a conexão só devolve a vaga ao pool.
+        if not self.invalidada:
+            raise InterfaceError('close', {}, Exception('another operation is in progress'))
+        self.fechada = True
 
 
 class EngineLenta:
+    def __init__(self):
+        self.conexao = ConexaoLenta()
+
     async def connect(self):
-        return ConexaoLenta()
+        return self.conexao
 
 
 async def test_cancelamento_nao_vira_falha_de_sql_quando_o_rollback_falha():
@@ -472,6 +562,35 @@ async def test_cancelamento_nao_vira_falha_de_sql_quando_o_rollback_falha():
     with pytest.raises(TimeoutError):
         async with asyncio.timeout(0.05):
             await ExecutorAiRead(EngineLenta()).executar('SELECT 1')
+
+
+async def test_conexao_que_recusa_o_close_no_cancelamento_e_invalidada():
+    # Ignorar o erro do close deixaria a conexão fora do pool: depois de pool_size +
+    # max_overflow timeouts, toda pergunta travaria no checkout.
+    engine = EngineLenta()
+    with pytest.raises(TimeoutError):
+        async with asyncio.timeout(0.05):
+            await ExecutorAiRead(engine).executar('SELECT 1')
+    await asyncio.sleep(0)
+    assert engine.conexao.invalidada and engine.conexao.fechada
+
+
+class ExecutorLento:
+    async def executar(self, sql):
+        await asyncio.sleep(10)
+
+
+async def test_sql_fica_no_andamento_quando_o_teto_cancela_a_consulta():
+    modelo, _ = modelo_simulado(PLANO)
+    andamento = Andamento()
+    with pytest.raises(TimeoutError):
+        async with asyncio.timeout(0.05):
+            await AgenteTextoSQL(modelo, ExecutorLento()).responder(
+                'Qual a receita?', CONTEXTO, andamento
+            )
+    [consulta] = andamento.consultas
+    assert 'ai_read.receita_volume_mensal' in consulta.sql_executado
+    assert consulta.erro == CONSULTA_INTERROMPIDA
 
 
 async def test_conferencia_usa_so_as_linhas_mostradas_ao_redator():
@@ -525,6 +644,41 @@ async def test_follow_up_recebe_o_estado_da_conversa():
     assert 'Sem período na pergunta: jan/2025 a jun/2025' in instrucoes
     assert resposta.periodo.descricao == 'jan/2025 a jun/2025'
     assert resposta.filtros == ['município = Olinda']
+
+
+@pytest.mark.parametrize(
+    'tela_na_troca,tela_agora,esperado',
+    [
+        # A tela não mudou desde a troca: vale o período da troca anterior.
+        (Periodo(date(2025, 1, 1), date(2025, 6, 1)), None, 'jul/2025 a dez/2025'),
+        (None, None, 'jul/2025 a dez/2025'),
+        # A tela mudou de período depois da troca: vale o da tela.
+        (None, Periodo(date(2024, 1, 1), date(2024, 6, 1)), 'jan/2024 a jun/2024'),
+    ],
+)
+async def test_periodo_da_tela_vence_quando_mudou_desde_a_ultima_troca(
+    tela_na_troca, tela_agora, esperado
+):
+    anterior = Troca(
+        pergunta='Qual a receita de Recife?',
+        metrica='Receita faturada (R$)',
+        periodo=PeriodoUsado(
+            inicio=date(2025, 7, 1), fim=date(2025, 12, 1), descricao='jul/2025 a dez/2025'
+        ),
+        periodo_da_tela=tela_na_troca,
+    )
+    if tela_na_troca is not None:
+        tela_agora = tela_na_troca
+    contexto = CONTEXTO.model_copy(update={'historico': [anterior], 'periodo': tela_agora})
+    plano = PLANO | {'periodo_inicio': None, 'periodo_fim': None}
+    modelo, chamadas = modelo_simulado(plano, 'A receita foi de R$ 1.234.567,89.')
+    resposta = await AgenteTextoSQL(modelo, ExecutorFalso(RESULTADO)).responder(
+        'Qual a receita de Olinda?', contexto
+    )
+    assert f'Sem período na pergunta: {esperado}' in chamadas[0][1].instructions
+    assert resposta.periodo.descricao == esperado
+    # O período da tela é estado interno da conversa: não vai ao prompt.
+    assert 'periodo_da_tela' not in chamadas[0][1].instructions
 
 
 async def test_sem_conversa_nao_ha_bloco_de_conversa():

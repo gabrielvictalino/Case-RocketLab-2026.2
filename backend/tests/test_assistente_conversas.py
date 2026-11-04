@@ -162,9 +162,60 @@ async def test_troca_de_outra_usuaria_nao_entra_na_conversa(portal):
     headers = await entrar(http, 'perdas')
     primeira = (await http.post(URL, json={'pergunta': 'UCs?'}, headers=headers)).json()
     resposta = RespostaAgente(tipo='resposta', texto=TEXTO, metrica='UCs', modelo='simulado')
-    await conversas.registrar(app.state.redis, primeira['conversa_id'], uuid4(), 'Outra?', resposta)
+    await conversas.registrar(
+        app.state.redis, primeira['conversa_id'], uuid4(), 'Outra?', resposta, None
+    )
     trocas = await trocas_no_redis(app, primeira['conversa_id'])
     assert [t['pergunta'] for t in trocas] == ['UCs?']
+
+
+async def test_conversa_no_formato_antigo_segue_como_conversa_nova(portal):
+    # Antes do v2, conversa:{id} era um JSON com a dona e as trocas. Depois do deploy, o
+    # follow-up dessa conversa responde e já grava a troca no formato novo.
+    app, http = portal
+    usar_modelo(app, PLANO, TEXTO, PLANO, TEXTO)
+    headers = await entrar(http, 'perdas')
+    primeira = (await http.post(URL, json={'pergunta': 'UCs?'}, headers=headers)).json()
+    conversa_id = primeira['conversa_id']
+    redis = app.state.redis
+    await redis.delete(chave(conversa_id), chave_das_trocas(conversa_id))
+    antiga = {'usuario_id': 'dona', 'trocas': [{'pergunta': 'UCs?', 'metrica': 'UCs'}]}
+    await redis.set(f'conversa:{conversa_id}', json.dumps(antiga), ex=7200)
+    corpo = {'pergunta': 'E agora?', 'conversa_id': conversa_id}
+    resposta = await http.post(URL, json=corpo, headers=headers)
+    assert resposta.status_code == 200, resposta.text
+    assert [t['pergunta'] for t in await trocas_no_redis(app, conversa_id)] == ['E agora?']
+
+
+async def test_troca_ilegivel_no_redis_nao_derruba_o_follow_up(portal):
+    # Uma troca gravada por outra versão de Troca fica fora do histórico, sem 500.
+    app, http = portal
+    usar_modelo(app, PLANO, TEXTO, PLANO, TEXTO)
+    headers = await entrar(http, 'perdas')
+    primeira = (await http.post(URL, json={'pergunta': 'UCs?'}, headers=headers)).json()
+    conversa_id = primeira['conversa_id']
+    await app.state.redis.lpush(chave_das_trocas(conversa_id), '{"formato": "outro"}')
+    corpo = {'pergunta': 'E agora?', 'conversa_id': conversa_id}
+    resposta = await http.post(URL, json=corpo, headers=headers)
+    assert resposta.status_code == 200, resposta.text
+    perguntas = [t.get('pergunta') for t in await trocas_no_redis(app, conversa_id)]
+    assert perguntas == [None, 'UCs?', 'E agora?']
+
+
+async def test_pergunta_sem_metrica_tambem_renova_o_ttl(portal):
+    # O TTL se renova a cada pergunta, não só nas que gravam uma troca.
+    app, http = portal
+    usar_modelo(app, PLANO, TEXTO, FORA)
+    headers = await entrar(http, 'perdas')
+    primeira = (await http.post(URL, json={'pergunta': 'UCs?'}, headers=headers)).json()
+    conversa_id = primeira['conversa_id']
+    redis = app.state.redis
+    for chave_redis in (chave(conversa_id), chave_das_trocas(conversa_id)):
+        await redis.expire(chave_redis, 60)
+    corpo = {'pergunta': 'Qual a capital da França?', 'conversa_id': conversa_id}
+    assert (await http.post(URL, json=corpo, headers=headers)).json()['tipo'] == 'nao_sei'
+    for chave_redis in (chave(conversa_id), chave_das_trocas(conversa_id)):
+        assert 7000 < await redis.ttl(chave_redis) <= 7200
 
 
 async def trocas_no_redis(app, conversa_id):

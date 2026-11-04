@@ -25,8 +25,10 @@ END $$;
 -- No portal, tipo_irregularidade é texto livre do operador e pode trazer nome ou
 -- documento do morador. A IA vê só os cinco tipos da Silver, sem diferenciar maiúsculas,
 -- espaços nas pontas e acentos ("desvio direto" é DESVIO DIRETO); o resto vira OUTRO.
--- A migração 0004 recria esta view e a fila num banco já carregado: quem muda uma das
--- duas aqui muda lá também.
+-- O translate também tem as minúsculas acentuadas: num banco com LC_CTYPE=C, o upper()
+-- não troca "ç" por "Ç".
+-- A migração 0004 recria esta view, a fila e a view do portal num banco já carregado:
+-- quem muda uma delas aqui muda lá também (test_migrations compara as duas versões).
 CREATE VIEW ai_read.inspecoes AS
  SELECT id_inspecao,id_uc,data,inspetor,resultado,
         CASE WHEN tipo IN ('BY-PASS','DESVIO DIRETO','LACRE VIOLADO',
@@ -43,7 +45,8 @@ CREATE VIEW ai_read.inspecoes AS
  ) todas
  CROSS JOIN LATERAL (
   SELECT translate(upper(nullif(btrim(todas.tipo_irregularidade), '')),
-                   'ÁÀÂÃÉÊÍÓÔÕÚÇ', 'AAAAEEIOOOUC') AS tipo
+                   'ÁÀÂÃÉÊÍÓÔÕÚÇáàâãéêíóôõúç',
+                   'AAAAEEIOOOUCAAAAEEIOOOUC') AS tipo
  ) normal;
 GRANT SELECT ON ai_read.inspecoes TO ai_read;
 -- Não expõe titular, documento ou endereço.

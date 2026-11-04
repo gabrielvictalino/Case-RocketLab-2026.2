@@ -69,8 +69,29 @@ async def insight(state, tela, periodo, comparacao, recorte, usuario) -> Insight
     uso = RunUsage()
     try:
         await limites.consumir(state.redis, usuario['id'], 'insights', settings.insights_por_minuto)
-        async with asyncio.timeout(settings.assistente_timeout_s) as limite:
-            gerado = await state.redator.redigir(pedido, uso)
+        gerado = await _redigir(state, pedido, uso, tela)
+    finally:
+        await limites.acertar_cota(state.redis, reserva, uso.input_tokens + uso.output_tokens)
+    if gerado.descartadas:
+        logger.info('tela=%s observações descartadas: %s', tela, '; '.join(gerado.descartadas))
+    resposta = Insight(
+        **metadados,
+        tela=tela,
+        observacoes=gerado.observacoes,
+        modelo=gerado.modelo,
+        gerado_em=datetime.now(UTC),
+    )
+    await _guardar(state.redis, chave, resposta)
+    return resposta
+
+
+async def _redigir(state, pedido: PedidoInsight, uso: RunUsage, tela: str):
+    """Chama o redator com o teto de tempo. Só o que acontece dentro do teto passa pelos
+    ramos dele: um TimeoutError de fora (do limite por minuto, por exemplo) não chega a
+    ler o `limite`."""
+    try:
+        async with asyncio.timeout(state.settings.assistente_timeout_s) as limite:
+            return await state.redator.redigir(pedido, uso)
     except TimeoutError:
         if not limite.expired():
             raise
@@ -86,19 +107,6 @@ async def insight(state, tela, periodo, comparacao, recorte, usuario) -> Insight
         raise APIError(
             503, 'Nenhuma observação do modelo passou na validação', 'INSIGHT_INDISPONIVEL'
         ) from None
-    finally:
-        await limites.acertar_cota(state.redis, reserva, uso.input_tokens + uso.output_tokens)
-    if gerado.descartadas:
-        logger.info('tela=%s observações descartadas: %s', tela, '; '.join(gerado.descartadas))
-    resposta = Insight(
-        **metadados,
-        tela=tela,
-        observacoes=gerado.observacoes,
-        modelo=gerado.modelo,
-        gerado_em=datetime.now(UTC),
-    )
-    await _guardar(state.redis, chave, resposta)
-    return resposta
 
 
 async def _montar(db, tela, periodo, comparacao, recorte):
