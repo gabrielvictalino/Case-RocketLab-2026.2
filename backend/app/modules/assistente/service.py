@@ -136,7 +136,12 @@ async def _responder(state, body: Pergunta, usuario, andamento: Andamento) -> Re
     async with state.portal_sessions() as db, db.begin():
         await repository.registrar(db, registro | _da_resposta(resposta))
     await conversas.registrar(
-        state.redis, registro['conversa_id'], usuario['id'], body.pergunta, resposta
+        state.redis,
+        registro['conversa_id'],
+        usuario['id'],
+        body.pergunta,
+        resposta,
+        contexto.periodo,
     )
     return RespostaPergunta(
         **resposta.model_dump(), id_resposta=registro['id'], conversa_id=registro['conversa_id']

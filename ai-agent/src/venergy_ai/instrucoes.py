@@ -19,6 +19,7 @@ Transforme a pergunta do usuário em um plano e numa consulta SQL para PostgreSQ
 - Arredonde no SQL: ROUND(valor::numeric, 2) para R$ e ROUND(valor::numeric, 1) para kWh,
   horas e percentuais. Percentual já multiplicado por 100.
 - Dê às colunas nomes que digam o que são, com a unidade: receita_reais, variacao_pct.
+  Um valor já convertido de escala leva a escala no nome: volume_mwh, receita_milhoes.
 - Numa comparação entre períodos, traga o valor atual, o anterior e a variação na mesma linha.
 - competencia é DATE no primeiro dia do mês: filtre com
   competencia BETWEEN DATE 'AAAA-MM-01' AND DATE 'AAAA-MM-01'.
@@ -177,7 +178,10 @@ def _como_dado(valor) -> str:
 
 
 def _conversa(historico: list[Troca]) -> str:
-    trocas = [troca.model_dump(mode='json', exclude_none=True) for troca in historico]
+    trocas = [
+        troca.model_dump(mode='json', exclude_none=True, exclude={'periodo_da_tela'})
+        for troca in historico
+    ]
     return '\n'.join(
         (
             '## Conversa até aqui',
