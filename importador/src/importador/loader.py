@@ -13,6 +13,10 @@ from importador.contracts import ContractError, file_hash, manifest_for, records
 logger = logging.getLogger(__name__)
 VIEWS = Path(__file__).resolve().parents[2] / 'views.sql'
 PUBLICATION_LOCK = 7820360
+# Lock de transação da troca de `analytics`: exclusivo aqui, compartilhado nas leituras do
+# portal (`app.core.database.SWAP_LOCK`). O PUBLICATION_LOCK serializa só importadores e
+# dura a carga inteira; este dura só a troca, para não segurar as telas durante o COPY.
+SWAP_LOCK = 7820361
 
 
 class _Verificado(Exception):
@@ -277,6 +281,9 @@ async def load(origin, database_url, redis_url=None, *, verify_only=False):
                 if verify_only:
                     raise _Verificado()
 
+                # Espera as leituras em curso terminarem; as novas aguardam o commit e já
+                # leem a carga nova, com os números e a identificação da mesma publicação.
+                await db.execute('SELECT pg_advisory_xact_lock($1)', SWAP_LOCK)
                 await db.execute('ALTER SCHEMA analytics RENAME TO analytics_anterior')
                 await db.execute('ALTER SCHEMA analytics_staging RENAME TO analytics')
                 await db.execute('GRANT USAGE ON SCHEMA analytics TO portal')

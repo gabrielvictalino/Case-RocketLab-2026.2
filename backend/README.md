@@ -100,7 +100,12 @@ O UUID é a versão da carga, também publicada na chave Redis `versao_carga`.
 O PostgreSQL é a fonte de verdade: se a atualização do Redis falhar, o CLI avisa,
 a carga permanece confirmada e `/meta/carga` informa sua versão correta.
 Um advisory lock de sessão serializa importações até o fim da atualização Redis,
-inclusive após o commit. `carregado_em` usa o relógio da publicação e
+inclusive após o commit. Um segundo advisory lock, de transação, sincroniza a
+publicação com as leituras: cada transação do portal o pega compartilhado
+(`app.core.database.sincronizar_com_a_publicacao`) e o importador o pega exclusivo
+só na troca de `analytics`. Assim uma resposta nunca mistura a identificação de uma
+carga com os números de outra; durante a troca, que leva frações de segundo, as
+leituras novas esperam. `carregado_em` usa o relógio da publicação e
 `ordem_publicacao`, uma sequência do banco, define a carga atual em `/meta/carga`.
 Uma falha de Redis pode manter sua chave antiga: consumidores de cache devem obter
 a versão em `operations.cargas`, usando a mesma transação da consulta analítica,
