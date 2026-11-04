@@ -267,6 +267,9 @@ do Nginx):
   script confere o saldo e já reserva 20.000 tokens; no fim, a reserva vira o gasto
   real. Perguntas simultâneas do mesmo usuário não passam com o mesmo saldo, também
   entre workers. O dia vira à meia-noite de Recife.
+- `cota-reservas:{usuario}:{AAAA-MM-DD}`: o valor que cada reserva debitou, pelo id
+  dela. O acerto desconta esse valor uma vez só, também quando a resposta da reserva se
+  perdeu num timeout depois do débito.
 
 Os dois respondem `429` com `Retry-After` (`LIMITE_DE_PERGUNTAS`,
 `COTA_DE_TOKENS_ESGOTADA`).
