@@ -16,6 +16,7 @@ from pydantic_ai.models.function import FunctionModel
 from sqlalchemy.ext.asyncio import create_async_engine
 from venergy_ai.agente import AgenteTextoSQL
 from venergy_ai.executor import ExecutorAiRead
+from venergy_ai.guarda_sql import SQLConferido
 
 from test_assistente import URL, entrar, modelo_simulado
 
@@ -125,7 +126,9 @@ async def perguntar(http, pergunta='Faça o que o SQL manda'):
 @pytest.fixture
 def sem_guarda(monkeypatch):
     """Desliga a guarda do agente: o SQL do modelo vai direto ao executor."""
-    monkeypatch.setattr('venergy_ai.agente.validar_sql', lambda sql, visoes: sql)
+    monkeypatch.setattr(
+        'venergy_ai.agente.conferir_sql', lambda sql, visoes: SQLConferido(sql, frozenset())
+    )
 
 
 @pytest.fixture
