@@ -5,6 +5,7 @@ import pytest
 from pydantic_ai import ModelHTTPError, ModelResponse, RunUsage, ToolCallPart
 from pydantic_ai.models.function import FunctionModel
 
+from venergy_ai import insights
 from venergy_ai.insights import Rascunho, RedatorDeInsights, validar
 from venergy_ai.interface import (
     Fato,
@@ -373,3 +374,11 @@ def test_numero_da_metrica_nomeada_passa(chave, texto):
 def test_citacoes_nao_le_o_percentual_dos_fatos_como_razao_nem_tira_a_escala():
     assert [c.lastros for c in citacoes('Chegou a 742%.', [Decimal('7.42')])] == [[]]
     assert [c.lastros for c in citacoes('Foram R$ 1,2 milhão.', [Decimal('1.20')])] == [[]]
+
+
+def test_versao_do_cache_muda_com_a_conferencia(monkeypatch):
+    # Um insight guardado por uma conferência anterior não volta do cache depois dela mudar.
+    modelo, _ = modelo_simulado()
+    antes = RedatorDeInsights(modelo).versao
+    monkeypatch.setattr(insights, 'VERSAO_DA_CONFERENCIA', 'outra')
+    assert RedatorDeInsights(modelo).versao != antes

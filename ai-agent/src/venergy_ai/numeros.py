@@ -60,25 +60,27 @@ NUMERO = re.compile(
     r'|bilh(?:ão|ões|ao|oes)|bi|MWh|GWh)(?![^\W\d_])))?',
     re.IGNORECASE,
 )
-# MWh e GWh entram como escala porque as views trazem energia em kWh. O segundo item é a
-# família da escala, para reconhecer a coluna que já está nela.
+# A escala escrita no texto e quanto ela multiplica o número. MWh e GWh entram como escala
+# porque a unidade comum da energia é o kWh, a das views.
 ESCALAS = {
-    'milh': (Decimal(10) ** 6, 'milhao'),
-    'mil': (Decimal(1000), 'mil'),
-    'mi': (Decimal(10) ** 6, 'milhao'),
-    'bilh': (Decimal(10) ** 9, 'bilhao'),
-    'bi': (Decimal(10) ** 9, 'bilhao'),
-    'mwh': (Decimal(1000), 'mwh'),
-    'gwh': (Decimal(10) ** 6, 'gwh'),
+    'milh': Decimal(10) ** 6,
+    'mil': Decimal(1000),
+    'mi': Decimal(10) ** 6,
+    'bilh': Decimal(10) ** 9,
+    'bi': Decimal(10) ** 9,
+    'mwh': Decimal(1000),
+    'gwh': Decimal(10) ** 6,
 }
-# A coluna que já está numa escala diz isso no nome: volume_mwh, receita_milhoes, ucs_mil.
-ESCALA_DA_COLUNA = {
-    'milhao': re.compile(r'milh(?:ao|oes|ão|ões)|(?:^|_)mi(?:_|$)', re.IGNORECASE),
-    'mil': re.compile(r'(?:^|_)mil(?:_|$)|milhares', re.IGNORECASE),
-    'bilhao': re.compile(r'bilh(?:ao|oes|ão|ões)|(?:^|_)bi(?:_|$)', re.IGNORECASE),
-    'mwh': re.compile(r'mwh', re.IGNORECASE),
-    'gwh': re.compile(r'gwh', re.IGNORECASE),
-}
+# A coluna que já está numa escala diz isso no nome (volume_mwh, receita_milhoes, ucs_mil),
+# e o valor dela é multiplicado por ela. Texto e coluna são comparados na mesma unidade:
+# 351,2 em volume_mwh são 351.200 kWh, e só "351,2 MWh" ou "351.200 kWh" os descrevem.
+ESCALA_DA_COLUNA = (
+    (re.compile(r'milh(?:ao|oes|ão|ões)|(?:^|_)mi(?:_|$)', re.IGNORECASE), Decimal(10) ** 6),
+    (re.compile(r'(?:^|_)mil(?:_|$)|milhares', re.IGNORECASE), Decimal(1000)),
+    (re.compile(r'bilh(?:ao|oes|ão|ões)|(?:^|_)bi(?:_|$)', re.IGNORECASE), Decimal(10) ** 9),
+    (re.compile(r'mwh', re.IGNORECASE), Decimal(1000)),
+    (re.compile(r'gwh', re.IGNORECASE), Decimal(10) ** 6),
+)
 # O fim do trecho antes do número: no máximo uma palavra e o "R$" depois da palavra-chave.
 # A palavra não pode ser "para", "em", "a" e afins: em "caiu para 351" e "queda em 33 UCs",
 # o número é o nível final ou uma contagem, não o tamanho da variação.
@@ -151,25 +153,18 @@ class Leitura(NamedTuple):
     baixa: bool = False
     # Dígitos significativos mostrados: com menos de dois, só vale o arredondamento.
     significativos: int = 2
-    # A leitura sem a escala escrita ("351,2" de "351,2 MWh"): a família da escala, que a
-    # coluna precisa ter no nome. None nas leituras comuns.
-    sem_escala: str | None = None
     # Um ano escrito em contexto de tempo ("em 2025"): só esta leitura é sustentada por
     # um ano permitido ou pelo ano de uma data das linhas.
     no_tempo: bool = False
-    # A leitura com a escala aplicada ("351.200" de "351,2 MWh"): a família da escala. Ela
-    # não vale contra uma coluna que já está nessa escala (volume_mwh), em que o 351.200
-    # seria mil vezes maior que o escrito. None nas leituras sem escala escrita.
-    escala: str | None = None
 
 
 class Valor(NamedTuple):
     valor: Decimal
     # A coluna é o tamanho de uma queda (queda_pct): positiva, ela sustenta "queda de".
     de_queda: bool = False
-    # As escalas em que a coluna já está, pelo nome (volume_mwh): só elas sustentam o
-    # número escrito sem a escala.
-    escalas: frozenset[str] = frozenset()
+    # A escala em que a coluna já está, pelo nome: 1.000 em volume_mwh. O valor é
+    # comparado multiplicado por ela, na mesma unidade da leitura.
+    fator: Decimal = Decimal(1)
     # O valor pode ser uma razão, que o texto escreve vezes 100 com % (0,167 → "16,7%").
     # Falso numa coluna em percentual e nos fatos dos insights, que já vêm em %.
     razao: bool = True
@@ -242,11 +237,11 @@ def _algum_lastro(citado: Citado, valores: list[Valor]) -> bool:
 
 
 def _valor_da_coluna(valor: Decimal, coluna: str, de_data: bool = False) -> Valor:
-    escalas = frozenset(nome for nome, padrao in ESCALA_DA_COLUNA.items() if padrao.search(coluna))
+    fator = max((f for padrao, f in ESCALA_DA_COLUNA if padrao.search(coluna)), default=None)
     return Valor(
         valor,
         bool(COLUNA_DE_QUEDA.search(coluna)),
-        escalas,
+        fator or Decimal(1),
         razao=not COLUNA_EM_PERCENTUAL.search(coluna),
         # O ano de uma data das linhas ("2025-07-01") só sustenta o ano do texto.
         ano=de_data,
@@ -386,45 +381,33 @@ def _leituras(
     textos = [numero.replace('.', '').replace(',', '.')]
     if re.fullmatch(r'\d+\.\d+', numero):
         textos.append(numero)
-    multiplicador, familia = next(
-        (m for p, m in ESCALAS.items() if escala.startswith(p)), (Decimal(1), None)
-    )
-    # Com escala, vale também o número como está, se a coluna já estiver nela (volume_mwh).
-    multiplicadores = [(multiplicador, None)]
-    if familia is not None:
-        multiplicadores.append((Decimal(1), familia))
+    fator = next((m for p, m in ESCALAS.items() if escala.startswith(p)), Decimal(1))
     # Os algarismos como estão escritos: "20,0" mostra três, e o truncamento vale.
     significativos = len(re.sub(r'\D', '', numero).lstrip('0'))
     leituras = []
     for texto in textos:
         valor = Decimal(texto)
-        for fator, sem_escala in multiplicadores:
-            unidade = Decimal(1).scaleb(valor.as_tuple().exponent) * fator
-            leituras.append(
-                Leitura(
-                    valor * fator,
-                    unidade.normalize(),
-                    sinal,
-                    percentual,
-                    alta,
-                    baixa,
-                    significativos,
-                    sem_escala,
-                    no_tempo,
-                    familia if sem_escala is None else None,
-                )
+        unidade = Decimal(1).scaleb(valor.as_tuple().exponent) * fator
+        leituras.append(
+            Leitura(
+                valor * fator,
+                unidade.normalize(),
+                sinal,
+                percentual,
+                alta,
+                baixa,
+                significativos,
+                no_tempo,
             )
+        )
     return leituras
 
 
 def _tem_lastro(leitura: Leitura, valores: list[Valor]) -> bool:
-    for valor, de_queda, escalas, razao, ano in valores:
+    for valor, de_queda, escala, razao, ano in valores:
         if ano and not leitura.no_tempo:
             continue
-        if leitura.sem_escala is not None and leitura.sem_escala not in escalas:
-            continue
-        if leitura.escala is not None and leitura.escala in escalas:
-            continue
+        valor *= escala
         # Com % ou pp, o resultado pode trazer o percentual pronto (16,7) ou a razão
         # (0,167), a não ser que o valor já esteja em percentual.
         fatores = (Decimal(1), Decimal(100)) if leitura.percentual and razao else (Decimal(1),)

@@ -13,6 +13,7 @@ import hashlib
 import re
 import time
 import unicodedata
+from pathlib import Path
 
 import pydantic_ai
 from pydantic import BaseModel, Field
@@ -30,6 +31,7 @@ from venergy_ai.interface import (
     ProvedorIndisponivel,
     ValorCitado,
 )
+from venergy_ai import numeros
 from venergy_ai.numeros import Citacao, citacoes
 
 pydantic_ai.BANNER_ENABLED = False
@@ -52,13 +54,24 @@ class Rascunhos(BaseModel):
     observacoes: list[Rascunho] = Field(description='De 3 a 5 observações.')
 
 
+# A conferência dos números (este módulo e numeros.py): um insight guardado no cache por
+# uma versão anterior dela pode trazer um texto que a atual descarta, e precisa ser gerado
+# de novo.
+VERSAO_DA_CONFERENCIA = hashlib.sha1(
+    Path(__file__).read_bytes() + Path(numeros.__file__).read_bytes()
+).hexdigest()[:12]
+
+
 class RedatorDeInsights:
     """Implementa `Redator`. Só recebe o modelo: os fatos chegam prontos do backend."""
 
     def __init__(self, modelo: Model):
         self.modelo = modelo
-        # Muda com o modelo e com as instruções: entra na chave do cache do backend.
-        assinatura = f'{modelo.system}:{modelo.model_name}\n{INSTRUCOES_INSIGHT}'
+        # Muda com o modelo, com as instruções e com a conferência dos números: entra na
+        # chave do cache do backend.
+        assinatura = (
+            f'{modelo.system}:{modelo.model_name}\n{VERSAO_DA_CONFERENCIA}\n{INSTRUCOES_INSIGHT}'
+        )
         self.versao = hashlib.sha1(assinatura.encode()).hexdigest()[:12]
         self.agente = Agent(
             modelo,

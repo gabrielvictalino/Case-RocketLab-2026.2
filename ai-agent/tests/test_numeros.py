@@ -89,6 +89,10 @@ def test_alta_com_real_no_meio():
         ('O volume foi de 351,2 MWh.', 351.2, 'volume_mwh'),
         ('A receita foi de R$ 1,2 milhão.', 1.2, 'receita_milhoes'),
         ('Foram 12 mil UCs.', 12, 'ucs_mil'),
+        # Outra unidade, a mesma energia: 351,2 MWh são 351.200 kWh e 0,3512 GWh.
+        ('O volume foi de 351.200 kWh.', 351.2, 'volume_mwh'),
+        ('O volume foi de 351,2 GWh.', 351200, 'volume_mwh'),
+        ('O volume foi de 351,2 MWh.', 351200, 'volume_kwh'),
     ],
 )
 def test_valor_ja_na_escala_do_texto(texto, valor, coluna):
@@ -110,6 +114,10 @@ def test_valor_ja_na_escala_do_texto(texto, valor, coluna):
         # Numa coluna já em MWh, 351.200 são 351.200 MWh: "351,2 MWh" é mil vezes menor.
         ('O volume foi de 351,2 MWh.', [[351200]], [], 'volume_mwh', ['351,2 MWh']),
         ('A receita foi de R$ 1,2 milhão.', [[1200000]], [], 'receita_milhoes', ['1,2 milhão']),
+        # A coluna em MWh com o texto em outra unidade: os dois vão para kWh antes.
+        ('O volume foi de 351,2 kWh.', [[351.2]], [], 'volume_mwh', ['351,2']),
+        ('O volume foi de 351,2 GWh.', [[351200000]], [], 'volume_mwh', ['351,2 GWh']),
+        ('O volume foi de 351,2.', [[351.2]], [], 'volume_mwh', ['351,2']),
     ],
 )
 def test_escala_inventada_nao_se_sustenta(texto, linhas, permitidos, coluna, sem_lastro):
