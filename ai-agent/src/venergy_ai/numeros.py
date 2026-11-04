@@ -157,6 +157,10 @@ class Leitura(NamedTuple):
     # Um ano escrito em contexto de tempo ("em 2025"): só esta leitura é sustentada por
     # um ano permitido ou pelo ano de uma data das linhas.
     no_tempo: bool = False
+    # A leitura com a escala aplicada ("351.200" de "351,2 MWh"): a família da escala. Ela
+    # não vale contra uma coluna que já está nessa escala (volume_mwh), em que o 351.200
+    # seria mil vezes maior que o escrito. None nas leituras sem escala escrita.
+    escala: str | None = None
 
 
 class Valor(NamedTuple):
@@ -407,6 +411,7 @@ def _leituras(
                     significativos,
                     sem_escala,
                     no_tempo,
+                    familia if sem_escala is None else None,
                 )
             )
     return leituras
@@ -417,6 +422,8 @@ def _tem_lastro(leitura: Leitura, valores: list[Valor]) -> bool:
         if ano and not leitura.no_tempo:
             continue
         if leitura.sem_escala is not None and leitura.sem_escala not in escalas:
+            continue
+        if leitura.escala is not None and leitura.escala in escalas:
             continue
         # Com % ou pp, o resultado pode trazer o percentual pronto (16,7) ou a razão
         # (0,167), a não ser que o valor já esteja em percentual.
