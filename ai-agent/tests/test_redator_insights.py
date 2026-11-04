@@ -276,6 +276,11 @@ def test_citacoes_deixa_de_fora_o_ano_e_os_meses_do_periodo():
     ]
     assert citacoes('Nos últimos 12 meses.', [7], meses=[12]) == []
     assert [c.trecho for c in citacoes('Foram 12 UCs.', [7], meses=[12])] == ['12']
+    # Os meses do período não liberam "R$ 12 milhões", que é dinheiro.
+    citadas = citacoes(
+        'Receita de R$ 12 milhões, alta de 5,3%.', [Decimal('3456789.12'), 5.3], meses=[12]
+    )
+    assert [(c.trecho, c.lastros) for c in citadas] == [('12 milhões', []), ('5,3%', [1])]
 
 
 def test_citacoes_nao_confunde_valor_arredondado_com_ano():
