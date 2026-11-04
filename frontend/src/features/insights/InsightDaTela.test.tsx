@@ -44,10 +44,10 @@ const FILTROS = {
 
 const TEXTO_RECEITA = 'A receita faturada subiu 5,3% e chegou a R$ 170,3 milhões.'
 
-// A posição do trecho no texto, como o backend manda.
+// A posição do trecho no texto, como o backend manda: em pontos de código.
 function posicao(texto: string, trecho: string) {
-  const inicio = texto.indexOf(trecho)
-  return { inicio, fim: inicio + trecho.length }
+  const inicio = Array.from(texto.slice(0, texto.indexOf(trecho))).length
+  return { inicio, fim: inicio + Array.from(trecho).length }
 }
 
 const INSIGHT: Insight = {
@@ -233,6 +233,24 @@ describe('InsightDaTela', () => {
     expect([...item.querySelectorAll('strong.ve-insight-num')].map((s) => s.textContent)).toEqual(['25'])
   })
 
+  it('destaca o número certo com um emoji antes, que ocupa duas unidades no JavaScript', async () => {
+    const texto = '📈 A receita faturada subiu 5,3%.'
+    const [receita] = INSIGHT.observacoes as [Insight['observacoes'][number]]
+    // Como o Python conta: o emoji é um ponto de código só.
+    expect(posicao(texto, '5,3%')).toEqual({ inicio: 27, fim: 31 })
+    roteiro = () =>
+      json({
+        ...INSIGHT,
+        observacoes: [
+          { ...receita, texto, valores: [{ ...receita.valores[0], trecho: '5,3%', ...posicao(texto, '5,3%') }] },
+        ],
+      })
+    renderizarApp(`/visao-geral?${PERIODOS}`)
+    const bloco = await blocoDoInsight()
+    const [item] = (await within(bloco).findAllByRole('listitem')) as [HTMLElement]
+    expect([...item.querySelectorAll('strong.ve-insight-num')].map((s) => s.textContent)).toEqual(['5,3%'])
+  })
+
   it.each([
     ['sem valores', { ...INSIGHT, observacoes: [{ ...INSIGHT.observacoes[0], valores: undefined }] }],
     ['sem carga', { ...INSIGHT, carga: undefined }],
@@ -272,7 +290,10 @@ describe('InsightDaTela', () => {
   })
 
   it('na Receita, envia os recortes da tela e recarrega quando o período muda', async () => {
-    const router = renderizarApp(`/receita?${PERIODOS}&municipio=Recife&classe=Residencial`)
+    // O bairro da URL fica de fora, como nos gráficos e tabelas da Receita.
+    const router = renderizarApp(
+      `/receita?${PERIODOS}&municipio=Recife&bairro=Iputinga&classe=Residencial`,
+    )
     const bloco = await blocoDoInsight()
     await within(bloco).findAllByRole('listitem')
     expect(pedido(0).pathname).toBe('/api/v1/insights/receita')

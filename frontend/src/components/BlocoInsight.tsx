@@ -11,7 +11,8 @@ export interface Destaque {
 export interface ItemInsight {
   texto: string
   etiqueta?: string
-  // Posições, no texto, dos números que a observação cita e o backend conferiu.
+  // Posições, no texto, dos números que a observação cita e o backend conferiu. Vêm do
+  // Python, em pontos de código, e não nas unidades UTF-16 do JavaScript.
   destaques?: ReadonlyArray<Destaque>
 }
 
@@ -27,10 +28,21 @@ export interface BlocoInsightProps {
   rodape?: string
 }
 
+// A posição de cada ponto de código em unidades UTF-16: um emoji ocupa duas.
+function posicoesUtf16(texto: string) {
+  const posicoes = [0]
+  for (const letra of texto) {
+    posicoes.push(posicoes[posicoes.length - 1]! + letra.length)
+  }
+  return posicoes
+}
+
 // Pela posição: buscar o trecho "25" no texto marcaria também o fim de "2025".
 function comDestaques(texto: string, destaques: ReadonlyArray<Destaque> = []) {
+  const utf16 = posicoesUtf16(texto)
   const ordenados = destaques
-    .filter(({ inicio, fim }) => inicio >= 0 && inicio < fim && fim <= texto.length)
+    .filter(({ inicio, fim }) => inicio >= 0 && inicio < fim && fim < utf16.length)
+    .map(({ inicio, fim }) => ({ inicio: utf16[inicio]!, fim: utf16[fim]! }))
     .sort((a, b) => a.inicio - b.inicio)
   const partes: ReactNode[] = []
   let cursor = 0

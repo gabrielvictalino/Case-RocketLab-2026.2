@@ -2,15 +2,17 @@ import type { Insight, ParametrosInsight, TelaInsight } from '@/features/insight
 import type { ErroApi } from '@/lib/api/cliente'
 import { formatarIntervaloPeriodo } from '@/lib/formatacao'
 import { parsePeriodo } from '@/lib/periodos'
+import { recorteReceita } from '@/features/receita/receita'
 import type { RecortesUrl } from '@/lib/recortes'
 
 export const INSIGHT_INDISPONIVEL = 'Insight indisponível para esta combinação de períodos'
 const DEMAIS_DADOS = 'Os demais dados da tela seguem válidos.'
 
-// Os recortes que cada tela aplica aos próprios números.
-const RECORTES_DA_TELA: Record<TelaInsight, ReadonlyArray<keyof ParametrosInsight>> = {
-  'visao-geral': [],
-  receita: ['municipio', 'bairro', 'classe'],
+// Os recortes que cada tela aplica aos próprios números: o insight analisa o mesmo
+// recorte dos gráficos e tabelas ao lado. A Receita não filtra por bairro.
+const RECORTES_DA_TELA: Record<TelaInsight, (recortes: RecortesUrl) => Partial<RecortesUrl>> = {
+  'visao-geral': () => ({}),
+  receita: recorteReceita,
 }
 
 export function parametrosDoInsight(
@@ -22,10 +24,9 @@ export function parametrosDoInsight(
     return null
   }
   const parametros: ParametrosInsight = { ...periodo }
-  for (const chave of RECORTES_DA_TELA[tela]) {
-    const valor = recortes[chave as keyof RecortesUrl]
+  for (const [chave, valor] of Object.entries(RECORTES_DA_TELA[tela](recortes))) {
     if (typeof valor === 'string' && valor) {
-      parametros[chave] = valor
+      parametros[chave as keyof ParametrosInsight] = valor
     }
   }
   return parametros
