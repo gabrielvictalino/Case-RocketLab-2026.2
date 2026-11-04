@@ -71,7 +71,7 @@ A carga de uma nova Gold preserva usuários, ordens e inspeções criadas no por
 
 | Área | Capacidades |
 | --- | --- |
-| Acesso | Login JWT, telas por cargo, sessão e retorno à rota solicitada após autenticação |
+| Acesso | Login JWT, permissões de ações por cargo, sessão e retorno à rota solicitada após autenticação |
 | Visão Geral | Oito KPIs, séries mensais, comparação entre períodos e insights de IA |
 | Receita | Diagnóstico da variação de receita, decomposição em volume, reajuste, bandeira e mix, com recortes geográficos e por classe/grupo |
 | Unidade Consumidora | Visão 360 de consumo, faturamento, medidores, GD, interrupções e atendimentos |
@@ -134,7 +134,14 @@ nulabilidade, referências e reconciliação das 12 tabelas. O importador valida
 arquivos, manifesto, hashes, totais, relações e regras de negócio antes de
 publicar a carga. O modo `--verificar` executa a validação transacional com rollback.
 
-As amostras de `contracts/samples` são sintéticas. A aceitação de um lote pelo
+Para usar o portal com a base da entrega, carregue o **lote de dados reais anexado
+à [release da entrega](https://github.com/gabrielvictalino/Case-RocketLab-2026.2/releases)**,
+conforme as instruções de execução local abaixo. Não carregue os arquivos brutos
+da landing diretamente no importador: ele recebe o lote Gold com as 12 tabelas
+do contrato e o manifesto.
+
+As amostras de `contracts/samples` são sintéticas e ficam reservadas aos testes
+automatizados e ao desenvolvimento isolado. A aceitação de um lote pelo
 importador comprova aderência às validações implementadas; a homologação completa
 das fórmulas e fontes reais permanece registrada como pendência nos documentos
 de domínio.
@@ -157,6 +164,34 @@ Há cache, limites por usuário, cota diária de tokens e limites por IP no Ngin
 A [avaliação automatizada](ai-agent/evals/README.md) mede acerto, recusas,
 números sem lastro, latência e consumo de tokens com o modelo real.
 
+## Decisão de Atualização: Batch Mensal
+
+O portal e o agente consomem a Gold publicada no PostgreSQL em **batch mensal**,
+após o fechamento das faturas e a disponibilização de uma nova extração das
+fontes. Na entrega do case, a extração é pontual: o anexo da release representa
+um retrato da base, e não uma atualização automática a cada mês.
+
+A cadência mensal acompanha a competência das análises de consumo, faturamento
+e receita e a disponibilidade das fontes. Processar consultas diretamente no
+Databricks ou manter uma ingestão contínua acrescentaria custo de compute e
+complexidade operacional sem tornar uma extração pontual mais recente. Servir
+o lote no PostgreSQL permite consultar o portal e o agente sem iniciar o compute
+do Databricks a cada acesso.
+
+Cada publicação reúne as 12 tabelas num retrato coerente, com data de referência,
+manifesto, hashes e validação antes da troca transacional no PostgreSQL. Isso
+evita que telas e respostas da IA misturem tabelas de extrações distintas e
+permite rastrear e reproduzir os indicadores da carga publicada.
+
+A cada nova extração, execute o Workflow, exporte o lote completo e repita a
+verificação e a importação. O Job atual é disparado manualmente, sem cron;
+`data_referencia` deve corresponder ao retrato de status das fontes, mesmo que
+o processamento aconteça em outro dia. A cadência mensal é a política de
+atualização, não um agendamento já implementado. O portal permanece com o último
+lote publicado até a próxima carga, inclusive para status de pagamento e demais
+dados vindos das fontes. Usuários, ordens e inspeções registradas no portal
+continuam sendo atualizados durante o uso e são preservados pelas cargas.
+
 ## Requisitos
 
 - Python 3.12 e [uv](https://docs.astral.sh/uv/) para o workspace Python.
@@ -178,18 +213,43 @@ git clone https://github.com/gabrielvictalino/Case-RocketLab-2026.2.git
 cd Case-RocketLab-2026.2
 git switch dev
 cp .env.example .env
+```
+
+Na página de [releases](https://github.com/gabrielvictalino/Case-RocketLab-2026.2/releases),
+abra a release da entrega e baixe o anexo do lote Gold de dados reais em **Assets**.
+Se estiver compactado, extraia-o para uma pasta local, por exemplo
+`lote-gold/<pasta-do-lote>/`. Localize a pasta que contém diretamente
+`manifest.json` e os 12 CSVs; preserve os arquivos e o manifesto recebidos.
+O arquivo de código-fonte da release não substitui o anexo de dados.
+
+No `.env`, configure `GOLD_EXPORT_DIR=./lote-gold/<pasta-do-lote>` com o caminho
+real da pasta encontrada. O valor de exemplo `./contracts/samples` deve ser
+substituído para usar a base real. Confira também as credenciais e preencha a
+chave do provedor para usar IA. Em seguida, a partir da raiz:
+
+```bash
 docker compose up -d postgres redis
 docker compose build backend nginx
 docker compose run --rm migracoes
-docker compose run --rm importador --origem contracts/samples
+docker compose run --rm importador --origem /entrada --verificar
+# Prossiga com a publicação somente se a verificação terminar com sucesso.
+docker compose run --rm importador --origem /entrada
 docker compose run --rm backend python -m app.seed
 docker compose up -d
 curl http://localhost/api/v1/health
 ```
 
-Confira o `.env` antes da subida e preencha a chave do provedor para usar IA.
-As credenciais de exemplo servem ao desenvolvimento local. O seed cria os
-usuários de demonstração; o importador acima carrega a amostra sintética.
+O Compose monta `GOLD_EXPORT_DIR` em `/entrada` no importador. O primeiro comando
+de importação valida o lote com rollback; o segundo publica os dados reais.
+Depois do login, confira em `GET /api/v1/meta/carga` a versão, o período e a
+proveniência da carga: o lote real deve informar `sintetica: false` na API
+(`synthetic: false` no manifesto). Preserve essa marca de origem no arquivo recebido.
+
+As credenciais de exemplo servem ao desenvolvimento local. O seed cria somente
+os usuários de demonstração, independentemente da origem dos dados analíticos.
+Se o anexo ainda não estiver disponível, obtenha-o com o responsável pela
+release antes de executar a carga real. Para testes isolados, a amostra continua
+disponível por `docker compose run --rm importador --origem contracts/samples`.
 
 O Compose base publica somente o Nginx. O override de desenvolvimento expõe
 backend, PostgreSQL e Redis em `127.0.0.1`. Detalhes de bootstrap, migrações,
@@ -197,12 +257,16 @@ permissões e volumes estão no [README do backend](backend/README.md).
 
 ### 2. Backend em Desenvolvimento
 
-Com PostgreSQL e Redis inicializados pelo Compose e `.env` configurado:
+Com PostgreSQL e Redis inicializados pelo Compose e `.env` configurado,
+use a pasta do lote real baixado da release na seção anterior. Substitua o
+caminho abaixo pelo diretório que contém `manifest.json`:
 
 ```bash
 uv sync --frozen --all-packages
 uv run alembic -c backend/alembic.ini upgrade head
-uv run importador --origem contracts/samples
+uv run importador --origem /caminho/para/lote-real --verificar
+# Prossiga somente após a verificação bem-sucedida.
+uv run importador --origem /caminho/para/lote-real
 uv run python -m app.seed
 uv run uvicorn app.main:app --reload --log-level info
 ```
@@ -258,7 +322,7 @@ Copie [`.env.example`](.env.example) para `.env` na raiz. As variáveis principa
 | `DATABASE_URL_PORTAL`, `DATABASE_URL_AI` | Engines distintas do portal e agente |
 | `DATABASE_URL_MIGRATIONS`, `DATABASE_URL_IMPORTADOR` | Conexões de migração e carga |
 | `REDIS_URL` | Conversas, cache e limites de uso |
-| `GOLD_EXPORT_DIR` | Diretório de lote montado no importador |
+| `GOLD_EXPORT_DIR` | Pasta local do lote real baixado da release, contendo `manifest.json` e os 12 CSVs; montada em `/entrada` no importador |
 | `JWT_SECRET`, `JWT_EXPIRATION_HOURS` | Assinatura e validade da sessão |
 | `AI_PROVEDOR`, `AI_MODELO` | Provedor e modelo; padrões `google` e `gemini-3.1-flash-lite` |
 | `GEMINI_API_KEY`, `OPENROUTER_API_KEY` | Chave do provedor escolhido |
