@@ -2514,4 +2514,3 @@ Na base completa (3.510 UCs com GD, potÃªncia instalada corrigida total de **3
 | `volume_utilizavel_kwh`, `volume_utilizavel_gd_ativa_kwh`, `volume_utilizavel_antes_conexao_kwh` | `decimal(28,2)` | NÃ£o | Soma de `volume_analise_kwh` total, pÃ³s-conexÃ£o e prÃ©-conexÃ£o |
 | `volume_analitico_kwh`, `volume_analitico_gd_ativa_kwh`, `volume_analitico_antes_conexao_kwh` | `decimal(28,2)` | NÃ£o | Soma de `consumo_kwh_analitico` total, pÃ³s-conexÃ£o e prÃ©-conexÃ£o |
 | `versao_regras_gold` | `string` | NÃ£o | Constante `GOLD_GD_V1` |
-

@@ -15000,4 +15000,3 @@ Bloqueia divergÃªncias de schema, valida IDs das pendÃªncias e confirma o pa
 de snapshots via marcador Delta. EvidÃªncias HTML registram somente as execuÃ§Ãµes
 anteriores. O novo cÃ³digo ainda precisa ser executado em catÃ¡logo de teste.
 Consulte [operaÃ§Ã£o de faturas](../auditoria_dados/operacao_faturas.md).
-
