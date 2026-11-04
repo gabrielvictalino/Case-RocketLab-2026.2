@@ -177,6 +177,45 @@ async def test_contador_negativo_nao_trava_o_usuario(redis):
     assert int(await redis.get(reserva.chave)) == 20_000
 
 
+class RedisQuePerdeARespostaDaReserva:
+    """O Redis da suíte, mas a resposta da reserva se perde num timeout depois de o
+    script rodar: o débito aconteceu, e quem reservou não sabe."""
+
+    def __init__(self, redis):
+        self.redis = redis
+
+    def __getattr__(self, nome):
+        return getattr(self.redis, nome)
+
+    async def eval(self, script, *args):
+        resultado = await self.redis.eval(script, *args)
+        if script == limites.RESERVAR:
+            raise TimeoutError('resposta perdida')
+        return resultado
+
+
+async def test_timeout_depois_do_debito_nao_cobra_a_reserva(redis):
+    usuario, agora = uuid4(), 1793674800.0
+    reserva = await limites.reservar_cota(
+        RedisQuePerdeARespostaDaReserva(redis), usuario, 100_000, 20_000, agora=agora
+    )
+    # A reserva volta com zero, mas o Redis debitou os 20 mil.
+    assert reserva.tokens == 0 and int(await redis.get(reserva.chave)) == 20_000
+    await limites.acertar_cota(redis, reserva, 1_000)
+    assert int(await redis.get(reserva.chave)) == 1_000
+    # Um segundo acerto da mesma reserva não desconta de novo.
+    await limites.acertar_cota(redis, reserva, 1_000)
+    assert int(await redis.get(reserva.chave)) == 2_000
+
+
+async def test_acerto_sem_debito_cobra_so_o_gasto(redis):
+    # O Redis não respondeu antes do script: nada foi debitado, e o acerto soma o gasto.
+    usuario, agora = uuid4(), 1793674800.0
+    chave = limites._chave_cota(usuario, agora)
+    await limites.acertar_cota(redis, limites.Reserva(chave, 0, 'nunca-reservou'), 1_000)
+    assert int(await redis.get(chave)) == 1_000
+
+
 class AgenteQueEspera:
     async def responder(self, pergunta, contexto, andamento=None):
         # Já gastou o plano quando o cliente fecha o painel.
