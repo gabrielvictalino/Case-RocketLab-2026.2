@@ -276,6 +276,11 @@ def test_citacoes_deixa_de_fora_o_ano_e_os_meses_do_periodo():
     ]
     assert citacoes('Nos últimos 12 meses.', [7], meses=[12]) == []
     assert [c.trecho for c in citacoes('Foram 12 UCs.', [7], meses=[12])] == ['12']
+    # Os meses do período não liberam "R$ 12 milhões", que é dinheiro.
+    citadas = citacoes(
+        'Receita de R$ 12 milhões, alta de 5,3%.', [Decimal('3456789.12'), 5.3], meses=[12]
+    )
+    assert [(c.trecho, c.lastros) for c in citadas] == [('12 milhões', []), ('5,3%', [1])]
 
 
 def test_citacoes_nao_confunde_valor_arredondado_com_ano():
@@ -339,6 +344,9 @@ def _descartada(chave, texto):
         ('inadimplencia', 'A inadimplência foi de 41,2%.'),
         # "São 2025 UCs" é uma contagem, não o ano do período.
         ('ucs_ativas', 'São 2025 UCs ativas e a receita foi de R$ 170,3 milhões.'),
+        # Sem métrica na frase do número, só o fato da observação o sustenta.
+        ('inadimplencia', 'A inadimplência merece atenção. Chegou a 41,2% no período.'),
+        ('inadimplencia', 'Chegou a 41,2% no período.'),
     ],
 )
 def test_numero_que_nao_sustenta_a_frase_e_descartado(chave, texto):
@@ -352,8 +360,9 @@ def test_numero_que_nao_sustenta_a_frase_e_descartado(chave, texto):
         ('taxa_acerto', 'A taxa de acerto foi de 41,2%.'),
         ('inadimplencia', 'A inadimplência foi de 7,42%, e a taxa de acerto, de 41,2%.'),
         ('ucs_ativas', 'Em 2025, eram 300 UCs ativas.'),
-        # Sem métrica nomeada antes, valem os fatos na unidade certa.
+        # Sem métrica nomeada antes, vale o fato da própria observação.
         ('receita', 'Foram R$ 170,3 milhões no período.'),
+        ('inadimplencia', 'A inadimplência merece atenção. Chegou a 7,42% no período.'),
     ],
 )
 def test_numero_da_metrica_nomeada_passa(chave, texto):
