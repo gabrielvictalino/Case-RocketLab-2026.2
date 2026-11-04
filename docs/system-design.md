@@ -492,7 +492,7 @@ no CI. A Gold real fica para a demo.
 |---|---|---|
 | Cache (cache-aside) | `cache:{versao_carga}:{rota}:{sha1(filtros)}` | TTL de 24 h como rede de segurança. Uma carga nova muda a versão e invalida tudo sem ação manual. Escrita de ordem apaga as chaves da fila; a que gera inspeção apaga também as de `kpis` e `insights/visao-geral`, por causa da taxa de acerto |
 | Rate limit por usuário | `rl:{usuario}:{rota}` | Assistente: 20 perguntas/min e cota diária de tokens. Insights: dentro do cache, o limite só conta as chamadas ao LLM |
-| Conversas do agente | `conversa:{id}` | Últimas trocas, TTL de 2 h; o histórico permanente fica na auditoria |
+| Conversas do agente | `conversa:v2:{id}` e `conversa:v2:{id}:trocas` | A primeira guarda a dona; a segunda, a lista das últimas 5 trocas, acrescentada por um script Lua que confere a dona. TTL de 2 h nas duas, renovado a cada pergunta. O `v2` separa do formato antigo (`conversa:{id}` com um JSON só). Sem período na pergunta, vale o da última troca, a não ser que o período da tela tenha mudado desde ela. O histórico permanente fica na auditoria |
 
 A Visão 360 e as respostas do chat não são cacheadas. O cache e o rate limit
 por usuário são fail-open: se o Redis cair, o backend vai direto ao
