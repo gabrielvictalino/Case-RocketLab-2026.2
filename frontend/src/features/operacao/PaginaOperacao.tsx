@@ -1,61 +1,125 @@
-import { useSearchParams } from 'react-router'
+﻿import { useSearchParams } from 'react-router'
 import { usePeriodo } from '@/app/periodo/usePeriodo'
 import { BarraRecorte } from '@/components/BarraRecorte'
 import { CabecalhoPagina } from '@/components/CabecalhoPagina'
 import { CartaoKpi } from '@/components/CartaoKpi'
 import { EstadoIndisponivel } from '@/components/Estados'
+import { GraficoSerieComparativa } from '@/components/Graficos'
 import { Painel } from '@/components/Painel'
 import { Selecao } from '@/components/Selecao'
+import { TabelaDados, type ColunaTabela } from '@/components/TabelaDados'
 import { formatarIntervaloPeriodo } from '@/lib/formatacao'
-import {
-  atualizarRecorteUrl,
-  lerRecortesUrl,
-  limparRecortesUrl,
-} from '@/lib/recortes'
+import { atualizarRecorteUrl, lerRecortesUrl, limparRecortesUrl } from '@/lib/recortes'
 import { useFiltrosMeta } from '@/lib/useFiltrosMeta'
+import {
+  formatarContinuidade,
+  montarSerieContinuidade,
+  numeroContinuidade,
+  variacaoContinuidade,
+} from './apresentacaoOperacao'
+import {
+  useRankingContinuidade,
+  useSerieContinuidade,
+  type AlimentadorContinuidade,
+  type OrdemContinuidade,
+} from './useOperacao'
 
-import type { OrdenacaoOperacao } from './logicaOperacao'
+const colunasRanking: ColunaTabela<AlimentadorContinuidade, unknown>[] = [
+  { accessorKey: 'alimentador', header: 'Alimentador', enableSorting: false },
+  { accessorKey: 'municipio', header: 'Município', enableSorting: false },
+  {
+    id: 'chi',
+    header: 'CHI',
+    accessorFn: (linha) => numeroContinuidade(linha.chi),
+    cell: ({ row }) => formatarContinuidade(row.original.chi),
+    enableSorting: false,
+  },
+  {
+    id: 'dec',
+    header: 'DEC (h)',
+    accessorFn: (linha) => numeroContinuidade(linha.dec),
+    cell: ({ row }) => formatarContinuidade(row.original.dec),
+    enableSorting: false,
+  },
+  {
+    id: 'fec',
+    header: 'FEC (vezes)',
+    accessorFn: (linha) => numeroContinuidade(linha.fec),
+    cell: ({ row }) => formatarContinuidade(row.original.fec),
+    enableSorting: false,
+  },
+  {
+    id: 'numero_ucs',
+    header: 'Nº de UCs',
+    accessorFn: (linha) => linha.numero_ucs,
+    cell: ({ row }) => formatarContinuidade(row.original.numero_ucs, 0),
+    enableSorting: false,
+  },
+  {
+    id: 'causa',
+    header: 'Causa mais frequente',
+    accessorFn: (linha) => linha.causas[0]?.causa ?? '—',
+    enableSorting: false,
+  },
+]
 
 export function PaginaOperacao() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const { periodo, comparacao } = usePeriodo()
-  const filtros = useFiltrosMeta()
-  const parametroOrdenacao = searchParams.get('ordenar')
-  const ordenacao: OrdenacaoOperacao = parametroOrdenacao === 'dec' || parametroOrdenacao === 'fec' ? parametroOrdenacao : 'chi'
+  const { periodo, comparacao, parametros } = usePeriodo()
+  const filtrosMeta = useFiltrosMeta()
   const recortes = lerRecortesUrl(searchParams)
 
-  const rotuloPeriodo = periodo ? formatarIntervaloPeriodo(periodo) : null
-  const rotuloComparacao = comparacao
-    ? formatarIntervaloPeriodo(comparacao)
-    : null
+  const parametroOrdem = searchParams.get('ordem')
+  const ordem: OrdemContinuidade =
+    parametroOrdem === 'dec' || parametroOrdem === 'fec' ? parametroOrdem : 'chi'
 
+  const filtros = {
+    municipio: recortes.municipio,
+    alimentador: recortes.alimentador,
+    comEventoAtipico: recortes.atipico,
+  }
+
+  const serie = useSerieContinuidade(parametros, filtros)
+  const ranking = useRankingContinuidade(parametros, filtros, ordem)
+
+  const rotuloPeriodo = periodo ? formatarIntervaloPeriodo(periodo) : null
+  const rotuloComparacao = comparacao ? formatarIntervaloPeriodo(comparacao) : null
   const resumoPeriodo = rotuloPeriodo
     ? rotuloComparacao
       ? `${rotuloPeriodo} × ${rotuloComparacao}`
       : rotuloPeriodo
     : 'período atual'
 
-  const municipios = filtros.data?.municipios ?? []
-  const alimentadores = filtros.data?.alimentadores ?? []
-  const escopoAlimentador = recortes.alimentador || 'geral'
   const escopoAtipico = recortes.atipico
     ? 'com evento atípico'
     : 'sem evento atípico'
+
+  const totais = serie.data?.totais
+  const totaisComparacao = serie.data?.dados_comparacao?.totais
+
+  const dadosDec = montarSerieContinuidade(serie.data, 'dec')
+  const dadosFec = montarSerieContinuidade(serie.data, 'fec')
+
+  function selecionarAlimentador(alimentador: string) {
+    setSearchParams(atualizarRecorteUrl(searchParams, { alimentador }))
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <CabecalhoPagina
         titulo="Operação"
-        subtitulo={`Continuidade · ${resumoPeriodo} · ${escopoAlimentador} · ${escopoAtipico}`}
+        subtitulo={`Continuidade · ${resumoPeriodo} · ${recortes.alimentador || 'geral'} · ${escopoAtipico}`}
       />
 
       <BarraRecorte
-        erro={filtros.error?.message ?? null}
-        aoTentarNovamente={() => {
-          void filtros.refetch()
-        }}
+        erro={filtrosMeta.error?.message ?? null}
+        aoTentarNovamente={() => { void filtrosMeta.refetch() }}
         aoLimpar={() => {
-          const proximos = limparRecortesUrl(searchParams, ['municipio', 'bairro', 'alimentador', 'atipico'])
+          const proximos = limparRecortesUrl(
+            searchParams,
+            ['municipio', 'bairro', 'alimentador', 'atipico'],
+          )
+          proximos.delete('ordem')
           proximos.delete('ordenar')
           setSearchParams(proximos)
         }}
@@ -63,9 +127,9 @@ export function PaginaOperacao() {
         <Selecao
           rotulo="Município"
           valor={recortes.municipio}
-          opcoes={municipios}
+          opcoes={filtrosMeta.data?.municipios ?? []}
           placeholder="Todos"
-          carregando={filtros.isLoading}
+          carregando={filtrosMeta.isLoading}
           aoMudar={(municipio) => {
             setSearchParams(atualizarRecorteUrl(searchParams, { municipio }))
           }}
@@ -73,23 +137,19 @@ export function PaginaOperacao() {
         <Selecao
           rotulo="Alimentador"
           valor={recortes.alimentador}
-          opcoes={alimentadores}
+          opcoes={filtrosMeta.data?.alimentadores ?? []}
           placeholder="Geral"
-          carregando={filtros.isLoading}
-          aoMudar={(alimentador) => {
-            setSearchParams(
-              atualizarRecorteUrl(searchParams, { alimentador }),
-            )
-          }}
+          carregando={filtrosMeta.isLoading}
+          aoMudar={selecionarAlimentador}
         />
         <label className="ve-switch">
           <input
             type="checkbox"
             checked={recortes.atipico}
-            onChange={(e) => {
+            onChange={(evento) => {
               setSearchParams(
                 atualizarRecorteUrl(searchParams, {
-                  atipico: e.target.checked,
+                  atipico: evento.target.checked,
                 }),
               )
             }}
@@ -114,36 +174,97 @@ export function PaginaOperacao() {
           rotulo="DEC"
           unidade="h"
           sentidoFavoravel="baixa"
-          dica="Duração Equivalente de Interrupção por Unidade Consumidora para comparar alimentadores e períodos."
-          indisponivel
+          dica="Duração Equivalente de Interrupção por Unidade Consumidora."
+          carregando={serie.isLoading}
+          semDados={!serie.isLoading && numeroContinuidade(totais?.dec) === null}
+          valor={formatarContinuidade(totais?.dec)}
+          variacao={variacaoContinuidade(totais?.dec, totaisComparacao?.dec)}
+          valorComparado={totaisComparacao
+            ? `${formatarContinuidade(totaisComparacao.dec)} h`
+            : undefined}
+          rotuloComparacao={rotuloComparacao ?? undefined}
+          semPeriodoComparacao={!comparacao}
         />
         <CartaoKpi
           rotulo="FEC"
           unidade="vezes"
           sentidoFavoravel="baixa"
-          dica="Frequência Equivalente de Interrupção por Unidade Consumidora para comparar alimentadores e períodos."
-          indisponivel
+          dica="Frequência Equivalente de Interrupção por Unidade Consumidora."
+          carregando={serie.isLoading}
+          semDados={!serie.isLoading && numeroContinuidade(totais?.fec) === null}
+          valor={formatarContinuidade(totais?.fec)}
+          variacao={variacaoContinuidade(totais?.fec, totaisComparacao?.fec)}
+          valorComparado={totaisComparacao
+            ? `${formatarContinuidade(totaisComparacao.fec)} vezes`
+            : undefined}
+          rotuloComparacao={rotuloComparacao ?? undefined}
+          semPeriodoComparacao={!comparacao}
         />
         <CartaoKpi
           rotulo="Eventos atípicos no período"
           sentidoFavoravel="baixa"
           indisponivel
+          mensagemIndisponivel="Contagem não disponibilizada pela API de continuidade."
         />
       </div>
-      <div role="note" className="rounded-lg border bg-muted/40 p-4 text-sm">
-        Os indicadores DEC e FEC apresentados são comparativos entre períodos e alimentadores e não devem ser comparados aos limites regulatórios da ANEEL.
-      </div>
 
+      {serie.isError && (
+        <div role="alert" className="rounded-lg border p-4 text-sm">
+          Não foi possível carregar os indicadores de continuidade.
+          <button
+            type="button"
+            className="ml-3 underline"
+            onClick={() => { void serie.refetch() }}
+          >
+            Tentar novamente
+          </button>
+        </div>
+      )}
+
+      <div role="note" className="rounded-lg border bg-muted/40 p-4 text-sm">
+        Os indicadores DEC e FEC apresentados são comparativos entre períodos e
+        alimentadores e não devem ser comparados aos limites regulatórios da ANEEL.
+      </div>
 
       <Painel
         titulo="DEC e FEC por competência"
         subtitulo={`${recortes.alimentador || 'Geral'} · eixo de tempo: competência · ${escopoAtipico}`}
       >
-        <EstadoIndisponivel />
+        {serie.isError ? (
+          <EstadoIndisponivel />
+        ) : (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))',
+              gap: '24px',
+            }}
+          >
+            <div>
+              <h3 className="mb-3 font-medium">DEC (h)</h3>
+              <GraficoSerieComparativa
+                dados={dadosDec}
+                rotuloAtual={rotuloPeriodo ?? 'Período atual'}
+                rotuloComparacao={rotuloComparacao ?? undefined}
+                indisponivel={!serie.isLoading && dadosDec.length === 0}
+              />
+            </div>
+            <div>
+              <h3 className="mb-3 font-medium">FEC (vezes)</h3>
+              <GraficoSerieComparativa
+                dados={dadosFec}
+                rotuloAtual={rotuloPeriodo ?? 'Período atual'}
+                rotuloComparacao={rotuloComparacao ?? undefined}
+                indisponivel={!serie.isLoading && dadosFec.length === 0}
+              />
+            </div>
+          </div>
+        )}
       </Painel>
 
       <Painel
         titulo="Ranking de alimentadores"
+        subtitulo={`Ordenado por ${ordem.toUpperCase()} · clique em uma linha para acompanhar a série do alimentador`}
         acoes={
           <label htmlFor="operacao-ordenacao" className="flex items-center gap-2 text-sm">
             Ordenar por
@@ -151,10 +272,11 @@ export function PaginaOperacao() {
               id="operacao-ordenacao"
               aria-label="Ordenar por"
               className="rounded-md border bg-background px-3 py-2"
-              value={ordenacao}
-              onChange={(e) => {
+              value={ordem}
+              onChange={(evento) => {
                 const proximos = new URLSearchParams(searchParams)
-                proximos.set('ordenar', e.target.value)
+                proximos.set('ordem', evento.target.value)
+                proximos.delete('ordenar')
                 setSearchParams(proximos)
               }}
             >
@@ -164,31 +286,19 @@ export function PaginaOperacao() {
             </select>
           </label>
         }
-        subtitulo={`Ordenado por ${ordenacao.toUpperCase()} · selecione um alimentador para acompanhar sua série de continuidade`}
       >
-                <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-muted/50 text-muted-foreground">
-              <tr>
-                {['Alimentador', 'Município', 'CHI', 'DEC', 'FEC', 'UCs', 'Causa principal'].map((coluna) => (
-                  <th key={coluna} scope="col" className="whitespace-nowrap px-5 py-3 font-medium">
-                    {coluna}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td colSpan={7} className="px-5 py-12 text-center">
-                  <p className="font-medium">Nenhum dado disponível</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    O ranking será exibido após a integração dos dados de continuidade.
-                  </p>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <TabelaDados
+          legenda="Ranking de alimentadores"
+          colunas={colunasRanking}
+          dados={ranking.data?.ranking ?? []}
+          chaveLinha={(linha) => linha.alimentador}
+          aoClicarLinha={(linha) => selecionarAlimentador(linha.alimentador)}
+          carregando={ranking.isLoading}
+          erro={ranking.isError ? 'Não foi possível carregar o ranking.' : null}
+          aoTentarNovamente={() => { void ranking.refetch() }}
+          tituloVazio="Nenhum dado disponível"
+          mensagemVazio="Não há alimentadores para os filtros selecionados."
+        />
       </Painel>
     </div>
   )

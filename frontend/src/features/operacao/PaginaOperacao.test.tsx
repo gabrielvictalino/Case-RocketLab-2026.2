@@ -25,7 +25,71 @@ window.Request = RequestCompativel
 beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async (requisicao: Request | string | URL) => {
     const url = typeof requisicao === 'string' ? requisicao : requisicao instanceof URL ? requisicao.href : requisicao.url
-    const dados = url.includes('/api/v1/meta/filtros')
+    const dados = url.includes('/api/v1/continuidade/serie')
+      ? {
+          periodo: '2026-01:2026-06',
+          comparacao: '2025-01:2025-06',
+          sem_evento_atipico: true,
+          totais: {
+            chi: 1250,
+            interrupcoes: 18,
+            numero_ucs: 500,
+            dec: 9.84,
+            fec: 5.12,
+          },
+          serie: [
+            {
+              competencia: '2026-01-01',
+              chi: 200,
+              interrupcoes: 3,
+              numero_ucs: 500,
+              dec: 1.5,
+              fec: 0.8,
+            },
+          ],
+          dados_comparacao: {
+            totais: {
+              chi: 1400,
+              interrupcoes: 20,
+              numero_ucs: 500,
+              dec: 11.02,
+              fec: 4.96,
+            },
+            serie: [
+              {
+                competencia: '2025-01-01',
+                chi: 220,
+                interrupcoes: 4,
+                numero_ucs: 500,
+                dec: 1.8,
+                fec: 0.9,
+              },
+            ],
+          },
+        }
+      : url.includes('/api/v1/continuidade/ranking')
+        ? {
+            periodo: '2026-01:2026-06',
+            comparacao: '2025-01:2025-06',
+            sem_evento_atipico: true,
+            ordem: new URL(url).searchParams.get('ordem') ?? 'chi',
+            ranking: [
+              {
+                alimentador: 'AL-01',
+                municipio: 'Recife',
+                chi: 1250,
+                interrupcoes: 18,
+                numero_ucs: 500,
+                dec: 9.84,
+                fec: 5.12,
+                causas: [
+                  { causa: 'Falha em equipamento', ocorrencias: 8, interrupcoes: 10 },
+                ],
+              },
+            ],
+            ranking_comparacao: null,
+          }
+        : url.includes('/api/v1/meta/filtros')
       ? {
           municipios: ['Recife', 'Olinda'],
           bairros: { Recife: ['Boa Viagem'], Olinda: ['Casa Caiada'] },
@@ -74,15 +138,24 @@ function renderizarOperacao(caminho = '/operacao') {
 }
 
 describe('Tela Operação', () => {
-  it('exibe os indicadores, o aviso regulatório e o ranking', () => {
-    renderizarOperacao()
+  it('exibe os indicadores, o aviso regulatório e o ranking', async () => {
+    renderizarOperacao('/operacao?periodo=2026-01:2026-06&comparacao=2025-01:2025-06')
 
     expect(screen.getByRole('heading', { name: 'Operação' })).toBeInTheDocument()
     expect(screen.getByText(/limites regulatórios da ANEEL/)).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Ranking de alimentadores' })).toBeInTheDocument()
-    expect(screen.getByText('Nenhum dado disponível')).toBeInTheDocument()
 
-    for (const coluna of ['Alimentador', 'Município', 'CHI', 'DEC', 'FEC', 'UCs', 'Causa principal']) {
+    await waitFor(() => {
+      expect(screen.getByText('Falha em equipamento')).toBeInTheDocument()
+    })
+
+    expect(screen.getByRole('article', { name: 'DEC' })).toHaveTextContent('9,84')
+    expect(screen.getByRole('article', { name: 'FEC' })).toHaveTextContent('5,12')
+
+    for (const coluna of [
+      'Alimentador', 'Município', 'CHI', 'DEC (h)',
+      'FEC (vezes)', 'Nº de UCs', 'Causa mais frequente',
+    ]) {
       expect(screen.getByRole('columnheader', { name: coluna })).toBeInTheDocument()
     }
   })
@@ -112,7 +185,7 @@ describe('Tela Operação', () => {
     })
 
     await waitFor(() => {
-      expect(new URLSearchParams(router.state.location.search).get('ordenar')).toBe('fec')
+      expect(new URLSearchParams(router.state.location.search).get('ordem')).toBe('fec')
       expect(screen.getByText(/Ordenado por FEC/)).toBeInTheDocument()
     })
   })
