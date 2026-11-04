@@ -1,6 +1,6 @@
 import pytest
 
-from venergy_ai.numeros import numeros_citados, numeros_sem_lastro
+from venergy_ai.numeros import numeros_citados, numeros_da_pergunta, numeros_sem_lastro
 
 LINHAS = [['Iputinga', -351234.5, -0.167, 1234567.89, 300, 16.66, 3.21]]
 
@@ -84,12 +84,33 @@ def test_alta_com_real_no_meio():
 
 
 @pytest.mark.parametrize(
-    'texto,valor',
-    [('O volume foi de 351,2 MWh.', 351.2), ('A receita foi de R$ 1,2 milhão.', 1.2)],
+    'texto,valor,coluna',
+    [
+        ('O volume foi de 351,2 MWh.', 351.2, 'volume_mwh'),
+        ('A receita foi de R$ 1,2 milhão.', 1.2, 'receita_milhoes'),
+        ('Foram 12 mil UCs.', 12, 'ucs_mil'),
+    ],
 )
-def test_valor_ja_na_escala_do_texto(texto, valor):
-    # O SQL pode ter devolvido volume_mwh ou receita_milhoes.
-    assert numeros_sem_lastro(texto, [[valor]]) == []
+def test_valor_ja_na_escala_do_texto(texto, valor, coluna):
+    # O SQL devolveu o valor já na escala, e o nome da coluna diz isso.
+    assert numeros_sem_lastro(texto, [[valor]], colunas=[coluna]) == []
+
+
+@pytest.mark.parametrize(
+    'texto,linhas,permitidos,coluna,sem_lastro',
+    [
+        # Sem a escala no nome da coluna, o número sem a escala não se sustenta.
+        ('A receita foi de R$ 1,2 milhão.', [[1.2]], [], 'tarifa', ['1,2 milhão']),
+        ('Foram 12 mil UCs.', [[12]], [], 'ucs', ['12 mil']),
+        # 351 kWh não são 351 MWh.
+        ('O consumo foi de 351 MWh.', [[351]], [], 'consumo_kwh', ['351 MWh']),
+        # Nem contra os números permitidos: os 12 meses e as 5 linhas não viram receita.
+        ('A receita foi de R$ 12 milhões.', [[3456789.12]], [12], 'receita', ['12 milhões']),
+        ('A receita foi de R$ 5 mil.', [[3456789.12]], [5], 'receita', ['5 mil']),
+    ],
+)
+def test_escala_inventada_nao_se_sustenta(texto, linhas, permitidos, coluna, sem_lastro):
+    assert numeros_sem_lastro(texto, linhas, permitidos, colunas=[coluna]) == sem_lastro
 
 
 @pytest.mark.parametrize(
@@ -107,10 +128,94 @@ def test_truncamento_so_com_dois_digitos(texto, valor, sem_lastro):
     assert numeros_sem_lastro(texto, [[valor]]) == sem_lastro
 
 
+@pytest.mark.parametrize(
+    'texto,valor',
+    [('A taxa ficou em 20,0%.', 20.06), ('Foram 10,0 h.', 10.06), ('O índice foi 1,50.', 1.509)],
+)
+def test_zeros_a_direita_contam_como_algarismos(texto, valor):
+    # "20,0" mostra três algarismos, como "16,6": o truncamento vale.
+    assert numeros_sem_lastro(texto, [[valor]], colunas=['taxa_pct']) == []
+
+
+@pytest.mark.parametrize(
+    'texto,linhas,coluna',
+    [
+        # O número depois de "caiu para" é o nível final, não o tamanho da queda.
+        ('O consumo caiu para 351 kWh.', [[351]], 'consumo_kwh'),
+        ('O consumo caiu de 400 kWh para 351 kWh.', [[400], [351]], 'consumo_kwh'),
+        ('O DEC reduziu para 3,2 h.', [[3.2]], 'dec_horas'),
+        ('O DEC recuou a 3,2 h.', [[3.2]], 'dec_horas'),
+        ('A receita subiu para R$ 1.234.', [[1234]], 'receita'),
+        # "queda em 33 UCs" conta onde houve queda.
+        ('Houve queda em 33 UCs.', [[33]], 'ucs'),
+    ],
+)
+def test_nivel_depois_da_variacao_nao_tem_direcao(texto, linhas, coluna):
+    assert numeros_sem_lastro(texto, linhas, colunas=[coluna]) == []
+
+
+def test_tamanho_da_variacao_continua_com_direcao():
+    assert numeros_sem_lastro('O consumo caiu 351 kWh.', [[351]], colunas=['consumo_kwh']) == [
+        '351'
+    ]
+    # "para a classe" não é "de X para Y": a queda continua precisando de valor negativo.
+    assert numeros_sem_lastro(
+        'Queda de 5% para a classe comercial.', [[5]], colunas=['variacao_pct']
+    ) == ['5%']
+
+
+def test_coluna_de_perdas_nao_e_coluna_de_queda():
+    # perdas_kwh é o nível de perdas: positivo, ele não sustenta uma queda.
+    texto = 'As perdas tiveram queda de 351 kWh.'
+    assert numeros_sem_lastro(texto, [[351]], colunas=['perdas_kwh']) == ['351']
+    assert numeros_sem_lastro(texto, [[351]], colunas=['reducao_perdas_kwh']) == []
+
+
 def test_limiar_da_pergunta_so_vale_como_limiar():
     assert numeros_sem_lastro('Foram 33 UCs com queda acima de 30%.', [[33]], limiares=[30]) == []
     assert numeros_sem_lastro('Pelo menos 3 UCs.', [[1]], limiares=[3]) == []
     assert numeros_sem_lastro('A queda média foi de 30%.', [[33]], limiares=[30]) == ['30%']
+
+
+@pytest.mark.parametrize(
+    'pergunta,numeros',
+    [
+        ('Quais os 10 bairros com maior queda?', [10]),
+        ('Qual a receita dos últimos 3 anos?', [3]),
+        ('Quantas UCs têm 3 ou mais interrupções?', [3]),
+        ('Quantas UCs tiveram queda acima de 30%?', [30]),
+        ('Quais os 5 piores alimentadores?', [5]),
+        ('Top 5 bairros por receita', [5]),
+        # Um número afirmado na pergunta não tem papel: a resposta não pode repeti-lo.
+        ('A receita de Recife foi R$ 9.876.543,21, certo?', []),
+        ('Há 2000 UCs com GD?', []),
+        ('A inadimplência foi 30%?', []),
+    ],
+)
+def test_numeros_da_pergunta_so_os_que_tem_papel(pergunta, numeros):
+    assert [float(n) for n in numeros_da_pergunta(pergunta)] == numeros
+
+
+@pytest.mark.parametrize(
+    'pergunta,texto,linhas',
+    [
+        ('Quais os 10 bairros com maior queda?', 'Dos 10 bairros pedidos, só 7 têm dado.', [[7]]),
+        ('Qual a receita dos últimos 3 anos?', 'Nos últimos 3 anos, foram R$ 1.234.', [[1234]]),
+        (
+            'Quantas UCs têm 3 ou mais interrupções?',
+            'Há 42 UCs com 3 ou mais interrupções.',
+            [[42]],
+        ),
+    ],
+)
+def test_resposta_repete_o_numero_da_pergunta_no_mesmo_papel(pergunta, texto, linhas):
+    assert numeros_sem_lastro(texto, linhas, limiares=numeros_da_pergunta(pergunta)) == []
+
+
+def test_numero_afirmado_na_pergunta_nao_vira_limiar_na_resposta():
+    limiares = numeros_da_pergunta('A receita de Recife foi R$ 9.876.543,21, certo?')
+    texto = 'A receita foi de mais de R$ 9.876.543,21.'
+    assert numeros_sem_lastro(texto, [[1234567.89]], limiares=limiares) == ['9.876.543,21']
 
 
 @pytest.mark.parametrize(

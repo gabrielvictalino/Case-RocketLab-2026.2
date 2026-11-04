@@ -73,7 +73,7 @@ class ExecutorAiRead:
         except OSError as erro:
             raise BancoIndisponivel(_mensagem(erro)) from erro
         finally:
-            await _sem_mascarar_o_cancelamento(conexao.close())
+            await _devolver_ao_pool(conexao)
         return ResultadoSQL(colunas, linhas, round((time.monotonic() - inicio) * 1000))
 
 
@@ -89,6 +89,39 @@ async def _sem_mascarar_o_cancelamento(passo) -> None:
         tarefa = asyncio.current_task()
         if tarefa is None or not tarefa.cancelling():
             raise
+
+
+async def _devolver_ao_pool(conexao) -> None:
+    """Fecha a conexão sem deixar a vaga do pool presa.
+
+    Cancelada no meio da consulta, a conexão pode recusar o close com "another operation
+    is in progress". Ignorar o erro deixaria a conexão fora do pool: depois de
+    `pool_size + max_overflow` cancelamentos, toda pergunta travaria no checkout. Nesse
+    caso ela é invalidada, e o pool descarta a conexão do driver e libera a vaga.
+
+    O fechamento roda blindado: um segundo cancelamento (o cancel scope do anyio cancela
+    de novo a cada `await`) não o interrompe no meio. Fora de um cancelamento, o erro do
+    close sobe, depois de a vaga ser liberada."""
+    erro = await asyncio.shield(asyncio.ensure_future(_fechar(conexao)))
+    if erro is not None:
+        tarefa = asyncio.current_task()
+        if tarefa is None or not tarefa.cancelling():
+            raise erro
+
+
+async def _fechar(conexao) -> Exception | None:
+    try:
+        await conexao.close()
+    except (SQLAlchemyError, OSError) as erro:
+        try:
+            await conexao.invalidate()
+            await conexao.close()
+        except (SQLAlchemyError, OSError):
+            # A conexão do driver já foi descartada pelo invalidate; o close só devolve a
+            # vaga, e não há mais o que fazer com ela.
+            pass
+        return erro
+    return None
 
 
 def _com_unidade_dos_intervalos(colunas: list[str], linhas: list) -> list[str]:

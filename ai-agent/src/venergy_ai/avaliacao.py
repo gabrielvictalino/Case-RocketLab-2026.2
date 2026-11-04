@@ -25,7 +25,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-from venergy_ai.agente import conferir_numeros
+from venergy_ai.agente import _periodo_padrao, conferir_numeros
 from venergy_ai.interface import (
     Assistente,
     Consulta,
@@ -200,7 +200,8 @@ def _sem_lastro(caso: Caso, resposta: RespostaAgente, consulta: Consulta, contex
     if contexto is None:
         recente = periodo.fim if periodo else date.today().replace(day=1)
         contexto = Contexto(competencia_mais_recente=recente)
-    return conferir_numeros(resposta.texto, caso.pergunta, consulta, periodo, contexto)
+    padrao = _periodo_padrao(contexto)
+    return conferir_numeros(resposta.texto, caso.pergunta, consulta, periodo, padrao, contexto)
 
 
 def _periodo(texto: str) -> Periodo:
