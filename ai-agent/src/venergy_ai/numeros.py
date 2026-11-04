@@ -56,7 +56,7 @@ IGNORADOS = re.compile(
 NUMERO = re.compile(
     r'(?<![\w,.])(?P<sinal>[-−+])?'
     r'(?P<numero>\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+,\d+|\d+\.\d+|\d+)'
-    r'(?:\s*(?P<escala>%|p\.?p\.?(?![^\W\d_])|(?:milh(?:ão|ões|ao|oes)|mil|mi'
+    r'(?:\s*(?P<escala>%|pontos?\s+percentua(?:l|is)|p\.?p\.?(?![^\W\d_])|(?:milh(?:ão|ões|ao|oes)|mil|mi'
     r'|bilh(?:ão|ões|ao|oes)|bi|MWh|GWh)(?![^\W\d_])))?',
     re.IGNORECASE,
 )
@@ -107,7 +107,7 @@ ANTES_DO_ANO = re.compile(
     re.IGNORECASE,
 )
 DEPOIS_DO_ANO = re.compile(
-    r'\s*(?:%|p\.?p\.?|R\$|[kMG]?Wh|kW\b|h\b|horas?\b|mil\b|milh|bilh|UCs?\b|unidades\b'
+    r'\s*(?:%|p\.?p\.?|pontos?\s+percentua|R\$|[kMG]?Wh|kW\b|h\b|horas?\b|mil\b|milh|bilh|UCs?\b|unidades\b'
     r'|clientes\b|consumidores\b|faturas\b|bairros\b|munic|alimentadores\b|inspe|ocorr'
     r'|interrup|atendimentos\b|reclama|protocolos\b)',
     re.IGNORECASE,
@@ -269,7 +269,9 @@ def citacoes(
     ("742%" não sai de 7,42%), e o número sem a escala escrita não vale ("R$ 1,2 milhão"
     não sai de R$ 1,20). Um número que nenhum valor sustenta vem com `lastros` vazia.
     """
-    por_valor = [[Valor(v, True, razao=False) for v in _decimais(valor)] for valor in valores]
+    # Um fato não é o tamanho de uma queda: a variação vem com o sinal, e uma receita que
+    # subiu 5,3% não sustenta "caiu 5,3%".
+    por_valor = [[Valor(v, razao=False) for v in _decimais(valor)] for valor in valores]
     anos, meses = set(anos), set(meses)
     resultado = []
     for citado in _citados(texto, nomes):
@@ -292,7 +294,10 @@ def _citados(texto: str, nomes: Iterable[str] = ()) -> Iterator[Citado]:
     # Trocar por espaços do mesmo tamanho mantém as posições do texto original.
     limpo = IGNORADOS.sub(lambda m: ' ' * len(m.group(0)), texto)
     for nome in sorted({n for n in nomes if n}, key=len, reverse=True):
-        limpo = re.sub(re.escape(nome), lambda m: ' ' * len(m.group(0)), limpo, flags=re.I)
+        # Só o nome inteiro: "Setor 2" não apaga o começo de "Setor 21", nem "Bairro 1" o
+        # de "1.234" logo depois.
+        padrao = rf'(?<!\w){re.escape(nome)}(?!\w|[.,]\d)'
+        limpo = re.sub(padrao, lambda m: ' ' * len(m.group(0)), limpo, flags=re.I)
     for citado in NUMERO.finditer(limpo):
         antes = limpo[: citado.start()]
         nivel = PARA.match(limpo, citado.end()) is not None

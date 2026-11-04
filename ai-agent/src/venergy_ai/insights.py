@@ -13,7 +13,7 @@ import hashlib
 import re
 import time
 import unicodedata
-from pathlib import Path
+from typing import NamedTuple
 
 import pydantic_ai
 from pydantic import BaseModel, Field
@@ -31,7 +31,6 @@ from venergy_ai.interface import (
     ProvedorIndisponivel,
     ValorCitado,
 )
-from venergy_ai import numeros
 from venergy_ai.numeros import Citacao, citacoes
 
 pydantic_ai.BANNER_ENABLED = False
@@ -54,12 +53,11 @@ class Rascunhos(BaseModel):
     observacoes: list[Rascunho] = Field(description='De 3 a 5 observações.')
 
 
-# A conferência dos números (este módulo e numeros.py): um insight guardado no cache por
-# uma versão anterior dela pode trazer um texto que a atual descarta, e precisa ser gerado
-# de novo.
-VERSAO_DA_CONFERENCIA = hashlib.sha1(
-    Path(__file__).read_bytes() + Path(numeros.__file__).read_bytes()
-).hexdigest()[:12]
+# A versão das regras de conferência dos números (`validar`, aqui, e numeros.py). Ela entra
+# na chave do cache: um insight guardado por uma versão anterior pode trazer um texto que a
+# atual descarta. Incremente quando uma regra mudar o que passa; um comentário ou uma
+# reformatação não precisam, e não gastam o cache.
+VERSAO_DA_CONFERENCIA = 2
 
 
 class RedatorDeInsights:
@@ -212,7 +210,7 @@ def _da_metrica_nomeada(
     citada: Citacao,
     alvos: list[Alvo],
     texto: str,
-    apelidos: dict[str, set[str]],
+    apelidos: dict[str, 'Apelido'],
     principal: Fato,
 ) -> Citacao:
     """Fica só com os fatos da métrica que a frase nomeia antes do número. Filtrar pela
@@ -220,39 +218,68 @@ def _da_metrica_nomeada(
     Sem métrica nomeada na frase, vale só o fato da própria observação: em "A
     inadimplência merece atenção. Chegou a 41,2%.", a taxa de acerto não sustenta o
     número, que não está na frase da inadimplência."""
-    chaves = _metrica_antes(texto, citada.inicio, apelidos) or {principal.chave}
+    candidatos = {alvos[i][0].chave for i in citada.lastros}
+    chaves = _metrica_antes(texto, citada.inicio, apelidos, candidatos) or {principal.chave}
     return citada._replace(lastros=[i for i in citada.lastros if alvos[i][0].chave in chaves])
 
 
-def _metrica_antes(texto: str, posicao: int, apelidos: dict[str, set[str]]) -> set[str] | None:
+class Apelido(NamedTuple):
+    chaves: set[str]
+    # A etiqueta inteira ou o nome do local. Falso na primeira palavra da etiqueta.
+    completo: bool
+
+
+def _metrica_antes(
+    texto: str, posicao: int, apelidos: dict[str, Apelido], candidatos: set[str]
+) -> set[str] | None:
     """As chaves dos fatos da última métrica nomeada antes da posição, na mesma frase.
     Entre dois nomes que terminam no mesmo ponto, vale o mais longo: "volume das UCs com
-    GD", e não "UCs com GD"."""
+    GD", e não "UCs com GD".
+
+    A etiqueta inteira e o nome do local decidem. A primeira palavra de uma etiqueta
+    ("receita", "ucs", "taxa") também aparece como palavra comum: ela só decide se algum
+    fato dela sustenta o número (`candidatos`). Em "A inadimplência das UCs residenciais
+    foi de 7,4%", o "UCs" não desvia o 7,4 para o fato das UCs com GD, e vale a
+    inadimplência, nomeada antes."""
     trecho = _sem_acento(texto[:posicao]).lower()
     inicio_da_frase = max((m.end() for m in re.finditer(r'[.;!?](?=\s)', trecho)), default=0)
     frase = trecho[inicio_da_frase:]
-    melhor = None
-    for apelido, chaves in apelidos.items():
-        for achado in re.finditer(rf'\b{re.escape(apelido)}\b', frase):
-            chave_de_ordem = (achado.end(), len(apelido))
-            if melhor is None or chave_de_ordem > melhor[0]:
-                melhor = (chave_de_ordem, chaves)
-    return None if melhor is None else melhor[1]
+    achados = sorted(
+        (
+            (achado.end(), len(nome), apelido)
+            for nome, apelido in apelidos.items()
+            # Fronteira por caractere de palavra, e não \b: "boa viagem (recife)" termina
+            # em ")", e \b depois dele exigiria uma letra em seguida.
+            for achado in re.finditer(rf'(?<!\w){re.escape(nome)}(?!\w)', frase)
+        ),
+        key=lambda achado: achado[:2],
+        reverse=True,
+    )
+    for _, _, apelido in achados:
+        if apelido.completo or apelido.chaves & candidatos:
+            return apelido.chaves
+    return None
 
 
-def _apelidos(fatos: list[Fato]) -> dict[str, set[str]]:
+def _apelidos(fatos: list[Fato]) -> dict[str, Apelido]:
     """Como cada fato pode ser nomeado no texto: a etiqueta inteira ("taxa de acerto"),
     a primeira palavra dela ("receita", que vale para todas as receitas) e, num local, o
     nome dele ("boa viagem (recife)" e "boa viagem")."""
-    apelidos: dict[str, set[str]] = {}
+    chaves: dict[str, set[str]] = {}
+    completos: set[str] = set()
     for fato in fatos:
         etiqueta, _, local = fato.metrica.partition(' · ')
-        nomes = {etiqueta, etiqueta.split()[0]}
+        inteiros = {etiqueta}
         if local:
-            nomes |= {local, local.split(' (', 1)[0]}
-        for nome in nomes:
-            apelidos.setdefault(_sem_acento(nome).lower().strip(), set()).add(fato.chave)
-    return apelidos
+            inteiros |= {local, local.split(' (', 1)[0]}
+        for nome in {*inteiros, etiqueta.split()[0]}:
+            normal = _sem_acento(nome).lower().strip()
+            chaves.setdefault(normal, set()).add(fato.chave)
+            if nome in inteiros:
+                completos.add(normal)
+    return {
+        nome: Apelido(fatos_do_nome, nome in completos) for nome, fatos_do_nome in chaves.items()
+    }
 
 
 def _sem_acento(texto: str) -> str:

@@ -14,7 +14,7 @@ o histórico de antes, e as chaves antigas expiram sozinhas em até 2 h.
 import logging
 
 from pydantic import ValidationError
-from redis.exceptions import RedisError
+from app.core.limites import FALHAS_DO_REDIS
 from venergy_ai.interface import TROCAS_NA_CONVERSA, RespostaAgente, Troca
 from venergy_ai.semantica import Periodo
 
@@ -57,7 +57,7 @@ async def ler(redis, conversa_id, usuario_id) -> list[Troca]:
             for chave_redis in chaves:
                 pipe.expire(chave_redis, TTL_S)
             dona, trocas, *_ = await pipe.execute()
-    except RedisError:
+    except FALHAS_DO_REDIS:
         logger.warning('conversa=%s redis indisponível; pergunta sem histórico', conversa_id)
         return []
     # A dona da conversa já foi conferida na auditoria; aqui é só uma segunda trava.
@@ -79,10 +79,13 @@ async def ler(redis, conversa_id, usuario_id) -> list[Troca]:
 async def registrar(
     redis, conversa_id, usuario_id, pergunta, resposta, periodo_da_tela: Periodo | None
 ):
-    """Acrescenta a troca respondida. Uma resposta sem métrica (fora do domínio, por exemplo)
-    não muda o estado que o próximo follow-up herda. `periodo_da_tela` é o da pergunta: se
-    a tela mudar de período depois, a próxima pergunta sem período usa o da tela."""
-    if resposta.metrica is None:
+    """Acrescenta a troca respondida. Uma resposta sem consulta executada (fora do domínio,
+    por exemplo) não muda o estado que o próximo follow-up herda. Uma com consulta entra
+    mesmo sem métrica, que a conferência pode ter descartado por citar um número sem
+    lastro: os filtros, o período e o SQL dela ainda valem para "e em 2024?".
+    `periodo_da_tela` é o da pergunta: se a tela mudar de período depois, a próxima
+    pergunta sem período usa o da tela."""
+    if resposta.metrica is None and not any(c.sql_executado for c in resposta.consultas):
         return
     troca = _troca(pergunta, resposta, periodo_da_tela).model_dump_json()
     chaves = (chave(conversa_id), chave_das_trocas(conversa_id))
@@ -90,7 +93,7 @@ async def registrar(
         await redis.eval(
             ACRESCENTAR, len(chaves), *chaves, str(usuario_id), troca, TROCAS_NA_CONVERSA, TTL_S
         )
-    except RedisError:
+    except FALHAS_DO_REDIS:
         logger.warning('conversa=%s redis indisponível; troca não guardada', conversa_id)
 
 

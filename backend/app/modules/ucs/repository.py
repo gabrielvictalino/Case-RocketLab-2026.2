@@ -160,42 +160,33 @@ async def listar_faturas_abertas(db, id_uc: str):
     )
 
 
-async def listar_ocorrencias_uc(db, id_uc: str, inicio, fim_plus_1m):
+async def listar_ocorrencias_uc(db, id_uc: str, inicio, fim_plus_1m, sem_evento_atipico):
     return (
         (
             await db.execute(
                 text(
                     'SELECT id_ocorrencia, data_abertura, data_encerramento, duracao_min, '
                     'duracao_efetiva_min, causa, flag_sobreposicao '
-                    'FROM analytics.ocorrencias_uc '
+                    'FROM analytics.ocorrencias_uc o '
                     'WHERE id_uc = :uc AND data_abertura >= :inicio '
                     'AND data_abertura < :fim_plus_1m '
+                    'AND (NOT :sem_evento_atipico OR EXISTS ('
+                    'SELECT 1 FROM analytics.continuidade_alimentador_mensal c '
+                    'WHERE c.alimentador = o.alimentador '
+                    "AND c.competencia = date_trunc('month', o.data_abertura)::date "
+                    'AND NOT c.flag_evento_atipico)) '
                     'ORDER BY data_abertura DESC'
                 ),
-                {'uc': id_uc, 'inicio': inicio, 'fim_plus_1m': fim_plus_1m},
+                dict(
+                    uc=id_uc,
+                    inicio=inicio,
+                    fim_plus_1m=fim_plus_1m,
+                    sem_evento_atipico=sem_evento_atipico,
+                ),
             )
         )
         .mappings()
         .all()
-    )
-
-
-async def resumo_alimentador(db, alimentador: str, inicio, fim):
-    return (
-        (
-            await db.execute(
-                text(
-                    'SELECT COALESCE(SUM(interrupcoes), 0) AS soma_interrupcoes, '
-                    'COALESCE(SUM(chi_horas), 0) AS soma_chi, '
-                    'MAX(numero_ucs) AS numero_ucs '
-                    'FROM analytics.continuidade_alimentador_mensal '
-                    'WHERE alimentador = :alm AND competencia BETWEEN :inicio AND :fim'
-                ),
-                {'alm': alimentador, 'inicio': inicio, 'fim': fim},
-            )
-        )
-        .mappings()
-        .first()
     )
 
 

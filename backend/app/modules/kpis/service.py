@@ -1,17 +1,8 @@
-from decimal import Decimal, ROUND_HALF_UP
-
+from app.modules.continuidade import repository as continuidade
 from app.modules.kpis import repository
 from app.modules.kpis.schemas import Indicador, KPIs, Serie
-from app.modules.metricas import contexto
+from app.modules.metricas import contexto, razao
 from app.modules.receita import repository as receita
-
-
-def razao(numerador, denominador, fator=1, casas='0.01'):
-    if numerador is None or denominador is None or denominador == 0:
-        return None
-    return (Decimal(numerador) * fator / Decimal(denominador)).quantize(
-        Decimal(casas), rounding=ROUND_HALF_UP
-    )
 
 
 def indicador(valor, comparacao):
@@ -24,10 +15,10 @@ def indicador(valor, comparacao):
     )
 
 
-async def valores(db, periodo, recorte):
+async def valores(db, periodo, recorte, sem_evento_atipico=False):
     r = await receita.totais(db, periodo, recorte)
     u = await repository.ucs(db, periodo, recorte)
-    c = await repository.continuidade(db, periodo, recorte)
+    c = await continuidade.totais(db, periodo, recorte, sem_evento_atipico)
     i = await repository.inspecoes(db, periodo, recorte)
     return {
         'receita': r['receita'],
@@ -47,14 +38,20 @@ async def valores(db, periodo, recorte):
     }
 
 
-async def kpis(db, periodo, comparacao, recorte):
+async def kpis(db, periodo, comparacao, recorte, sem_evento_atipico=False):
     ctx = await contexto(db, periodo, comparacao)
-    atual = await valores(db, ctx.atual, recorte)
-    anterior = await valores(db, ctx.anterior, recorte) if ctx.anterior else {}
+    atual = await valores(db, ctx.atual, recorte, sem_evento_atipico)
+    anterior = await valores(db, ctx.anterior, recorte, sem_evento_atipico) if ctx.anterior else {}
     indicadores = {key: indicador(value, anterior.get(key)) for key, value in atual.items()}
     ucs = {key: indicadores.pop(key) for key in ('ativas', 'com_gd')}
     continuidade = {key: indicadores.pop(key) for key in ('dec', 'fec')}
-    return KPIs(**ctx.metadados(), **indicadores, ucs=ucs, continuidade=continuidade)
+    return KPIs(
+        **ctx.metadados(),
+        sem_evento_atipico=sem_evento_atipico,
+        **indicadores,
+        ucs=ucs,
+        continuidade=continuidade,
+    )
 
 
 async def serie(db, periodo, comparacao, recorte):

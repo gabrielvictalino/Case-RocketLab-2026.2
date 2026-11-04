@@ -382,3 +382,56 @@ def test_versao_do_cache_muda_com_a_conferencia(monkeypatch):
     antes = RedatorDeInsights(modelo).versao
     monkeypatch.setattr(insights, 'VERSAO_DA_CONFERENCIA', 'outra')
     assert RedatorDeInsights(modelo).versao != antes
+
+
+@pytest.mark.parametrize(
+    'chave,texto',
+    [
+        # A receita subiu 5,3% (R$ 8,6 milhões): "caiu" e "queda" invertem o sentido.
+        ('receita', 'A receita faturada caiu 5,3% no período.'),
+        ('receita', 'A receita faturada teve queda de R$ 8,6 milhões.'),
+    ],
+)
+def test_queda_de_um_valor_que_subiu_e_descartada(chave, texto):
+    observacoes, descartadas = _descartada(chave, texto)
+    assert observacoes == [] and 'número fora dos fatos' in descartadas[0]
+
+
+@pytest.mark.parametrize(
+    'chave,texto',
+    [
+        # "ponto percentual" por extenso é a mesma unidade de "pp".
+        ('inadimplencia', 'A inadimplência subiu 0,81 ponto percentual.'),
+        ('inadimplencia', 'A inadimplência subiu 0,81 pontos percentuais.'),
+        # A primeira palavra de outra etiqueta ("UCs ativas") não desvia o número da
+        # inadimplência, nomeada antes na frase.
+        ('inadimplencia', 'A inadimplência das UCs residenciais foi de 7,42%.'),
+    ],
+)
+def test_redacao_comum_em_portugues_passa(chave, texto):
+    observacoes, descartadas = _descartada(chave, texto)
+    assert descartadas == [] and len(observacoes) == 1
+
+
+def test_nome_de_local_so_sai_inteiro():
+    # "Setor 2" não apaga o começo de "Setor 21": o 21 é conferido inteiro.
+    citadas = citacoes('O Setor 21 teve 3%.', [3], nomes=['Setor 2'])
+    assert [c.trecho for c in citadas] == ['21', '3%']
+    assert [c.trecho for c in citacoes('O Setor 2 teve 3%.', [3], nomes=['Setor 2'])] == ['3%']
+
+
+def test_local_com_municipio_entre_parenteses_e_reconhecido():
+    # Dois bairros com o mesmo nome: "boa viagem (recife)" termina em ")" e precisa casar.
+    fatos = [
+        Fato(
+            chave=f'local:Boa Viagem ({municipio})',
+            metrica=f'Receita · Boa Viagem ({municipio})',
+            unidade='R$',
+            valor=Decimal(valor),
+        )
+        for municipio, valor in (('Recife', '100'), ('Cabo', '200'))
+    ]
+    texto = 'A receita de Boa Viagem (Recife) foi de R$ 100.'
+    apelidos = insights._apelidos(fatos)
+    chaves = insights._metrica_antes(texto, texto.index('100'), apelidos, set())
+    assert chaves == {'local:Boa Viagem (Recife)'}

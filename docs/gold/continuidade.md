@@ -23,7 +23,7 @@ Pelo glossário do case (seção 3.2), cada ocorrência é uma UC interrompida, 
 
 **Período maior** (um ano, um ciclo, o período inteiro): some o CHI e as interrupções das competências e divida pelo número de UCs. Para um conjunto de alimentadores, divida pela soma das UCs deles. Nunca tire a média dos DECs mensais: um alimentador pequeno pesaria o mesmo que um grande. Por isso a tabela guarda os numeradores (`chi_horas`, `interrupcoes`) e o denominador (`numero_ucs`) ao lado do DEC e do FEC.
 
-**Com ou sem evento atípico:** a tabela traz todas as competências, e `flag_evento_atipico` marca as do evento. Excluir o evento é filtrar `NOT flag_evento_atipico` antes de somar. O glossário define CHI como o critério padrão para priorizar manutenção, e o padrão do ranking no backend (#57) é o CHI.
+**Com ou sem evento atípico:** a tabela traz todas as competências, e `flag_evento_atipico` marca as do evento. Excluir o evento é filtrar `NOT flag_evento_atipico` antes de somar os numeradores e contar as UCs. O denominador de cada mês inclui apenas os alimentadores com linha restante; no período, cada alimentador com ao menos uma competência restante entra uma vez. Um alimentador sem competência válida não contribui com numeradores nem denominador. O glossário define CHI como o critério padrão para priorizar manutenção, e o padrão do ranking no backend (#57) é o CHI.
 
 ## 3. Regras e decisões
 
@@ -140,11 +140,13 @@ Todas bloqueiam a carga. A Gold anterior continua intacta quando uma falha acont
 
 O último ciclo tem o evento de 2025-07. Sem as três competências marcadas, o DEC ainda sobe de 1,50 para 2,05:
 
-| Competências | Alimentadores | Interrupções por mês | Minutos efetivos por interrupção | CHI do mês ÷ 45.000 UCs |
-| :--- | :---: | :---: | :---: | :---: |
-| Meses normais | 122 | 3.366 | 99,6 | cerca de 0,12 |
-| 2025-11 e 2026-02 | 122 | 5.306 | 99,5 | 0,20 e 0,19 |
-| 2025-07, sem os 3 marcados | 119 | 4.995 | 292,5 | 0,54 |
+| Competências | Alimentadores | UCs no recorte | Interrupções por mês | Minutos efetivos por interrupção | DEC do recorte |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| Meses normais | 122 | 45.000 | 3.366 | 99,6 | cerca de 0,12 |
+| 2025-11 e 2026-02 | 122 | 45.000 | 5.306 | 99,5 | 0,20 e 0,19 |
+| 2025-07, sem os 3 marcados | 119 | 40.761 | 4.995 | 292,5 | cerca de 0,60 |
+
+As 40.761 UCs de julho/2025 são 45.000 menos as 2.285 do `ALM-REC-008`, 1.091 do `ALM-SAO-004` e 863 do `ALM-JAB-004`. O valor anterior de 0,54 dividia o CHI restante pelas 45.000 UCs: era a contribuição à rede inteira, não o DEC do recorte após filtrar as linhas. No ciclo, os três alimentadores têm outras competências válidas e o denominador continua em 45.000; por isso os valores do ciclo acima permanecem iguais. A soma dos DECs mensais não precisa coincidir com o DEC do período quando a cobertura muda.
 
 A maior parte do aumento vem do próprio 2025-07 nos outros 119 alimentadores: eles tiveram 1,5 vez mais interrupções que num mês normal, abaixo do limite de 5× da Silver, e cada uma durou quase o triplo. O excesso difuso de 2025-11 e 2026-02, que a auditoria deixou para investigar, vem do número de interrupções, com a duração normal.
 
@@ -204,7 +206,7 @@ Se uma validação falhar, a mensagem lista cada regra violada com a quantidade 
 
 ## 9. Pendências
 
-* **Contrato provisório:** os três YAMLs estão como `provisorio-nao-aprovado`. A causa principal por linha (seção 3.4) e o valor `SEM OCORRENCIA` precisam do aceite de quem consome a tabela (#57).
+* **Contrato provisório:** os três YAMLs continuam como `provisorio-nao-aprovado`. O backend (#57) aceita a causa principal por linha (seção 3.4) e o valor `SEM OCORRENCIA` como atributos mensais; o ranking conta ocorrências por causa no detalhe `ocorrencias_uc`. O aceite desse consumo não homologa a exportação real nem aprova o contrato inteiro.
 * **Evento atípico pela duração:** a Silver marca a competência pelo número de ocorrências do alimentador. Em 2025-07, os 119 alimentadores não marcados ficaram abaixo do limite em número, mas com interrupções quase três vezes mais longas (seção 6). Se o portal precisar excluir o evento inteiro, a regra da Silver (PR #23) precisa considerar também o CHI do mês, decisão a combinar com o dono da Silver.
 * **Exportação para o banco local:** fica no passo único de exportação do Job (system design, seção 13, pendência 9).
 * **Recorte "sem esta causa":** se o portal precisar, dá para acrescentar a união dos intervalos por UC, competência e causa (Silver, seção 2.4).
