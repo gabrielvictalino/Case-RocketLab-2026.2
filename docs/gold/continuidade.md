@@ -1,5 +1,7 @@
 # Gold de continuidade (DEC/FEC)
 
+[Índice do dicionário da Gold](decisoes_silver_to_gold.md), domínio 3.
+
 | | |
 | :--- | :--- |
 | **Notebook** | `data-engineering/silver_to_gold/silver-to-gold-continuidade.ipynb` |
