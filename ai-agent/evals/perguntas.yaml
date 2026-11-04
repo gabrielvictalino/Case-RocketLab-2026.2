@@ -138,6 +138,16 @@ casos:
       SELECT count(DISTINCT id_uc) AS ucs FROM medidores_historico
       WHERE tipo_medidor = 'SMART' AND data_retirada IS NULL
 
+  - id: parque-atual-de-medidores
+    categoria: dia-a-dia
+    pergunta: Quantos medidores estão instalados atualmente, incluindo os instalados antes do último ano?
+    sql: SELECT count(*) AS medidores FROM medidores_historico WHERE data_retirada IS NULL
+
+  - id: gd-existente-no-fim-do-periodo
+    categoria: periodo-ambiguo
+    pergunta: Quantas UCs já tinham GD conectada até o fim de junho de 2026, incluindo conexões anteriores ao último ano?
+    sql: SELECT count(*) AS ucs FROM gd_uc WHERE data_conexao < DATE '2026-07-01'
+
   # Período ambíguo: a resposta precisa declarar o período que usou.
   - id: receita-no-ultimo-ano
     categoria: periodo-ambiguo
