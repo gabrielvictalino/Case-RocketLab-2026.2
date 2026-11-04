@@ -415,7 +415,7 @@ separados.
 |---|---|---|---|
 | `analytics` | Tabelas do contrato Gold | importador | role `portal` |
 | `operations` | `usuarios`, `ordens_inspecao`, `ordem_eventos`, `inspecoes`, `importacoes`, `agente_auditoria`, `cargas` | role `portal`; `cargas` pelo importador | role `portal` |
-| `ai_read` | Views sobre `analytics` e `operations.inspecoes`, sem nome, CPF e endereço | importador, a cada carga | role `ai_read` |
+| `ai_read` | Views sobre `analytics`, `operations.inspecoes` e as ordens ativas, sem nome, CPF, endereço e texto livre | importador, a cada carga | role `ai_read` |
 
 Role `ai_read`: só `SELECT` em `ai_read`, `default_transaction_read_only = on`,
 `statement_timeout = 5s` e sem `EXECUTE` em `set_config`, na família
@@ -430,7 +430,9 @@ conexão do portal, nunca pela do agente.
 Role `importador`: cria e substitui `analytics` e `analytics_staging`, faz
 `INSERT` em `operations.cargas` (criada pelo `init.sql` e depois gerida pelo
 Alembic) e `SELECT` em `operations.inspecoes` (concedido pela migração que
-cria a tabela). Não escreve em nenhuma outra tabela de `operations`.
+cria a tabela) e em `id_uc` e `status` de `operations.ordens_inspecao` (migração
+0004), para a fila da IA tirar as UCs com ordem ativa, como a do portal. Não
+escreve em nenhuma outra tabela de `operations`.
 
 As views que leem `analytics` (a `inspecoes` e as de `ai_read`) ficam em
 `importador/views.sql` e pertencem à role `importador`. Uma view do Postgres
@@ -490,7 +492,7 @@ no CI. A Gold real fica para a demo.
 |---|---|---|
 | Cache (cache-aside) | `cache:{versao_carga}:{rota}:{sha1(filtros)}` | TTL de 24 h como rede de segurança. Uma carga nova muda a versão e invalida tudo sem ação manual. Escrita de ordem apaga as chaves da fila; a que gera inspeção apaga também as de `kpis` e `insights/visao-geral`, por causa da taxa de acerto |
 | Rate limit por usuário | `rl:{usuario}:{rota}` | Assistente: 20 perguntas/min e cota diária de tokens. Insights: dentro do cache, o limite só conta as chamadas ao LLM |
-| Conversas do agente | `conversa:{id}` | Últimas trocas, TTL de 2 h; o histórico permanente fica na auditoria |
+| Conversas do agente | `conversa:v2:{id}` e `conversa:v2:{id}:trocas` | A primeira guarda a dona; a segunda, a lista das últimas 5 trocas, acrescentada por um script Lua que confere a dona. TTL de 2 h nas duas, renovado a cada pergunta. O `v2` separa do formato antigo (`conversa:{id}` com um JSON só). Sem período na pergunta, vale o da última troca, a não ser que o período da tela tenha mudado desde ela. O histórico permanente fica na auditoria |
 
 A Visão 360 e as respostas do chat não são cacheadas. O cache e o rate limit
 por usuário são fail-open: se o Redis cair, o backend vai direto ao

@@ -1,10 +1,13 @@
+import asyncio
 from datetime import date
 
 import pytest
 from pydantic_ai import ModelHTTPError, ModelResponse, TextPart, ToolCallPart
+from pydantic_ai.exceptions import ModelConnectionError, ModelTimeoutError
 from pydantic_ai.models.function import FunctionModel
+from sqlalchemy.exc import InterfaceError
 
-from venergy_ai.agente import AgenteTextoSQL
+from venergy_ai.agente import CONSULTA_INTERROMPIDA, MOTIVO_SEM_DADO, AgenteTextoSQL
 from venergy_ai.executor import ConsultaFalhou, ExecutorAiRead, ResultadoSQL
 from venergy_ai.interface import (
     Andamento,
@@ -119,6 +122,20 @@ async def test_sem_periodo_na_tela_usa_os_ultimos_12_meses():
     assert resposta.periodo.descricao == 'jul/2025 a jun/2026'
 
 
+async def test_periodo_padrao_nao_comeca_antes_da_base():
+    # Uma carga de jan a jun/2026: os 12 meses começariam fora da base.
+    carga = CONTEXTO.model_copy(update={'competencia_inicial': date(2026, 1, 1)})
+    plano = PLANO | {'periodo_inicio': None, 'periodo_fim': None}
+    modelo, chamadas = modelo_simulado(plano, 'Foram R$ 1.234.567,89 de jan a jun/2026.')
+    resposta = await AgenteTextoSQL(modelo, ExecutorFalso(RESULTADO)).responder(
+        'Qual a receita?', carga
+    )
+    instrucoes = chamadas[0][1].instructions
+    assert 'Sem período na pergunta: jan/2026 a jun/2026' in instrucoes
+    assert 'Sem comparação padrão' in instrucoes
+    assert resposta.periodo.descricao == 'jan/2026 a jun/2026'
+
+
 async def test_cobertura_e_data_de_referencia_da_carga_vao_para_as_instrucoes():
     carga = CONTEXTO.model_copy(
         update={'competencia_inicial': date(2022, 7, 1), 'data_referencia': date(2026, 7, 1)}
@@ -126,9 +143,11 @@ async def test_cobertura_e_data_de_referencia_da_carga_vao_para_as_instrucoes():
     modelo, chamadas = modelo_simulado(PLANO, TEXTO)
     await AgenteTextoSQL(modelo, ExecutorFalso(RESULTADO)).responder('Qual a receita?', carga)
     instrucoes = chamadas[0][1].instructions
-    assert 'A base cobre as competências de jul/2022 a jun/2026' in instrucoes
+    assert 'Os dados da carga cobrem as competências de jul/2022 a jun/2026' in instrucoes
     assert "data_vencimento < DATE '2026-07-01'" in instrucoes
     assert 'Comparação padrão: jul/2024 a jun/2025' in instrucoes
+    # O último mês do período entra inteiro nas colunas de data e hora.
+    assert "Em data ou data e hora: >= DATE '2025-07-01' AND < DATE '2026-07-01'." in instrucoes
 
 
 @pytest.mark.parametrize('linhas', [[], [[None]]], ids=['zero-linhas', 'agregacao-vazia'])
@@ -203,14 +222,39 @@ async def test_numero_inventado_vira_nao_sei():
     assert resposta.metrica == 'Receita faturada (R$)'
 
 
-async def test_numeros_da_pergunta_podem_ser_citados():
-    plano = PLANO | {'sql': 'SELECT alimentador, chi_horas FROM continuidade_alimentador_mensal'}
-    resultado = ResultadoSQL(['alimentador', 'chi_horas'], [['ALM-REC-001', 812.5]], 4)
-    modelo, _ = modelo_simulado(plano, 'Dos 5 piores pedidos, o ALM-REC-001 lidera com 812,5.')
-    resposta = await AgenteTextoSQL(modelo, ExecutorFalso(resultado)).responder(
-        'Quais os 5 piores alimentadores?', CONTEXTO
-    )
-    assert resposta.tipo == 'resposta'
+@pytest.mark.parametrize(
+    'pergunta,resultado,texto,tipo',
+    [
+        # Como contagem, o 5 é o número de linhas.
+        (
+            'Quais os 5 piores alimentadores?',
+            ResultadoSQL(
+                ['alimentador', 'chi_horas'], [[f'ALM-REC-00{i}', 812.5] for i in range(5)], 4
+            ),
+            'Dos 5 piores, o ALM-REC-000 lidera com 812,5.',
+            'resposta',
+        ),
+        # Como limiar, o número da pergunta pode ser repetido.
+        (
+            'Quantas UCs de Olinda tiveram queda de consumo acima de 30%?',
+            ResultadoSQL(['ucs'], [[33]], 4),
+            'Foram 33 UCs com queda de consumo acima de 30%.',
+            'resposta',
+        ),
+        # Como resultado, não: o número que o usuário escreveu não saiu da consulta.
+        (
+            'A receita de Recife foi R$ 9.876.543,21, certo?',
+            RESULTADO,
+            'A receita de Recife foi de R$ 9.876.543,21.',
+            'nao_sei',
+        ),
+    ],
+    ids=['contagem', 'limiar', 'valor-da-pergunta'],
+)
+async def test_numeros_da_pergunta(pergunta, resultado, texto, tipo):
+    modelo, _ = modelo_simulado(PLANO, texto)
+    resposta = await AgenteTextoSQL(modelo, ExecutorFalso(resultado)).responder(pergunta, CONTEXTO)
+    assert resposta.tipo == tipo, resposta.motivo
 
 
 @pytest.mark.parametrize('tipo', ['fora_do_dominio', 'sem_dado'])
@@ -231,6 +275,148 @@ async def test_nao_sei_sem_consulta(tipo):
     assert resposta.consultas == [] and executor.executados == []
 
 
+async def test_nao_sei_sem_numero_inventado():
+    # O motivo e a alternativa são texto do modelo: um número sem lastro não chega ao usuário.
+    plano = {
+        'tipo': 'sem_dado',
+        'motivo': 'Não há dado de 2027; em 2026 a receita foi R$ 5,2 milhões.',
+        'alternativa': 'Quer a receita de R$ 5,2 milhões de 2026?',
+    }
+    modelo, _ = modelo_simulado(plano)
+    resposta = await AgenteTextoSQL(modelo, ExecutorFalso()).responder(
+        'Qual a receita de 2027?', CONTEXTO
+    )
+    assert resposta.motivo == MOTIVO_SEM_DADO and resposta.texto == f'Não sei. {MOTIVO_SEM_DADO}'
+    assert resposta.alternativa is None
+
+
+async def test_nao_sei_pode_citar_os_anos_da_pergunta_e_do_periodo():
+    plano = {
+        'tipo': 'sem_dado',
+        'motivo': 'Não há dado de 2027.',
+        'alternativa': 'Qual a receita de Recife em 2026?',
+    }
+    modelo, _ = modelo_simulado(plano)
+    resposta = await AgenteTextoSQL(modelo, ExecutorFalso()).responder(
+        'Qual a receita de 2027?', CONTEXTO
+    )
+    assert resposta.motivo == 'Não há dado de 2027.'
+    assert resposta.alternativa == 'Qual a receita de Recife em 2026?'
+
+
+async def test_nao_sei_pode_citar_o_primeiro_ano_da_base():
+    # "A base começa em 2022" é a explicação que mais ajuda numa pergunta sobre 2021.
+    contexto = CONTEXTO.model_copy(update={'competencia_inicial': date(2022, 7, 1)})
+    plano = {'tipo': 'sem_dado', 'motivo': 'A base começa em 2022.'}
+    modelo, _ = modelo_simulado(plano)
+    resposta = await AgenteTextoSQL(modelo, ExecutorFalso()).responder(
+        'Qual a receita de 2021?', contexto
+    )
+    assert resposta.motivo == 'A base começa em 2022.'
+
+
+async def test_alternativa_pode_repetir_o_numero_da_pergunta_no_mesmo_papel():
+    plano = {
+        'tipo': 'sem_dado',
+        'motivo': 'A base não tem a geração das placas solares.',
+        'alternativa': 'Quais as 5 UCs com maior potência instalada?',
+    }
+    modelo, _ = modelo_simulado(plano)
+    resposta = await AgenteTextoSQL(modelo, ExecutorFalso()).responder(
+        'Quais as 5 UCs que mais geraram energia solar?', CONTEXTO
+    )
+    assert resposta.alternativa == 'Quais as 5 UCs com maior potência instalada?'
+
+
+@pytest.mark.parametrize(
+    'pergunta,texto,linhas,tipo',
+    [
+        (
+            'Quais os 10 bairros com maior queda de receita?',
+            'Dos 10 bairros pedidos, só 7 têm dado; o primeiro caiu R$ 1.234.',
+            [[-1234]] * 7,
+            'resposta',
+        ),
+        (
+            'Quantas UCs têm 3 ou mais interrupções?',
+            'Há 42 UCs com 3 ou mais interrupções.',
+            [[42]],
+            'resposta',
+        ),
+        (
+            'Qual a receita dos últimos 3 anos?',
+            'Nos últimos 3 anos, a receita foi de R$ 1.234.567,89.',
+            [[1234567.89]],
+            'resposta',
+        ),
+        # O número que a pergunta afirma não vira limiar na resposta.
+        (
+            'A receita de Recife foi R$ 9.876.543,21, certo?',
+            'A receita foi de mais de R$ 9.876.543,21.',
+            [[1234567.89]],
+            'nao_sei',
+        ),
+    ],
+)
+async def test_numeros_da_pergunta_valem_no_papel_que_tinham(pergunta, texto, linhas, tipo):
+    modelo, _ = modelo_simulado(PLANO, texto)
+    executor = ExecutorFalso(ResultadoSQL(['receita_reais'], linhas, 5))
+    resposta = await AgenteTextoSQL(modelo, executor).responder(pergunta, CONTEXTO)
+    assert resposta.tipo == tipo, resposta.motivo
+
+
+async def test_metrica_e_filtros_com_numero_fora_do_sql_nao_chegam_a_tela():
+    plano = PLANO | {
+        'metrica': 'Receita faturada (R$ 5,2 milhões)',
+        'filtros': ['município = Recife', 'receita acima de R$ 9.999', 'LIMIT 1000'],
+    }
+    modelo, _ = modelo_simulado(plano, TEXTO)
+    resposta = await AgenteTextoSQL(modelo, ExecutorFalso(RESULTADO)).responder(
+        'Qual a receita de Recife?', CONTEXTO
+    )
+    assert resposta.tipo == 'resposta'
+    assert resposta.metrica is None
+    # O 1000 está no SQL que rodou (o LIMIT da guarda); o 9.999 não está.
+    assert resposta.filtros == ['município = Recife', 'LIMIT 1000']
+
+
+async def test_consulta_so_em_retrato_nao_declara_periodo():
+    plano = PLANO | {
+        'metrica': 'UCs no cadastro',
+        'periodo_inicio': None,
+        'periodo_fim': None,
+        'sql': 'SELECT count(*) AS ucs FROM ucs',
+    }
+    modelo, chamadas = modelo_simulado(plano, 'O cadastro tem 300 UCs.')
+    resposta = await AgenteTextoSQL(
+        modelo, ExecutorFalso(ResultadoSQL(['ucs'], [[300]], 3))
+    ).responder('Quantas UCs há?', CONTEXTO)
+    assert resposta.tipo == 'resposta' and resposta.periodo is None
+    assert 'Período: não se aplica' in texto_das_mensagens(chamadas[1][0])
+
+
+async def test_resultado_cortado_no_limite_nao_libera_o_total():
+    linhas = [[f'UC{i:06d}'] for i in range(1000)]
+    plano = PLANO | {'sql': 'SELECT id_uc FROM fila_inspecao'}
+    modelo, chamadas = modelo_simulado(plano, 'Há 1.000 UCs na fila.')
+    resposta = await AgenteTextoSQL(
+        modelo, ExecutorFalso(ResultadoSQL(['id_uc'], linhas, 3))
+    ).responder('Quantas UCs estão na fila?', CONTEXTO)
+    assert 'pelo menos 1000 linhas, cortado no limite' in texto_das_mensagens(chamadas[1][0])
+    assert resposta.tipo == 'nao_sei'
+
+
+async def test_comparacao_da_tela_e_a_unica_no_prompt():
+    semestre = Periodo(date(2026, 1, 1), date(2026, 6, 1))
+    anterior = Periodo(date(2025, 7, 1), date(2025, 12, 1))
+    contexto = CONTEXTO.model_copy(update={'periodo': semestre, 'comparacao': anterior})
+    modelo, chamadas = modelo_simulado(PLANO, TEXTO)
+    await AgenteTextoSQL(modelo, ExecutorFalso(RESULTADO)).responder('E a receita?', contexto)
+    instrucoes = chamadas[0][1].instructions
+    assert instrucoes.count('Comparação padrão') == 1
+    assert 'Comparação padrão: jul/2025 a dez/2025' in instrucoes
+
+
 async def test_plano_fora_do_formato_vira_nao_sei():
     sem_sql = {'tipo': 'consulta', 'metrica': 'Receita'}
     modelo, chamadas = modelo_simulado(sem_sql, sem_sql)
@@ -239,8 +425,18 @@ async def test_plano_fora_do_formato_vira_nao_sei():
     assert resposta.motivo == 'O modelo não devolveu a resposta no formato esperado.'
 
 
-async def test_provedor_fora_do_ar():
-    modelo, _ = modelo_simulado(ModelHTTPError(503, 'simulado', 'indisponível'))
+@pytest.mark.parametrize(
+    'erro',
+    [
+        ModelHTTPError(503, 'simulado', 'indisponível'),
+        # O pydantic-ai traduz httpx.TransportError (timeout e conexão) nestas duas.
+        ModelTimeoutError('simulado', 'ReadTimeout'),
+        ModelConnectionError('simulado', 'ConnectError'),
+    ],
+    ids=['http', 'timeout', 'conexao'],
+)
+async def test_provedor_fora_do_ar(erro):
+    modelo, _ = modelo_simulado(erro)
     with pytest.raises(ProvedorIndisponivel):
         await AgenteTextoSQL(modelo, ExecutorFalso()).responder('Qual a receita?', CONTEXTO)
 
@@ -304,9 +500,14 @@ async def test_falha_do_provedor_depois_do_sql_fica_no_andamento():
 async def test_banco_fora_do_ar_nao_pede_correcao_ao_modelo():
     modelo, chamadas = modelo_simulado(PLANO, PLANO, TEXTO)
     executor = ExecutorFalso(BancoIndisponivel('connection refused'))
+    andamento = Andamento()
     with pytest.raises(BancoIndisponivel):
-        await AgenteTextoSQL(modelo, executor).responder('Qual a receita?', CONTEXTO)
+        await AgenteTextoSQL(modelo, executor).responder('Qual a receita?', CONTEXTO, andamento)
     assert len(chamadas) == 1
+    # O SQL tentado fica para a auditoria, como a docstring de Andamento promete.
+    [consulta] = andamento.consultas
+    assert 'ai_read.receita_volume_mensal' in consulta.sql_executado
+    assert consulta.erro == 'Banco indisponível: connection refused'
 
 
 class EngineForaDoAr:
@@ -317,6 +518,79 @@ class EngineForaDoAr:
 async def test_executor_separa_a_falha_de_conexao():
     with pytest.raises(BancoIndisponivel, match='connection refused'):
         await ExecutorAiRead(EngineForaDoAr()).executar('SELECT 1')
+
+
+class TransacaoQueRecusaORollback:
+    async def rollback(self):
+        # O asyncpg recusa o ROLLBACK enquanto a consulta cancelada ainda não acabou.
+        raise InterfaceError('ROLLBACK', {}, Exception('another operation is in progress'))
+
+
+class ConexaoLenta:
+    def __init__(self):
+        self.invalidada = False
+        self.fechada = False
+
+    async def begin(self):
+        return TransacaoQueRecusaORollback()
+
+    async def exec_driver_sql(self, sql):
+        await asyncio.sleep(10)
+
+    async def invalidate(self):
+        self.invalidada = True
+
+    async def close(self):
+        # Enquanto a consulta cancelada não acabou, o close também é recusado; invalidada,
+        # a conexão só devolve a vaga ao pool.
+        if not self.invalidada:
+            raise InterfaceError('close', {}, Exception('another operation is in progress'))
+        self.fechada = True
+
+
+class EngineLenta:
+    def __init__(self):
+        self.conexao = ConexaoLenta()
+
+    async def connect(self):
+        return self.conexao
+
+
+async def test_cancelamento_nao_vira_falha_de_sql_quando_o_rollback_falha():
+    # Sem isso, o InterfaceError do rollback tomaria o lugar do cancelamento, viraria
+    # ConsultaFalhou e o teto de tempo do assistente não valeria.
+    with pytest.raises(TimeoutError):
+        async with asyncio.timeout(0.05):
+            await ExecutorAiRead(EngineLenta()).executar('SELECT 1')
+
+
+async def test_conexao_que_recusa_o_close_no_cancelamento_e_invalidada():
+    # Ignorar o erro do close deixaria a conexão fora do pool: depois de pool_size +
+    # max_overflow timeouts, toda pergunta travaria no checkout.
+    engine = EngineLenta()
+    with pytest.raises(TimeoutError):
+        async with asyncio.timeout(0.05):
+            await ExecutorAiRead(engine).executar('SELECT 1')
+    await asyncio.sleep(0)
+    assert engine.conexao.invalidada and engine.conexao.fechada
+
+
+class ExecutorLento:
+    async def executar(self, sql):
+        await asyncio.sleep(10)
+
+
+async def test_sql_fica_no_andamento_quando_o_teto_cancela_a_consulta():
+    modelo, _ = modelo_simulado(PLANO)
+    andamento = Andamento()
+    with pytest.raises(TimeoutError):
+        async with asyncio.timeout(0.05):
+            await AgenteTextoSQL(modelo, ExecutorLento()).responder(
+                'Qual a receita?', CONTEXTO, andamento
+            )
+    [consulta] = andamento.consultas
+    assert 'ai_read.receita_volume_mensal' in consulta.sql_executado
+    assert consulta.erro == CONSULTA_INTERROMPIDA
 
 
 async def test_conferencia_usa_so_as_linhas_mostradas_ao_redator():
@@ -370,6 +644,41 @@ async def test_follow_up_recebe_o_estado_da_conversa():
     assert 'Sem período na pergunta: jan/2025 a jun/2025' in instrucoes
     assert resposta.periodo.descricao == 'jan/2025 a jun/2025'
     assert resposta.filtros == ['município = Olinda']
+
+
+@pytest.mark.parametrize(
+    'tela_na_troca,tela_agora,esperado',
+    [
+        # A tela não mudou desde a troca: vale o período da troca anterior.
+        (Periodo(date(2025, 1, 1), date(2025, 6, 1)), None, 'jul/2025 a dez/2025'),
+        (None, None, 'jul/2025 a dez/2025'),
+        # A tela mudou de período depois da troca: vale o da tela.
+        (None, Periodo(date(2024, 1, 1), date(2024, 6, 1)), 'jan/2024 a jun/2024'),
+    ],
+)
+async def test_periodo_da_tela_vence_quando_mudou_desde_a_ultima_troca(
+    tela_na_troca, tela_agora, esperado
+):
+    anterior = Troca(
+        pergunta='Qual a receita de Recife?',
+        metrica='Receita faturada (R$)',
+        periodo=PeriodoUsado(
+            inicio=date(2025, 7, 1), fim=date(2025, 12, 1), descricao='jul/2025 a dez/2025'
+        ),
+        periodo_da_tela=tela_na_troca,
+    )
+    if tela_na_troca is not None:
+        tela_agora = tela_na_troca
+    contexto = CONTEXTO.model_copy(update={'historico': [anterior], 'periodo': tela_agora})
+    plano = PLANO | {'periodo_inicio': None, 'periodo_fim': None}
+    modelo, chamadas = modelo_simulado(plano, 'A receita foi de R$ 1.234.567,89.')
+    resposta = await AgenteTextoSQL(modelo, ExecutorFalso(RESULTADO)).responder(
+        'Qual a receita de Olinda?', contexto
+    )
+    assert f'Sem período na pergunta: {esperado}' in chamadas[0][1].instructions
+    assert resposta.periodo.descricao == esperado
+    # O período da tela é estado interno da conversa: não vai ao prompt.
+    assert 'periodo_da_tela' not in chamadas[0][1].instructions
 
 
 async def test_sem_conversa_nao_ha_bloco_de_conversa():
