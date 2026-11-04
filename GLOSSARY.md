@@ -12,6 +12,10 @@ diagnóstico da receita.
 O ponto que recebe energia e tem um medidor; entidade central da plataforma. Um mesmo titular pode ter várias UCs.
 _Evitar_: cliente, consumidor, instalação
 
+**UC ativa**:
+Unidade consumidora com ao menos um registro mensal nas competências do período,
+inclusive quando não há fatura. Cada UC é contada uma vez no período.
+
 **Classe**:
 Categoria tarifária da UC: Residencial, Comercial, Industrial, Rural ou Poder Público.
 _Evitar_: tipo de cliente, segmento
@@ -23,15 +27,18 @@ _Evitar_: rede, linha, circuito
 ### Medição
 
 **Consumo analítico**:
-Consumo (kWh) de uma competência usado em todas as análises e telas; igual ao consumo original, exceto nos meses de troca de medidor, em que é estimado pelo histórico da UC.
+Consumo (kWh) de uma competência usado nas análises e telas; igual ao original quando a leitura é utilizável. Leituras bloqueadas, incluindo trocas, são estimadas pela mediana da UC na mesma fase da GD, com fallback ao histórico utilizável da UC.
 _Evitar_: consumo corrigido, consumo tratado
 
 **Consumo original**:
-Consumo (kWh) como veio do sistema de medição, preservado para auditoria.
+Consumo (kWh) da Silver após normalizações e correções de sinal comprovadas, preservado antes da imputação da Gold.
 _Evitar_: consumo bruto
 
 **Leitura estimada**:
 Leitura feita sem acesso ao medidor, com consumo estimado pela distribuidora.
+
+**Medidor atual**:
+Medidor instalado hoje na UC: o único dela sem data de retirada.
 
 **Troca de medidor**:
 Competência em que o medidor da UC foi substituído, e por isso o consumo original não representa o consumo real.
@@ -76,27 +83,38 @@ Parte da receita cujas faturas foram pagas.
 _Evitar_: receita recebida, caixa
 
 **Volume faturado**:
-Energia (kWh) das leituras que têm fatura correspondente nas competências do período.
+Volume analítico (kWh) associado às faturas elegíveis nas competências do período, incluindo estimativas de consumo. Não comprova o volume registrado pelo sistema comercial.
 _Evitar_: consumo total, energia vendida
 
 **Efeito-volume**:
 Parte da variação de receita entre dois períodos explicada pela mudança na energia faturada, a preços do período de comparação.
 
 **Efeito-preço**:
-Parte da variação de receita explicada pela mudança de preço, dividida em reajuste (tarifa base da classe) e bandeira. O que sobra é o efeito-mix.
+Parte da variação de receita explicada pela mudança de preço, dividida em reajuste (tarifa base derivada por subgrupo tarifário e competência) e bandeira. O que sobra é o efeito-mix.
 _Evitar_: efeito-tarifa
 
 **Grupo de UC**:
 Recorte temporal que classifica cada UC na competência: UCs com GD (a partir do mês de conexão), UCs com irregularidade confirmada (a partir do mês da primeira inspeção técnica com irregularidade confirmada) e demais UCs. A ordem de precedência estrita é GD > irregularidade confirmada > demais.
 _Evitar_: tipo de UC, cluster de cliente
 
+**Tarifa base**:
+Valor de referência por kWh de cada subgrupo tarifário e competência, calculado pela mediana da parcela de energia das faturas por consumo utilizável positivo, descontado o adicional da bandeira. Derivada das faturas do case, sem homologação regulatória. Os adicionais fixos do case não representam o histórico da ANEEL.
+
 **Tarifa média**:
 Receita dividida pelo volume faturado, em R$/kWh. É derivada; a base não tem tabela de tarifas.
 _Evitar_: preço, tarifa
 
 **Inadimplência**:
-Percentual da receita do período em faturas ainda em aberto.
-_Evitar_: calote, atraso
+Percentual da receita do período em faturas ainda em aberto, vencidas ou não.
+_Evitar_: calote, atraso (o valor vencido é a conta atrasada)
+
+**Conta em aberto**:
+Fatura ainda não paga (`ABERTA`), vencida ou não.
+_Evitar_: dívida
+
+**Conta atrasada**:
+Conta em aberto com vencimento anterior à data de referência da carga. Sem essa data, não dá para saber quais venceram.
+_Evitar_: inadimplência (que não olha o vencimento)
 
 **Explicação da conta**:
 Comparação da fatura de uma UC com a do mesmo mês do ano anterior, separando o que mudou em consumo, bandeira e tarifa. Responde à reclamação de "conta alta".
@@ -135,7 +153,7 @@ _Evitar_: lista de suspeitos, ranking de fraude
 Nova ordem de inspeção para uma UC que já tem inspeção anterior.
 
 **Motivo da suspeita**:
-Os sinais que colocaram a UC na fila (queda de consumo, leituras estimadas, localização, tipo de medidor), em linguagem do negócio.
+Os sinais que colocaram a UC na fila (queda de consumo, leituras estimadas, tipo de medidor, inspeção anterior), em linguagem do negócio.
 
 **Energia a recuperar**:
 Estimativa, em kWh, da energia não faturada que a inspeção pode recuperar se confirmar irregularidade.
@@ -147,6 +165,35 @@ Ida a campo em que a vistoria não pôde ser feita (ex.: imóvel fechado). A ord
 **Taxa de acerto**:
 Percentual das inspeções do período que confirmaram irregularidade.
 _Evitar_: precisão, assertividade
+
+### Atendimento
+
+**Atendimento**:
+Contato do titular de uma UC com a distribuidora, identificado por um protocolo.
+_Evitar_: chamado
+
+**Protocolo**:
+Identificador único de um atendimento, que reúne as etapas da sua linha do tempo.
+
+**Etapa do atendimento**:
+Cada registro da linha do tempo de um atendimento, em ordem cronológica pela
+sequência, independentemente da ação registrada.
+_Evitar_: tratativa, interação
+
+**Assunto**:
+Classificação temática do atendimento: `FALTA DE ENERGIA`, `FATURA`,
+`DANO ELETRICO`, `LIGACAO NOVA`, `GERACAO DISTRIBUIDA` ou `RELIGACAO`.
+Subassunto é um detalhamento do assunto presente na origem, mas não faz parte
+do contrato de atendimento.
+
+**Status do atendimento**:
+Situação do atendimento: `ENCERRADO` quando há data de fechamento, ou `EM ABERTO`
+quando não há.
+
+**Nota de satisfação**:
+Avaliação do atendimento atribuída pelo titular da UC, de 1 a 5, com uma casa
+decimal. Nota nula significa que o titular não avaliou; não é zero e não entra
+na média de satisfação.
 
 ### Portal
 

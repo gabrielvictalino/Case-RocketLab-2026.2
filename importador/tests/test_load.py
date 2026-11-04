@@ -307,6 +307,26 @@ async def test_reload_preserves_operations_and_unified_view(client, headers, db,
         await redis.aclose()
 
 
+async def test_reload_recreates_ai_views_with_grants(db, infrastructure):
+    importer = await asyncpg.connect(infrastructure['importer_url'])
+    try:
+        # Uma view que saiu do views.sql e um grant perdido não sobrevivem à carga. A sobra
+        # depende de outra view de ai_read, e o DROP não pode depender da ordem delas.
+        await importer.execute(
+            'CREATE VIEW ai_read.sobra AS SELECT u.id_uc,d.titular FROM ai_read.ucs u '
+            'JOIN analytics.dim_uc d USING (id_uc)'
+        )
+        await importer.execute('GRANT SELECT ON ai_read.sobra TO ai_read')
+        await importer.execute('REVOKE SELECT ON ai_read.gd_uc FROM ai_read')
+        await load(SAMPLES, infrastructure['importer_url'])
+        assert await db.fetchval("SELECT to_regclass('ai_read.sobra')") is None
+        assert await db.fetchval("SELECT has_table_privilege('ai_read','ai_read.gd_uc','SELECT')")
+    finally:
+        await importer.execute('DROP VIEW IF EXISTS ai_read.sobra')
+        await importer.execute('GRANT SELECT ON ai_read.gd_uc TO ai_read')
+        await importer.close()
+
+
 async def test_redis_failure_does_not_undo_committed_import(db, infrastructure):
     before = await db.fetchval('SELECT count(*) FROM operations.cargas')
     try:
@@ -365,6 +385,15 @@ async def test_redis_failure_does_not_undo_committed_import(db, infrastructure):
             ).update(consumo_kwh_analitico='999.00'),
             'uc_consumo_faturamento_mensal',
             'LEITURA_UTILIZAVEL exige consumo analítico igual ao original (R2)',
+        ),
+        (
+            'r2_volume_analitico',
+            'uc_consumo_faturamento_mensal',
+            lambda rows: next(
+                r for r in rows if r['id_fatura'] and r['metodo_consumo'] != 'LEITURA_UTILIZAVEL'
+            ).update(consumo_kwh_analitico='999.00'),
+            'uc_consumo_faturamento_mensal',
+            'volume com fatura deve ser igual ao consumo analítico (R2)',
         ),
         (
             'r3_group_temporal',

@@ -118,3 +118,19 @@ describe('formatacao pt-BR', () => {
     })
   })
 })
+
+
+describe('formatos compactos', () => {
+  it('formata moeda, quantidade, energia e nulos', async () => {
+    const f = await import('@/lib/formatacao')
+    const normal = (v: string) => v.replaceAll('\u00a0', ' ')
+    expect(normal(f.formatarMoedaCompacta(1000))).toBe('R$ 1 mil')
+    expect(normal(f.formatarMoedaCompacta(1380000))).toBe('R$ 1,38 mi')
+    expect(normal(f.formatarMoedaCompacta(1840000000))).toBe('R$ 1,84 bi')
+    expect(normal(f.formatarNumeroCompacto(48200))).toBe('48,2 mil')
+    expect(normal(f.formatarEnergiaCompacta(999))).toBe('999 kWh')
+    expect(normal(f.formatarEnergiaCompacta(2000))).toBe('2 MWh')
+    expect(normal(f.formatarEnergiaCompacta(2000000))).toBe('2 GWh')
+    expect(f.formatarEnergiaCompacta(null)).toBe('—')
+  })
+})

@@ -402,7 +402,7 @@ numa tela só, para não abrir quatro sistemas com o cliente esperando na linha.
 
 **Critérios de aceite**
 - [ ] Campo de busca em destaque; URL `/ucs/UC100123` abre direto
-- [ ] Cabeçalho, explicação da conta em destaque, gráfico de consumo 12 meses × ano anterior com meses estimados e de troca marcados (tooltip "consumo estimado pela média da UC")
+- [ ] Cabeçalho, explicação da conta em destaque, gráfico de consumo 12 meses × ano anterior com meses estimados e de troca marcados (tooltip "consumo estimado pela mediana da UC")
 - [ ] Tabelas de faturas em aberto, interrupções, chamados (com histórico expansível) e inspeções; aviso de ordem ativa
 - [ ] UC não encontrada mostra mensagem própria; estados de carregamento e erro distintos
 - [ ] A tela não usa a barra de período global

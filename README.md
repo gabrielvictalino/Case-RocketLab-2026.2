@@ -18,3 +18,32 @@ em [backend/README.md](backend/README.md). As pendências para a Gold real estã
 
 Comandos de desenvolvimento, testes, proxy e geração do cliente OpenAPI do portal
 web estão em [frontend/README.md](frontend/README.md).
+
+## Dados
+
+O [dicionário de dados da Gold](docs/gold/decisoes_silver_to_gold.md) reúne as
+12 tabelas do contrato e as saídas analíticas por domínio, com notebook produtor,
+grão, fórmulas e decisões de limpeza que afetam os indicadores.
+Os layouts de exportação estão em [contracts/README.md](contracts/README.md);
+a auditoria das fontes está em [docs/overview_dados/README.md](docs/overview_dados/README.md).
+
+### Camada Gold de faturas
+
+O [guia de execução](data-engineering/README.md) descreve o notebook PySpark,
+a publicação Delta, a exportação CSV e o Job Databricks da Gold de faturas.
+As regras, os grãos e as limitações das métricas estão no
+[dicionário de dados](docs/gold/faturas.md). O resumo auxiliar usa o volume das
+leituras utilizáveis; as tabelas comerciais usam o consumo analítico associado
+às faturas, incluindo estimativas com método e proveniência e grupos temporais.
+A integração com `0.3.0-provisional` deriva tarifa base por subgrupo tarifário ×
+competência e usa adicionais de bandeira fixos do case, conforme decisão
+6587742059 da #67. Esses valores não comprovam kWh do sistema comercial nem
+tarifa homologada. A decomposição da receita segue a R5 do contrato no consumidor.
+A referência do status de pagamento é um parâmetro explícito da carga.
+A [matriz de aderência](docs/gold/aderencia-faturas-0.3.md) identifica os bloqueios.
+Os testes locais e o job Gold no agregador `CI` usam Spark com dados sintéticos.
+
+## Suposições
+
+- Na Visão Geral, a variação de tarifa média e de UCs é neutra, pois seu sentido favorável depende do contexto.
+- As séries de comparação são alinhadas pela posição das competências nos períodos; valores excedentes são descartados e competências sem correspondente permanecem vazias.

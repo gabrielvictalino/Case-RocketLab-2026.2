@@ -1,15 +1,20 @@
+import { useId } from 'react'
 import { Info } from 'lucide-react'
+import { Link } from 'react-router'
+import { Esqueleto } from '@/components/Estados'
 import {
   formatarPontosPercentuais,
   formatarVariacao,
 } from '@/lib/formatacao'
 import { TEXTO_DADOS_INDISPONIVEIS } from '@/components/Estados'
 
-export type SentidoFavoravel = 'alta' | 'baixa'
+export type SentidoFavoravel = 'alta' | 'baixa' | 'neutro'
 export type TipoVariacao = 'percentual' | 'pp'
 
 export interface ParKpi {
   subrotulo: string
+  semDados?: boolean
+  mensagemComparacao?: string
   valor?: string
   variacao?: number | null
   tipoVariacao?: TipoVariacao
@@ -19,6 +24,11 @@ export interface ParKpi {
 
 export interface CartaoKpiProps {
   rotulo: string
+  carregando?: boolean
+  destino?: string
+  semDados?: boolean
+  mensagemComparacao?: string
+  semPeriodoComparacao?: boolean
   valor?: string
   unidade?: string
   rotuloComparacao?: string
@@ -37,7 +47,10 @@ export function classeCorVariacao(
   variacao: number | null | undefined,
   sentidoFavoravel: SentidoFavoravel = 'alta',
 ): string {
-  if (variacao === null || variacao === undefined || variacao === 0) {
+  if (
+    sentidoFavoravel === 'neutro' || variacao === null ||
+    variacao === undefined || variacao === 0
+  ) {
     return 've-delta-neutral'
   }
   const favoravel =
@@ -67,6 +80,11 @@ export function formatarVariacaoKpi(
 
 export function CartaoKpi({
   rotulo,
+  carregando = false,
+  destino,
+  semDados = false,
+  mensagemComparacao,
+  semPeriodoComparacao = false,
   valor,
   unidade,
   rotuloComparacao,
@@ -79,8 +97,9 @@ export function CartaoKpi({
   indisponivel = false,
   mensagemIndisponivel = TEXTO_DADOS_INDISPONIVEIS,
 }: CartaoKpiProps) {
-  return (
-    <article className="ve-kpi" aria-label={rotulo}>
+  const descricaoId = useId()
+  const conteudo = (
+    <>
       <div className="ve-kpi-label">
         <span>{rotulo}</span>
         {dica && (
@@ -90,6 +109,7 @@ export function CartaoKpi({
         )}
       </div>
 
+      <div id={descricaoId} style={{ display: 'contents' }}>
       {pares && pares.length > 0 ? (
         <>
           <div className="ve-kpi-pair">
@@ -97,6 +117,8 @@ export function CartaoKpi({
               const sentidoPar = par.sentidoFavoravel ?? sentidoFavoravel
               const tipoPar = par.tipoVariacao ?? tipoVariacao
               const classePar = classeCorVariacao(par.variacao, sentidoPar)
+              let valorPar = indisponivel ? '—' : (par.valor ?? '—')
+              if (par.semDados) valorPar = 'Sem dados no período'
               return (
                 <div
                   key={par.subrotulo}
@@ -104,9 +126,14 @@ export function CartaoKpi({
                 >
                   <div className="ve-kpi-sublabel">{par.subrotulo}</div>
                   <div className="ve-kpi-value ve-num">
-                    {indisponivel ? '—' : (par.valor ?? '—')}
+                    {carregando && <Esqueleto linhas={1} />}
+                    {!carregando && (
+                      <span className={par.semDados ? 've-kpi-sem-dados' : undefined}>
+                        {valorPar}
+                      </span>
+                    )}
                   </div>
-                  {!indisponivel &&
+                  {!indisponivel && !carregando && !par.semDados &&
                     par.variacao !== undefined &&
                     par.variacao !== null && (
                       <div style={{ marginTop: '4px' }}>
@@ -118,12 +145,17 @@ export function CartaoKpi({
                         </span>
                       </div>
                     )}
-                  {!indisponivel && par.valorComparado && (
+                  {!indisponivel && !carregando &&
+                    (par.valorComparado || par.mensagemComparacao) && (
                     <div
                       className="ve-muted"
                       style={{ fontSize: '12px', marginTop: '4px' }}
                     >
-                      vs {par.valorComparado}
+                      {par.valorComparado ? (
+                        `vs ${par.valorComparado}`
+                      ) : (
+                        <span className="ve-kpi-sem-dados">{par.mensagemComparacao}</span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -135,10 +167,10 @@ export function CartaoKpi({
               <span>{mensagemIndisponivel}</span>
             </div>
           ) : (
-            rotuloComparacao && (
+            (rotuloComparacao || semPeriodoComparacao) && (
               <div className="ve-kpi-foot">
-                <span>Comparação</span>
-                <span className="ve-num">{rotuloComparacao}</span>
+                <span>{semPeriodoComparacao ? 'Sem período de comparação' : 'Comparação'}</span>
+                {!semPeriodoComparacao && <span className="ve-num">{rotuloComparacao}</span>}
               </div>
             )
           )}
@@ -146,16 +178,23 @@ export function CartaoKpi({
       ) : (
         <>
           <div className="ve-kpi-main">
-            <span className="ve-kpi-value ve-num">
-              {indisponivel ? '—' : (valor ?? '—')}
-            </span>
-            {unidade && <span className="ve-kpi-unit">{unidade}</span>}
+            <div className="ve-kpi-value ve-num">
+              {carregando && <Esqueleto linhas={1} />}
+              {!carregando && semDados && (
+                <span className="ve-kpi-sem-dados">Sem dados no período</span>
+              )}
+              {!carregando && !semDados && (indisponivel ? '—' : (valor ?? '—'))}
+            </div>
+            {unidade && !semDados && !carregando && <span className="ve-kpi-unit">{unidade}</span>}
           </div>
 
-          {!indisponivel && variacao !== undefined && variacao !== null && (
+          {!indisponivel && !carregando && !semDados &&
+            variacao !== undefined && variacao !== null && (
             <div>
               <span
-                className={`ve-delta ve-delta-chip ${classeCorVariacao(variacao, sentidoFavoravel)}`}
+                className={
+                  `ve-delta ve-delta-chip ${classeCorVariacao(variacao, sentidoFavoravel)}`
+                }
               >
                 <span aria-hidden="true">{setaVariacao(variacao)}</span>{' '}
                 {formatarVariacaoKpi(variacao, tipoVariacao)}
@@ -168,17 +207,36 @@ export function CartaoKpi({
               <span>{mensagemIndisponivel}</span>
             </div>
           ) : (
-            (rotuloComparacao || valorComparado) && (
+            (rotuloComparacao || semPeriodoComparacao || valorComparado || mensagemComparacao) && (
               <div className="ve-kpi-foot">
-                <span>{rotuloComparacao ?? 'Comparação'}</span>
-                {valorComparado && (
-                  <span className="ve-num">{valorComparado}</span>
+                <span>
+                  {semPeriodoComparacao
+                    ? 'Sem período de comparação'
+                    : (rotuloComparacao ?? 'Comparação')}
+                </span>
+                {(valorComparado || mensagemComparacao) && (
+                  <span className={valorComparado ? 've-num' : 've-kpi-sem-dados'}>
+                    {valorComparado ?? mensagemComparacao}
+                  </span>
                 )}
               </div>
             )
           )}
         </>
       )}
-    </article>
+      </div>
+    </>
+  )
+  return destino ? (
+    <Link
+      className="ve-kpi ve-kpi-link"
+      to={destino}
+      aria-label={`${rotulo} · ver detalhe`}
+      aria-describedby={descricaoId}
+    >
+      {conteudo}
+    </Link>
+  ) : (
+    <article className="ve-kpi" aria-label={rotulo}>{conteudo}</article>
   )
 }

@@ -1,101 +1,188 @@
-import { AlertTriangle, MessageSquareText, Send, X } from 'lucide-react'
-import { useLocation } from 'react-router'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { AlertTriangle, MessageSquareText, RotateCcw, Send, X } from 'lucide-react'
+import { useLocation, useSearchParams } from 'react-router'
 import { usePeriodo } from '@/app/periodo/usePeriodo'
+import { Etiqueta } from '@/components/Etiqueta'
+import {
+  contextoDaTela,
+  ROTULO_TELA,
+  rotulosDosRecortes,
+} from '@/features/assistente/conversa'
+import { EtapasEspera, RespostaAgente } from '@/features/assistente/RespostaAgente'
+import type { ConversaAgente } from '@/features/assistente/useConversaAgente'
 import { formatarIntervaloPeriodo } from '@/lib/formatacao'
+
+const LIMITE_PERGUNTA = 1000
+
+const SUGESTOES = [
+  'Qual bairro mais perdeu volume residencial no último ano?',
+  'Quantas unidades com painel solar em Olinda tiveram queda de consumo acima de 30%?',
+  'Quais os 5 alimentadores com o pior DEC no último ano?',
+]
 
 export interface PainelAgenteProps {
   aberto: boolean
   aoFechar: () => void
+  conversa: ConversaAgente
 }
 
-const ROTULO_ROTA: Record<string, string> = {
-  '/visao-geral': 'Visão Geral',
-  '/receita': 'Receita',
-  '/unidade-consumidora': 'Unidade Consumidora',
-  '/perdas': 'Perdas',
-  '/operacao': 'Operação',
-}
-
-export function PainelAgente({ aberto, aoFechar }: PainelAgenteProps) {
+export function PainelAgente({ aberto, aoFechar, conversa }: PainelAgenteProps) {
   const location = useLocation()
-  const { periodo, comparacao } = usePeriodo()
+  const [searchParams] = useSearchParams()
+  const { periodo, comparacao, parametros, carregando } = usePeriodo()
+  const [texto, setTexto] = useState('')
+  const fimDaConversa = useRef<HTMLDivElement>(null)
+  const { trocas, aguardando, perguntar, novaConversa } = conversa
+
+  useEffect(() => {
+    fimDaConversa.current?.scrollIntoView?.({ block: 'end' })
+  }, [trocas])
 
   if (!aberto) {
     return null
   }
 
-  const nomeTela = ROTULO_ROTA[location.pathname] ?? 'Portal'
+  const contexto = contextoDaTela(location.pathname, searchParams, parametros)
+  // Antes de /meta/carga responder, o período da URL ainda não foi resolvido: a pergunta
+  // sairia sem ele, e o backend responderia sobre os últimos 12 meses.
+  const semPeriodo = parametros === null
+  const nomeTela = contexto.tela ? ROTULO_TELA[contexto.tela] : 'Portal'
   const rotuloPeriodo = periodo ? formatarIntervaloPeriodo(periodo) : null
-  const rotuloComparacao = comparacao
-    ? formatarIntervaloPeriodo(comparacao)
-    : null
+  const rotuloComparacao = comparacao ? formatarIntervaloPeriodo(comparacao) : null
   const contextoPeriodo = rotuloPeriodo
     ? rotuloComparacao
       ? `${rotuloPeriodo} × ${rotuloComparacao}`
       : rotuloPeriodo
-    : 'período atual'
+    : carregando
+      ? 'carregando o período'
+      : 'período indisponível'
+  const recortes = rotulosDosRecortes(contexto)
+
+  function enviar(pergunta: string) {
+    if (aguardando || semPeriodo || !pergunta.trim()) {
+      return
+    }
+    perguntar(pergunta, contexto)
+    setTexto('')
+  }
+
+  function aoTeclar(evento: KeyboardEvent<HTMLTextAreaElement>) {
+    if (evento.key === 'Enter' && !evento.shiftKey) {
+      evento.preventDefault()
+      enviar(texto)
+    }
+  }
 
   return (
-    <aside
-      className="ve-agent"
-      role="dialog"
-      aria-label="Pergunte aos dados"
-    >
+    <aside className="ve-agent" role="dialog" aria-label="Pergunte aos dados">
       <div className="ve-agent-head">
-        <div>
+        <div style={{ minWidth: 0 }}>
           <div className="ve-agent-title">
-            <MessageSquareText
-              size={16}
-              className="ve-icon"
-              aria-hidden="true"
-            />
+            <MessageSquareText size={16} className="ve-icon" aria-hidden="true" />
             <span>Pergunte aos dados</span>
           </div>
-          <div
-            className="ve-muted"
-            style={{ fontSize: '12px', lineHeight: '16px', marginTop: '2px' }}
-          >
+          <div className="ve-muted ve-agent-context" aria-label="Contexto enviado">
             {nomeTela} · {contextoPeriodo}
           </div>
+          {recortes.length > 0 && (
+            <div className="ve-agent-chips" aria-label="Recortes da tela">
+              {recortes.map((recorte) => (
+                <Etiqueta key={recorte}>{recorte}</Etiqueta>
+              ))}
+            </div>
+          )}
         </div>
-        <button
-          type="button"
-          className="ve-btn ve-btn-quiet ve-btn-sm"
-          aria-label="Fechar painel do agente"
-          onClick={aoFechar}
-        >
-          <X size={16} aria-hidden="true" />
-        </button>
+        <div style={{ display: 'flex', gap: 'var(--space-1)', flex: 'none' }}>
+          {trocas.length > 0 && (
+            <button
+              type="button"
+              className="ve-btn ve-btn-quiet ve-btn-sm"
+              aria-label="Começar uma nova conversa"
+              title="Nova conversa"
+              disabled={aguardando}
+              onClick={novaConversa}
+            >
+              <RotateCcw size={16} aria-hidden="true" />
+            </button>
+          )}
+          <button
+            type="button"
+            className="ve-btn ve-btn-quiet ve-btn-sm"
+            aria-label="Fechar painel do agente"
+            onClick={aoFechar}
+          >
+            <X size={16} aria-hidden="true" />
+          </button>
+        </div>
       </div>
 
-      <div className="ve-agent-body">
-        <div className="ve-insight-off" role="status">
-          <AlertTriangle size={16} className="ve-icon" aria-hidden="true" />
-          <div>
-            <strong>Assistente indisponível</strong>
-            {' · '}
-            <span>
-              O agente ainda não está disponível nesta versão do portal.
-            </span>
+      <div className="ve-agent-body" aria-live="polite">
+        {trocas.length === 0 && (
+          <div className="ve-agent-intro">
+            <p>
+              Pergunte em português sobre consumo, receita, interrupções, atendimentos,
+              geração distribuída e perdas. A resposta mostra o período, a métrica e o SQL
+              usados. Quando os dados não respondem, o agente diz que não sabe.
+            </p>
+            <div className="ve-agent-sugestoes">
+              {SUGESTOES.map((sugestao) => (
+                <button
+                  key={sugestao}
+                  type="button"
+                  className="ve-btn ve-btn-sm"
+                  disabled={semPeriodo}
+                  onClick={() => enviar(sugestao)}
+                >
+                  {sugestao}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
+        {trocas.map((troca) => (
+          <div key={troca.id} className="ve-agent-troca">
+            <p className="ve-agent-q">{troca.pergunta}</p>
+            {troca.estado === 'pendente' && <EtapasEspera />}
+            {troca.estado === 'falhou' && (
+              <div className="ve-insight-off" role="alert">
+                <AlertTriangle size={16} className="ve-icon" aria-hidden="true" />
+                <span>{troca.erro}</span>
+              </div>
+            )}
+            {troca.estado === 'respondida' && troca.resposta && (
+              <RespostaAgente resposta={troca.resposta} aoPerguntar={enviar} />
+            )}
+          </div>
+        ))}
+        <div ref={fimDaConversa} />
       </div>
 
+      {semPeriodo && (
+        <p className="ve-muted ve-agent-aviso" role="status">
+          {carregando
+            ? 'Carregando o período da tela. A pergunta sai com ele.'
+            : 'O período da tela não carregou. Recarregue a página para perguntar.'}
+        </p>
+      )}
       <form
         className="ve-agent-form"
-        onSubmit={(e) => {
-          e.preventDefault()
+        onSubmit={(evento) => {
+          evento.preventDefault()
+          enviar(texto)
         }}
       >
         <textarea
           rows={1}
-          disabled
+          value={texto}
+          maxLength={LIMITE_PERGUNTA}
+          onChange={(evento) => setTexto(evento.target.value)}
+          onKeyDown={aoTeclar}
           placeholder="Pergunte sobre os dados..."
           aria-label="Pergunte sobre os dados"
         />
         <button
           type="submit"
-          disabled
+          disabled={aguardando || semPeriodo || !texto.trim()}
           className="ve-btn ve-btn-primary"
           aria-label="Enviar pergunta"
         >

@@ -163,7 +163,8 @@ versão da carga.
 4. **Insight** com o mesmo funcionamento da Visão Geral.
 
 A decomposição vale para qualquer par de períodos, então é calculada na hora
-sobre `receita_volume_mensal`. A fórmula é a mesma do diagnóstico e do
+sobre `receita_volume_mensal`. Os efeitos são calculados por município, bairro, classe
+e grupo de UC, e os agregados somam esses efeitos. A fórmula é a mesma do diagnóstico e do
 agente, e vem do contrato.
 
 ### 4.3 Unidade Consumidora (F3)
@@ -174,20 +175,34 @@ agente, e vem do contrato.
   endereço, alimentador, medidor atual, GD (potência e data de conexão).
 - **Consumo analítico** dos últimos 12 meses ao lado dos mesmos meses do ano
   anterior, com marcação de leitura estimada e de troca de medidor. O tooltip
-  da troca diz "consumo estimado pela média da UC". O consumo original não
+  da troca diz "consumo estimado pela mediana da UC". O consumo original não
   aparece para o atendente.
 - **Explicação da conta** (determinística, sem LLM): compara a última fatura
   com a do mesmo mês do ano anterior e separa a variação em consumo, bandeira
-  e tarifa numa frase pronta.
+  e tarifa numa frase pronta. A troca de medidor e a leitura estimada são
+  citadas como fato, sem dizer que a fatura foi estimada.
 - Faturas em aberto, com dias de atraso.
-- **Interrupções da UC** nos últimos 12 meses (data, duração, causa) e o
-  resumo do alimentador no mesmo período (nº de ocorrências, DEC).
+- **Interrupções da UC** nos últimos 12 meses (data, duração, duração
+  efetiva, causa, sobreposição) e o resumo do alimentador no mesmo período
+  (nº de interrupções, DEC).
 - Chamados com histórico de tratativas e nota de satisfação.
 - Inspeções da UC (históricas e novas) e ordem ativa, se houver.
 
 A tela ignora o período global e usa sempre os últimos 12 meses da UC.
 
+Decisões de backend da Visão 360:
+- (D1) Data de referência obtida de `manifesto->>'reference_date'` da carga mais recente.
+- (D2) Janela de 12 meses pela maior competência da UC (ou fallback da carga), sem período global.
+- (D3) Resumo do alimentador agrega `Σ chi_horas ÷ numero_ucs` e arredonda uma única vez com HALF_UP.
+- (D4) Explicação da conta determinística por R5. O motivo principal é o efeito (consumo, tarifa,
+  bandeira ou outros) de maior módulo com o sinal da variação. Com base zero, a frase omite o
+  percentual e usa a variação absoluta. Os avisos de medição seguem a ordem cronológica.
+- (D5) Normalização devolve 422 `UC_INVALIDA` para formato inválido e 404 `UC_NAO_ENCONTRADA` se ausente.
+- (D6) Sessão do portal acessa `analytics.*`, `portal_read.inspecoes` e `operations.*` sem passar por `ai_read`.
+
 ### 4.4 Perdas (F4, F5, D1)
+
+Na fila de inspeção, a seleção é restrita à página; após gerar ordens em lote, a pessoa permanece na fila e pode abrir as ordens abertas. A exportação Excel e a planilha de campo permanecem para a leva 2 (D1).
 
 Duas abas.
 
@@ -195,6 +210,17 @@ Duas abas.
 motivo da suspeita, energia a recuperar, inspeção anterior (se houver) e
 filtros por município, bairro e classe. O gerente marca várias linhas e gera
 as ordens **em lote**. Exportação para Excel (D1).
+
+Decisões da fila:
+
+- Ordenação por score decrescente e ID da UC crescente; a inspeção anterior usa
+  a data mais recente, preferindo origem portal e depois o maior ID em empates.
+- Os totais da página e do filtro usam os valores da Gold; ambos e os itens
+  compartilham o snapshot da consulta. Página além do fim retorna itens vazios.
+- Filtros usam igualdade literal, inclusive valores vazios. O frontend omite
+  parâmetros vazios. A página aceita até 1.000.000 e o tamanho até 100.
+- A paginação usa OFFSET: ordens ou cargas alteradas entre requisições podem
+  deslocar itens entre páginas. O cache e sua invalidação ficam para a leva 2.
 
 **Ordens**: lista por status, com as ações de cada estado e
 exportação/importação da planilha de campo.
@@ -344,6 +370,13 @@ lado. O resultado fica em cache por tela, filtros e versão da carga. Se o
 LLM falhar, o endpoint responde `503` e o frontend mostra "insight
 indisponível".
 
+Cada observação aponta o fato principal (a etiqueta mostrada) e passa pela mesma
+validação de números das respostas do agente (`venergy_ai.numeros`): a que cita um
+número fora dos fatos é descartada, e cada número mantido volta com o valor e o campo
+do fato que o sustenta (valor, comparação, variação ou variação %). A chave do cache
+inclui os fatos, então um número que muda sem nova carga (a taxa de acerto, depois de
+uma inspeção) gera outro insight sem invalidação.
+
 ## 7. Frontend
 
 | Item | Escolha |
@@ -382,11 +415,14 @@ separados.
 |---|---|---|---|
 | `analytics` | Tabelas do contrato Gold | importador | role `portal` |
 | `operations` | `usuarios`, `ordens_inspecao`, `ordem_eventos`, `inspecoes`, `importacoes`, `agente_auditoria`, `cargas` | role `portal`; `cargas` pelo importador | role `portal` |
-| `ai_read` | Views sobre `analytics`, sem nome, CPF e endereço | importador, a cada carga | role `ai_read` |
+| `ai_read` | Views sobre `analytics`, `operations.inspecoes` e as ordens ativas, sem nome, CPF, endereço e texto livre | importador, a cada carga | role `ai_read` |
 
 Role `ai_read`: só `SELECT` em `ai_read`, `default_transaction_read_only = on`,
-`statement_timeout = 5s` e sem `EXECUTE` em `set_config` e na família
-`pg_sleep`. Como a própria sessão pode mudar o timeout e o modo só leitura com
+`statement_timeout = 5s` e sem `EXECUTE` em `set_config`, na família
+`pg_sleep` e nos advisory locks de sessão (`pg_advisory_lock`,
+`pg_try_advisory_lock` e as variantes `_shared`). O `ROLLBACK` não solta um
+advisory lock de sessão, e o lock das cargas na mão da IA travaria o
+importador. Como a própria sessão pode mudar o timeout e o modo só leitura com
 `SET`, o agente roda cada consulta numa transação encerrada com `ROLLBACK`, e a
 mudança não sobrevive na conexão do pool. A auditoria do agente é gravada pela
 conexão do portal, nunca pela do agente.
@@ -394,7 +430,9 @@ conexão do portal, nunca pela do agente.
 Role `importador`: cria e substitui `analytics` e `analytics_staging`, faz
 `INSERT` em `operations.cargas` (criada pelo `init.sql` e depois gerida pelo
 Alembic) e `SELECT` em `operations.inspecoes` (concedido pela migração que
-cria a tabela). Não escreve em nenhuma outra tabela de `operations`.
+cria a tabela) e em `id_uc` e `status` de `operations.ordens_inspecao` (migração
+0004), para a fila da IA tirar as UCs com ordem ativa, como a do portal. Não
+escreve em nenhuma outra tabela de `operations`.
 
 As views que leem `analytics` (a `inspecoes` e as de `ai_read`) ficam em
 `importador/views.sql` e pertencem à role `importador`. Uma view do Postgres
@@ -454,7 +492,7 @@ no CI. A Gold real fica para a demo.
 |---|---|---|
 | Cache (cache-aside) | `cache:{versao_carga}:{rota}:{sha1(filtros)}` | TTL de 24 h como rede de segurança. Uma carga nova muda a versão e invalida tudo sem ação manual. Escrita de ordem apaga as chaves da fila; a que gera inspeção apaga também as de `kpis` e `insights/visao-geral`, por causa da taxa de acerto |
 | Rate limit por usuário | `rl:{usuario}:{rota}` | Assistente: 20 perguntas/min e cota diária de tokens. Insights: dentro do cache, o limite só conta as chamadas ao LLM |
-| Conversas do agente | `conversa:{id}` | Últimas trocas, TTL de 2 h; o histórico permanente fica na auditoria |
+| Conversas do agente | `conversa:v2:{id}` e `conversa:v2:{id}:trocas` | A primeira guarda a dona; a segunda, a lista das últimas 5 trocas, acrescentada por um script Lua que confere a dona. TTL de 2 h nas duas, renovado a cada pergunta. O `v2` separa do formato antigo (`conversa:{id}` com um JSON só). Sem período na pergunta, vale o da última troca, a não ser que o período da tela tenha mudado desde ela. O histórico permanente fica na auditoria |
 
 A Visão 360 e as respostas do chat não são cacheadas. O cache e o rate limit
 por usuário são fail-open: se o Redis cair, o backend vai direto ao
@@ -552,6 +590,19 @@ percentual. O CI usa Python 3.12, a mesma versão da imagem Docker.
 5. **Diferenciais**: testes do backend (D5) → follow-up (D3) → planilha de
    campo (D1) → avaliações (D4) → telas por cargo (D2).
 
+### Semântica comercial da Gold de faturas (#67)
+
+Consumo original é o valor da Silver após normalizações e correções de sinal
+comprovadas. O analítico preserva leituras utilizáveis e estima leituras bloqueadas
+pela mediana da própria UC na fase da GD, com fallback histórico. A troca é
+identificada também pelo mês de retirada do medidor antecessor vinculado.
+Sem doador, a exportação falha com contagem. Volume faturado é o analítico ligado
+à fatura elegível, incluindo estimativas; sem fatura é zero. Faturas sem leitura
+são segregadas. A tarifa base é derivada por subgrupo × competência, líquida dos
+adicionais fixos do case, e não homologada. Método, doadores e cobertura ficam
+nas auxiliares da Gold. O complemento explícito fornece tarifas e proveniência;
+o volume sempre vem do analítico.
+
 ## 13. Pendências do contrato com o time de dados
 
 O portal depende destes pontos para sair da amostra e usar a Gold real (regras formalizadas no contrato `0.3.0-provisional`):
@@ -559,9 +610,9 @@ O portal depende destes pontos para sair da amostra e usar a Gold real (regras f
 | # | Pendência | Bloqueia | Status no Contrato 0.3.0-provisional |
 |---|---|---|---|
 | 1 | **Consumo original e analítico** em colunas separadas em `uc_consumo_faturamento_mensal`, com a marcação de leitura estimada e de troca de medidor e o método de estimativa | Visão 360, volume faturado | **Formalizado (R2)**: colunas separadas, `metodo_consumo` e gate de troca de medidor. |
-| 2 | **Fórmula da decomposição da receita** (volume, reajuste, bandeira, mix), aplicável a qualquer par de períodos sobre `receita_volume_mensal`, incluindo como obter a tarifa base da classe por competência | Receita, insights, agente | **Formalizado (R5)**: fórmula canônica com fator $k_0$, quatro efeitos e fechamento exato em Decimal no README. |
+| 2 | **Fórmula da decomposição da receita** (volume, reajuste, bandeira, mix), aplicável a qualquer par de períodos sobre `receita_volume_mensal`, incluindo como obter a tarifa base derivada por subgrupo tarifário e competência | Receita, insights, agente | **Formalizado (R5)**: fórmula canônica com fator $k_0$, quatro efeitos e fechamento exato em Decimal no README. |
 | 3 | **Grupo de UC** em `receita_volume_mensal` (com GD, irregularidade confirmada, demais), respeitando a data de conexão da GD | Receita | **Formalizado (R3)**: regra temporal GD > IRREGULARIDADE_CONFIRMADA > DEMAIS com `date_trunc` e gate SQL. |
-| 4 | **Regra de DEC/FEC**: sobreposição de interrupções (fórmula simples ou `duracao_efetiva_min`), denominador por alimentador e marcação de evento atípico | Operação, Visão Geral | **Proposta no #98** (`docs/gold/continuidade.md`): CHI com `duracao_efetiva_min`, interrupções com `flag_sobreposicao = false`, denominador fixo com as UCs do alimentador no cadastro e evento atípico marcado pela Silver, sem remoção. Falta o aceite do backend (#57) para a causa principal por linha e o valor `SEM OCORRENCIA`. |
+| 4 | **Regra de DEC/FEC**: sobreposição de interrupções (fórmula simples ou `duracao_efetiva_min`), denominador por alimentador e marcação de evento atípico | Operação, Visão Geral | **Consumida no backend #57**, conforme a proposta #98 (`docs/gold/continuidade.md`): CHI com `duracao_efetiva_min`, interrupções com `flag_sobreposicao = false`, denominador fixo com as UCs do alimentador no cadastro e evento atípico marcado pela Silver. Quando solicitado, série, ranking e KPIs filtram as linhas marcadas antes de agregar, conforme a regra da Gold. Causa principal mensal e `SEM OCORRENCIA` aceitos como atributos; contagens por causa vêm de `ocorrencias_uc`. Homologação real e aprovação integral do contrato continuam pendentes. |
 | 5 | **Fila de inspeção** com score, motivos em formato legível (lista de sinais com valor) e energia a recuperar em kWh e R$, sem UCs com GD | Perdas | **Formalizado (R4)**: gate estrito excluindo UCs de `gd_uc` da fila; `dim_uc.flag_gd` auditado contra `gd_uc`. |
 | 6 | **Atendimentos** em duas tabelas (protocolo; protocolo × sequência) | Visão 360 | **Formalizado**: tabelas `atendimentos` e `atendimentos_historico` com metadados R1. |
 | 7 | **Faturas órfãs** fora de toda tabela de receita do contrato | Receita, KPIs | **Formalizado (R2)**: faturas órfãs excluídas de toda tabela analítica; competência sem fatura modelada com nulos síncronos e zeros; nova coluna `data_vencimento`. Faturas múltiplas da mesma UC na competência (`MULTIPLAS_FATURAS_UC_MES`, #67) também são segregadas, e a competência entra como sem fatura. |

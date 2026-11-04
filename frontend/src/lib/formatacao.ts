@@ -124,7 +124,7 @@ function obterFormatadorVariacao(casas: number): Intl.NumberFormat {
   return fmt
 }
 
-function converterNumero(valor: ValorNumerico): number | null {
+export function converterNumero(valor: ValorNumerico): number | null {
   if (valor === null || valor === undefined) {
     return null
   }
@@ -292,4 +292,26 @@ export function formatarIntervaloPeriodo(
     return `${mesInicio}–${mesFim}/${anoFim}`
   }
   return `${formatarCompetencia(periodo.inicio)}–${formatarCompetencia(periodo.fim)}`
+}
+
+const formatoCompacto = new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 2 })
+const moedaCompacta = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', notation: 'compact', minimumFractionDigits: 0, maximumFractionDigits: 2 })
+
+export function formatarNumeroCompacto(valor: ValorNumerico): string {
+  const numero = converterNumero(valor)
+  return numero === null ? AUSENTE : formatoCompacto.format(numero)
+}
+
+export function formatarMoedaCompacta(valor: ValorNumerico): string {
+  const numero = converterNumero(valor)
+  return numero === null ? AUSENTE : moedaCompacta.format(numero)
+}
+
+export function formatarEnergiaCompacta(valor: ValorNumerico): string {
+  const numero = converterNumero(valor)
+  if (numero === null) return AUSENTE
+  const magnitude = Math.abs(numero)
+  const divisor = magnitude >= 1e6 ? 1e6 : magnitude >= 1e3 ? 1e3 : 1
+  const unidade = divisor === 1e6 ? 'GWh' : divisor === 1e3 ? 'MWh' : 'kWh'
+  return `${formatoCompacto.format(numero / divisor)}${NBSP}${unidade}`
 }

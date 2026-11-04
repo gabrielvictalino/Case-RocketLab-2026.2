@@ -187,3 +187,77 @@ async def test_audit_failure_rolls_back_transition(client, headers, db):
         assert await db.fetchval('SELECT status FROM operations.ordens_inspecao') == 'ABERTA'
     finally:
         await db.execute('GRANT INSERT ON operations.ordem_eventos TO portal')
+
+
+def ai_url(infrastructure):
+    return infrastructure['settings'].database_url_ai.replace(
+        'postgresql+asyncpg://', 'postgresql://'
+    )
+
+
+async def test_fila_da_ia_tira_as_ucs_com_ordem_ativa(client, headers, infrastructure):
+    # A fila do glossário são as UCs sem ordem ativa: a da IA tem de bater com a do portal.
+    ai = await asyncpg.connect(ai_url(infrastructure))
+    na_fila = "SELECT count(*) FROM ai_read.fila_inspecao WHERE id_uc = 'UC100001'"
+    try:
+        assert await ai.fetchval(na_fila) == 1
+        id_ = await criar(client, headers)
+        assert await ai.fetchval(na_fila) == 0
+        url = f'{BASE}/{id_}'
+        await client.post(url + '/despachar', headers=headers, json={'inspetor': 'INSP-001'})
+        assert await ai.fetchval(na_fila) == 0
+        await client.post(url + '/cancelar', headers=headers, json={'motivo': 'Teste'})
+        assert await ai.fetchval(na_fila) == 1
+    finally:
+        await ai.close()
+
+
+async def test_ia_nao_ve_o_texto_livre_do_tipo_de_irregularidade(client, headers, infrastructure):
+    id_ = await criar(client, headers)
+    url = f'{BASE}/{id_}'
+    await client.post(url + '/despachar', headers=headers, json={'inspetor': 'INSP-001'})
+    body = dict(
+        resultado='IRREGULARIDADE CONFIRMADA',
+        tipo_irregularidade='Desvio feito pelo morador João da Silva, CPF 123.456.789-00',
+        kwh_recuperado='10',
+        data='2026-06-20',
+    )
+    assert (await client.post(url + '/resultado', headers=headers, json=body)).status_code == 200
+    ai = await asyncpg.connect(ai_url(infrastructure))
+    try:
+        linhas = await ai.fetch('SELECT origem, tipo_irregularidade FROM ai_read.inspecoes')
+    finally:
+        await ai.close()
+    # A histórica mantém o tipo da Silver; o texto do portal vira OUTRO.
+    assert sorted((r['origem'], r['tipo_irregularidade'] or '') for r in linhas) == [
+        ('historica', ''),
+        ('historica', 'DESVIO DIRETO'),
+        ('portal', 'OUTRO'),
+    ]
+
+
+async def test_tipo_escrito_no_portal_e_normalizado(client, headers, infrastructure):
+    # Como no portal: "desvio direto" e "Ligação clandestina" são tipos conhecidos.
+    for uc, tipo in (('UC100002', ' desvio direto '), ('UC100003', 'Ligação clandestina')):
+        url = f'{BASE}/{await criar(client, headers, uc)}'
+        await client.post(url + '/despachar', headers=headers, json={'inspetor': 'INSP-001'})
+        body = dict(
+            resultado='IRREGULARIDADE CONFIRMADA',
+            tipo_irregularidade=tipo,
+            kwh_recuperado='10',
+            data='2026-06-20',
+        )
+        assert (
+            await client.post(url + '/resultado', headers=headers, json=body)
+        ).status_code == 200
+    ai = await asyncpg.connect(ai_url(infrastructure))
+    try:
+        tipos = await ai.fetch(
+            "SELECT tipo_irregularidade FROM ai_read.inspecoes WHERE origem = 'portal'"
+        )
+    finally:
+        await ai.close()
+    assert sorted(r['tipo_irregularidade'] for r in tipos) == [
+        'DESVIO DIRETO',
+        'LIGACAO CLANDESTINA',
+    ]

@@ -129,3 +129,89 @@ async def listar(db, status, page, size):
         text(f'SELECT count(*) FROM operations.ordens_inspecao {where}'), params
     )
     return {'items': items, 'total': total, 'page': page, 'size': size}
+
+
+async def fila(db, filtro, page: int, size: int) -> dict:
+    campos = filtro.model_dump()
+    condicoes = [f'u.{campo} = :{campo}' for campo, valor in campos.items() if valor is not None]
+    where = ' AND '.join(condicoes) if condicoes else 'TRUE'
+    params = {**campos, 'limit': size, 'offset': (page - 1) * size}
+    linhas = (
+        (
+            await db.execute(
+                text(f"""
+            WITH base AS (
+                SELECT f.id_uc, u.municipio, u.bairro, u.classe, f.score, f.motivos,
+                       f.energia_recuperar_kwh, f.energia_recuperar_reais
+                FROM analytics.fila_inspecao f
+                JOIN analytics.dim_uc u USING (id_uc)
+                WHERE {where} AND NOT EXISTS (
+                    SELECT 1 FROM operations.ordens_inspecao o
+                    WHERE o.id_uc = f.id_uc AND o.status IN ('ABERTA', 'EM_CAMPO')
+                )
+            )
+            SELECT agg.*, p.*, i.id_inspecao, i.data AS inspecao_data,
+                   i.inspetor, i.resultado, i.tipo_irregularidade, i.kwh_recuperado, i.origem
+            FROM (SELECT count(*) AS total,
+                         coalesce(sum(energia_recuperar_kwh), 0.00) AS filtro_kwh,
+                         coalesce(sum(energia_recuperar_reais), 0.00) AS filtro_reais
+                  FROM base) agg
+            LEFT JOIN LATERAL (
+                SELECT * FROM base ORDER BY score DESC, id_uc ASC LIMIT :limit OFFSET :offset
+            ) p ON true
+            LEFT JOIN LATERAL (
+                SELECT id_inspecao, data, inspetor, resultado, tipo_irregularidade,
+                       kwh_recuperado, origem
+                FROM portal_read.inspecoes WHERE id_uc = p.id_uc
+                ORDER BY data DESC, (origem = 'portal') DESC, id_inspecao DESC LIMIT 1
+            ) i ON true
+            ORDER BY p.score DESC, p.id_uc ASC
+            """),
+                params,
+            )
+        )
+        .mappings()
+        .all()
+    )
+    items = []
+    for linha in linhas:
+        if linha['id_uc'] is None:
+            continue
+        item = {
+            key: linha[key]
+            for key in (
+                'id_uc',
+                'municipio',
+                'bairro',
+                'classe',
+                'score',
+                'motivos',
+                'energia_recuperar_kwh',
+                'energia_recuperar_reais',
+            )
+        }
+        item['inspecao_anterior'] = None
+        if linha['id_inspecao'] is not None:
+            item['inspecao_anterior'] = {
+                'id_inspecao': linha['id_inspecao'],
+                'data': linha['inspecao_data'],
+                **{
+                    key: linha[key]
+                    for key in (
+                        'inspetor',
+                        'resultado',
+                        'tipo_irregularidade',
+                        'kwh_recuperado',
+                        'origem',
+                    )
+                },
+            }
+        items.append(item)
+    return {
+        'items': items,
+        'total': linhas[0]['total'],
+        'page': page,
+        'size': size,
+        'filtro_kwh': linhas[0]['filtro_kwh'],
+        'filtro_reais': linhas[0]['filtro_reais'],
+    }
