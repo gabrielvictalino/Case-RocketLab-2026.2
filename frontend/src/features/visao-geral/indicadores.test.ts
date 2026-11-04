@@ -4,6 +4,7 @@ import { alinharSeries, montarCartoes, temPontosExibiveis } from './indicadores'
 
 const ind = { valor: '1840000000', comparacao: '1000000000', variacao: '0.8', variacao_pct: '7.6' }
 const kpis: components['schemas']['KPIs'] = {
+  sem_evento_atipico: false,
   periodo: '2025-07..2026-06', comparacao: '2024-07..2025-06',
   carga: { id: '1', batch_id: '1', versao_contrato: '1', sintetica: true, carregado_em: '2026-01-01', competencia_inicial: '2022-07-01', competencia_mais_recente: '2026-06-01' },
   receita: ind, receita_arrecadada: ind, volume_faturado_kwh: ind, tarifa_media: ind,

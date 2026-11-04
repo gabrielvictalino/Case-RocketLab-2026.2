@@ -5,6 +5,9 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from app.core.decomposicao import decompor
 from app.core.errors import APIError
+from app.core.periodos import Periodo
+from app.modules.continuidade import repository as continuidade
+from app.modules.metricas import Recorte, razao
 from app.modules.perdas.schemas import Ordem
 from app.modules.ucs import repository as repo
 from app.modules.ucs.schemas import (
@@ -282,7 +285,7 @@ def explicar_conta(atual: Mapping | None, anterior: Mapping | None) -> Explicaca
     )
 
 
-async def obter_visao_uc(db, id_uc_bruto: str) -> VisaoUC:
+async def obter_visao_uc(db, id_uc_bruto: str, sem_evento_atipico=False) -> VisaoUC:
     id_uc = normalizar_id_uc(id_uc_bruto)
     uc_row = await repo.buscar_dim_uc(db, id_uc)
     if not uc_row:
@@ -386,7 +389,9 @@ async def obter_visao_uc(db, id_uc_bruto: str) -> VisaoUC:
         )
 
     fim_plus_1m = subtrair_meses(fim, -1)
-    rows_ocorrencias = await repo.listar_ocorrencias_uc(db, id_uc, inicio, fim_plus_1m)
+    rows_ocorrencias = await repo.listar_ocorrencias_uc(
+        db, id_uc, inicio, fim_plus_1m, sem_evento_atipico
+    )
     ocorrencias = [
         OcorrenciaUC(
             id_ocorrencia=r['id_ocorrencia'],
@@ -400,24 +405,17 @@ async def obter_visao_uc(db, id_uc_bruto: str) -> VisaoUC:
         for r in rows_ocorrencias
     ]
 
-    alm_stats = await repo.resumo_alimentador(db, uc_row['alimentador'], inicio, fim)
-    soma_interrupcoes = int(alm_stats['soma_interrupcoes']) if alm_stats else 0
-    soma_chi = Decimal(str(alm_stats['soma_chi'])) if alm_stats else Decimal(0)
-    num_ucs = (
-        Decimal(str(alm_stats['numero_ucs']))
-        if (alm_stats and alm_stats['numero_ucs'])
-        else Decimal(0)
+    alm_stats = await continuidade.totais(
+        db, Periodo(inicio, fim), Recorte(alimentador=uc_row['alimentador']), sem_evento_atipico
     )
-
-    if num_ucs > 0:
-        dec = (soma_chi / num_ucs).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-    else:
-        dec = Decimal('0.00')
-
     resumo_alm = ResumoAlimentador(
-        alimentador=uc_row['alimentador'], interrupcoes=soma_interrupcoes, dec=dec
+        alimentador=uc_row['alimentador'],
+        interrupcoes=alm_stats['interrupcoes'],
+        dec=razao(alm_stats['chi'], alm_stats['numero_ucs']),
     )
-    interrupcoes = Interrupcoes(ocorrencias=ocorrencias, alimentador=resumo_alm)
+    interrupcoes = Interrupcoes(
+        ocorrencias=ocorrencias, alimentador=resumo_alm, sem_evento_atipico=sem_evento_atipico
+    )
 
     rows_chamados = await repo.listar_chamados(db, id_uc)
     protos = [r['protocolo'] for r in rows_chamados]

@@ -15,7 +15,7 @@ não foi encontrado contrato Gold aprovado/versionado nessas referências.
 | Rotas de ordens | Análise anterior sugeria PATCH genérico | Ações `/despachar`, `/tentativas`, `/resultado`, `/cancelar`, conforme system design |
 | Python | Workspace #61 propunha 3.14 | 3.12 em todos os membros, imagem e CI, para usar o runtime disponível e validado; versões resolvidas no uv.lock |
 | Consumo | Diagnóstico usa mediana, tela menciona média, Silver preserva negativos sinalizados | Nenhuma estimativa oficial implementada; original preservado, analítico sintético e método explícito |
-| Continuidade | Soma simples no diagnóstico versus duração efetiva/união na Silver | Nenhuma regra oficial implementada; amostra sintética com numeradores/denominadores explícitos |
+| Continuidade | Soma simples no diagnóstico versus duração efetiva/união na Silver | #57 consome os numeradores mensais Gold, denominador fixo por alimentador e exclusão opcional por competência marcada; causas contadas no detalhe, conforme `docs/gold/continuidade.md`. Homologação real continua pendente |
 | Gold | Modelos propostos sem contrato aprovado | `0.3.0-provisional`, sinalizado no manifesto; `synthetic` preserva a proveniência e aceita exportação real compatível, com metadados completos (R1–R8) sem certificar as fórmulas |
 | Inspeções | Portal e IA compartilhavam a mesma view | `portal_read.inspecoes` para o portal e projeção independente `ai_read.inspecoes` para a IA, ambas do importador |
 | Bootstrap | Importador precisa de novas inspeções, migrações não devem precisar de Gold | init → Alembic operations → importador e views, sem dependência circular |
@@ -54,7 +54,8 @@ P17: fila filtrada e paginada entregue; a aprovação do score pela Gold segue p
 
 1. Aprovar contratos e homologar exportação real com hashes, totais e cobertura.
 2. P13/P14 UC 360 e explicação da conta, P20 receita,
-   P22 continuidade e P24 KPIs, após fechar as regras correspondentes.
+   após fechar as regras correspondentes. P22 continuidade (#57) e P24 KPIs (#59)
+   implementados; homologação real e cache continuam pendentes.
 3. Implementação do agente com executor somente leitura, validação SQL, timeout e
    auditoria; insights compartilham os mesmos serviços de métricas.
 4. Cache com versão de carga e invalidação da fila, rate limit por usuário,

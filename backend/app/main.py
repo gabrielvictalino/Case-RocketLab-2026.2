@@ -17,6 +17,7 @@ from app.core.database import create_engines
 from app.modules.assistente.router import router as assistente_router
 from app.modules.assistente.service import criar_assistente
 from app.modules.auth.router import router as auth_router
+from app.modules.continuidade.router import router as continuidade_router
 from app.modules.insights.router import router as insights_router
 from app.modules.insights.service import criar_redator
 from app.modules.kpis.router import router as kpis_router
@@ -133,6 +134,7 @@ def create_app(settings=None):
         fila_router,
         ucs_router,
         kpis_router,
+        continuidade_router,
         receita_router,
         assistente_router,
         insights_router,
