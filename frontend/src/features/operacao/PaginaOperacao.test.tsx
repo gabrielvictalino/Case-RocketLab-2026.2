@@ -233,6 +233,32 @@ describe('Tela Operação', () => {
     fireEvent.click(screen.getByRole('button', { name: /^CHI/ }))
     expect(screen.getByRole('columnheader', { name: /CHI/ })).toHaveAttribute('aria-sort', 'ascending')
   })
+  it('limpa a ordenacao local ao mudar o seletor e ao limpar filtros', async () => {
+    renderizarOperacao()
+
+    const cabecalhoDec = await screen.findByRole('columnheader', { name: /DEC \(h\)/ })
+    fireEvent.click(screen.getByRole('button', { name: /^DEC \(h\)/ }))
+    expect(cabecalhoDec).toHaveAttribute('aria-sort', 'ascending')
+
+    fireEvent.change(screen.getByLabelText('Ordenar por'), {
+      target: { value: 'fec' },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText(/Ordenado por FEC/)).toBeInTheDocument()
+      expect(screen.getByRole('columnheader', { name: /DEC \(h\)/ })).not.toHaveAttribute('aria-sort')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /^DEC \(h\)/ }))
+    expect(screen.getByRole('columnheader', { name: /DEC \(h\)/ })).toHaveAttribute('aria-sort', 'ascending')
+
+    fireEvent.click(screen.getByRole('button', { name: /Limpar filtros/ }))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Ordenar por')).toHaveValue('chi')
+      expect(screen.getByRole('columnheader', { name: /DEC \(h\)/ })).not.toHaveAttribute('aria-sort')
+    })
+  })
   it('seleciona alimentador na serie sem filtrar o ranking', async () => {
     const router = renderizarOperacao('/operacao?periodo=2026-01..2026-06')
 

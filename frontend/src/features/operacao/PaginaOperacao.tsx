@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { useCarga } from '@/app/periodo/useCarga'
 import { usePeriodo } from '@/app/periodo/usePeriodo'
@@ -61,6 +62,7 @@ const colunasRanking: ColunaTabela<AlimentadorContinuidade, unknown>[] = [
 
 export function PaginaOperacao() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const [revisaoOrdenacao, setRevisaoOrdenacao] = useState(0)
   const { periodo, comparacao, parametros, carga, carregando, erro } = usePeriodo()
   const cargaQuery = useCarga()
   const filtrosMeta = useFiltrosMeta()
@@ -118,6 +120,7 @@ export function PaginaOperacao() {
           )
           proximos.delete('ordem')
           proximos.delete('ordenar')
+          setRevisaoOrdenacao((atual) => atual + 1)
           setSearchParams(proximos)
         }}
       >
@@ -284,6 +287,7 @@ export function PaginaOperacao() {
                 const proximos = new URLSearchParams(searchParams)
                 proximos.set('ordem', evento.target.value)
                 proximos.delete('ordenar')
+                setRevisaoOrdenacao((atual) => atual + 1)
                 setSearchParams(proximos)
               }}
             >
@@ -295,6 +299,7 @@ export function PaginaOperacao() {
         }
       >
         <TabelaDados
+          key={`${ordem}-${revisaoOrdenacao}`}
           legenda="Ranking de alimentadores"
           colunas={colunasRanking}
           dados={ranking.data?.ranking ?? []}
