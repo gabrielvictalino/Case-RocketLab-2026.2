@@ -122,16 +122,17 @@ async def exportar_ordens(db) -> bytes:
 async def previa_importacao(db, conteudo, nome, user) -> PreviaImportacao:
     celulas = await asyncio.to_thread(planilha.ler, conteudo)
     normalizadas = [planilha.normalizar(numero, linha) for numero, linha in celulas]
-    lidas = [linha for linha in normalizadas if isinstance(linha, planilha.LinhaLida)]
+    preenchidas = [linha for linha in normalizadas if linha is not None]
+    lidas = [linha for linha in preenchidas if isinstance(linha, planilha.LinhaLida)]
     erros = {
         linha.numero: linha.motivo
-        for linha in normalizadas
+        for linha in preenchidas
         if isinstance(linha, planilha.LinhaComErro)
     }
     ordens = await repo.ordens_da_planilha(
         db,
-        [linha.id_ordem for linha in lidas if linha.id_ordem],
-        [linha.id_uc for linha in lidas if linha.id_ordem is None],
+        [linha.id_ordem for linha in preenchidas if linha.id_ordem],
+        [linha.id_uc for linha in preenchidas if linha.id_ordem is None and linha.id_uc],
     )
     por_id = {ordem['id']: ordem for ordem in ordens}
     ativa_da_uc = {
@@ -144,7 +145,8 @@ async def previa_importacao(db, conteudo, nome, user) -> PreviaImportacao:
             erros[linha.numero] = motivo
         else:
             aceitas.append((linha, ordem))
-    aceitas = _sem_ordem_repetida(aceitas, erros)
+    _marcar_ordens_repetidas(preenchidas, ativa_da_uc, erros)
+    aceitas = [(linha, ordem) for linha, ordem in aceitas if linha.numero not in erros]
     validas = [
         {
             'linha': linha.numero,
@@ -163,7 +165,12 @@ async def previa_importacao(db, conteudo, nome, user) -> PreviaImportacao:
     arquivo = planilha.nome_do_arquivo(nome)
     await repo.criar_importacao(db, id_, arquivo, user['id'], validas, lista_erros, avisos)
     return PreviaImportacao(
-        id=id_, arquivo=arquivo, validas=validas, erros=lista_erros, avisos=avisos
+        id=id_,
+        arquivo=arquivo,
+        validas=validas,
+        erros=lista_erros,
+        avisos=avisos,
+        ignoradas=len(normalizadas) - len(preenchidas),
     )
 
 
@@ -185,19 +192,26 @@ def _ordem_da_linha(linha, por_id, ativa_da_uc):
     return ordem, None
 
 
-def _sem_ordem_repetida(aceitas, erros):
+def _marcar_ordens_repetidas(linhas, ativa_da_uc, erros):
     # Como na Silver: escolher uma das versões de uma mesma ordem é decisão de quem preencheu.
+    # Por isso as linhas com erro contam: sem elas, a outra cópia passaria como a versão certa.
     numeros = defaultdict(list)
-    for linha, ordem in aceitas:
-        numeros[ordem['id']].append(linha.numero)
-    unicas = []
-    for linha, ordem in aceitas:
-        if len(numeros[ordem['id']]) == 1:
-            unicas.append((linha, ordem))
-        else:
-            lista = ', '.join(map(str, numeros[ordem['id']]))
-            erros[linha.numero] = f'Ordem repetida nas linhas {lista}'
-    return unicas
+    for linha in linhas:
+        if id_ordem := _id_da_ordem(linha, ativa_da_uc):
+            numeros[id_ordem].append(linha.numero)
+    for repetidas in numeros.values():
+        if len(repetidas) == 1:
+            continue
+        motivo = f'Ordem repetida nas linhas {", ".join(map(str, repetidas))}'
+        for numero in repetidas:
+            erros[numero] = f'{erros[numero]}; {motivo}' if numero in erros else motivo
+
+
+def _id_da_ordem(linha, ativa_da_uc):
+    if linha.id_ordem:
+        return linha.id_ordem
+    ordem = ativa_da_uc.get(linha.id_uc)
+    return ordem['id'] if ordem else None
 
 
 async def confirmar_importacao(db, id_, user) -> ImportacaoConfirmada:

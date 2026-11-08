@@ -19,7 +19,7 @@ from openpyxl.cell import WriteOnlyCell
 from pydantic import ValidationError
 
 from app.core.errors import APIError
-from app.modules.perdas.schemas import Resultado
+from app.modules.perdas.schemas import PADRAO_INSPETOR, PADRAO_UC, Resultado
 
 XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 LIMITE_BYTES = 5 * 1024 * 1024
@@ -39,6 +39,7 @@ COLUNAS_CAMPO = (
 )
 # `id_inspecao` só existe para manter o layout histórico: o portal gera o seu.
 COLUNAS_OBRIGATORIAS = tuple(coluna for coluna in COLUNAS_CAMPO if coluna != 'id_inspecao')
+CAMPOS_PREENCHIDOS_NA_VISTORIA = ('data', 'tipo_irregularidade', 'kwh_recuperado')
 
 FORMATOS_DATA = (
     (re.compile(r'\d{4}-\d{2}-\d{2}', re.ASCII), '%Y-%m-%d'),
@@ -62,9 +63,11 @@ TIPOS_CONHECIDOS = {
     'MEDIDOR ADULTERADO',
 }
 KWH = re.compile(r'-?\d+(?:[.,]\d+)?', re.ASCII)
+# A base histórica não tem separador de milhar, mas uma planilha preenchida à mão pode ter.
+KWH_COM_MILHAR = re.compile(r'[1-9]\d{0,2}(?:\.\d{3})+', re.ASCII)
 LIMITE_KWH = Decimal(10) ** 16
-UC = re.compile(r'UC\d{6}', re.ASCII)
-INSPETOR = re.compile(r'INSP-(00[1-9]|0[1-3][0-9]|040)', re.ASCII)
+UC = re.compile(PADRAO_UC, re.ASCII)
+INSPETOR = re.compile(PADRAO_INSPETOR, re.ASCII)
 
 
 @dataclass(frozen=True)
@@ -81,6 +84,9 @@ class LinhaLida:
 class LinhaComErro:
     numero: int
     motivo: str
+    # A ordem que a linha indica ainda conta para achar a mesma ordem em outra linha.
+    id_ordem: UUID | None = None
+    id_uc: str | None = None
 
 
 def nome_do_arquivo(bruto: str | None) -> str:
@@ -167,7 +173,8 @@ def _sem_nul(celula):
     return celula.replace('\x00', '') if isinstance(celula, str) else celula
 
 
-def normalizar(numero: int, celulas: dict) -> LinhaLida | LinhaComErro:
+def normalizar(numero: int, celulas: dict) -> LinhaLida | LinhaComErro | None:
+    """Devolve `None` para a linha exportada que a equipe ainda não preencheu."""
     motivos: list[str] = []
 
     def campo(converter, nome: str):
@@ -179,9 +186,8 @@ def normalizar(numero: int, celulas: dict) -> LinhaLida | LinhaComErro:
 
     resultado = campo(_resultado, 'resultado')
     if resultado is None and not motivos:
-        # Linha exportada que a equipe ainda não preencheu.
-        if all(_vazio(celulas.get(nome)) for nome in ('data', 'kwh_recuperado')):
-            return LinhaComErro(numero, 'Linha sem resultado preenchido')
+        if all(_vazio(celulas.get(nome)) for nome in CAMPOS_PREENCHIDOS_NA_VISTORIA):
+            return None
         motivos.append('Resultado vazio')
     id_ordem = campo(_id_ordem, 'id_ordem')
     id_uc = campo(_id_uc, 'id_uc')
@@ -192,13 +198,13 @@ def normalizar(numero: int, celulas: dict) -> LinhaLida | LinhaComErro:
     if id_ordem is None and id_uc is None and not motivos:
         motivos.append('Informe id_ordem ou id_uc')
     if motivos:
-        return LinhaComErro(numero, '; '.join(motivos))
+        return LinhaComErro(numero, '; '.join(motivos), id_ordem, id_uc)
     try:
         corpo = Resultado(
             resultado=resultado, tipo_irregularidade=tipo, kwh_recuperado=kwh, data=data
         )
     except ValidationError as erro:
-        return LinhaComErro(numero, _motivo_de_validacao(erro))
+        return LinhaComErro(numero, _motivo_de_validacao(erro), id_ordem, id_uc)
     aviso = None
     if tipo is not None and tipo not in TIPOS_CONHECIDOS:
         aviso = f'Tipo de irregularidade fora dos 5 tipos da base: {tipo}'
@@ -290,6 +296,9 @@ def _kwh(valor) -> Decimal:
     texto = '' if valor is None or isinstance(valor, bool) else str(valor).strip()
     if not texto:
         raise ValueError('kWh recuperado vazio ou inválido')
+    # Célula numérica não tem separador: o ponto dela é sempre decimal.
+    if isinstance(valor, str) and KWH_COM_MILHAR.fullmatch(texto):
+        raise ValueError(f'kWh recuperado ambíguo: {texto} (escreva sem separador de milhar)')
     if not KWH.fullmatch(texto):
         raise ValueError(f'kWh recuperado inválido: {texto}')
     kwh = Decimal(texto.replace(',', '.'))

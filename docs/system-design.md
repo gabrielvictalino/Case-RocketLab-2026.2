@@ -299,8 +299,14 @@ A view `inspecoes` une `analytics.inspecoes_historicas` e
 - O inspetor gravado é sempre o despachado na ordem. Uma linha com outro
   inspetor é erro de linha, porque o portal só troca o inspetor por um novo
   despacho.
-- Uma mesma ordem em mais de uma linha invalida todas elas, como o `id_inspecao`
-  repetido na Silver.
+- Uma mesma ordem em mais de uma linha preenchida invalida todas elas, mesmo
+  que uma das cópias já tenha outro erro, como o `id_inspecao` repetido na
+  Silver.
+- A linha exportada e não preenchida (sem resultado, data, tipo e kWh) é
+  ignorada: só aparece na contagem da prévia.
+- Em célula de texto, um kWh como `1.500` é recusado por ser ambíguo. A base
+  histórica não tem separador de milhar, mas uma planilha preenchida à mão pode
+  ter.
 
 ## 6. Backend
 

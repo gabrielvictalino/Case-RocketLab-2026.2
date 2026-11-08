@@ -6,9 +6,12 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
-UC = Annotated[str, StringConstraints(pattern=r'^UC\d{6}$')]
+PADRAO_UC = r'^UC\d{6}$'
+PADRAO_INSPETOR = r'^INSP-(00[1-9]|0[1-3][0-9]|040)$'
+
+UC = Annotated[str, StringConstraints(pattern=PADRAO_UC)]
 Texto = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
-Inspetor = Annotated[str, StringConstraints(pattern=r'^INSP-(00[1-9]|0[1-3][0-9]|040)$')]
+Inspetor = Annotated[str, StringConstraints(pattern=PADRAO_INSPETOR)]
 Energia = Annotated[Decimal, Field(ge=0, max_digits=18, decimal_places=2)]
 
 
@@ -159,6 +162,7 @@ class PreviaImportacao(BaseModel):
     validas: list[LinhaValida]
     erros: list[ObservacaoLinha]
     avisos: list[ObservacaoLinha]
+    ignoradas: int
 
 
 class ImportacaoConfirmada(BaseModel):

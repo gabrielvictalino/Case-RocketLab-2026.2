@@ -92,7 +92,15 @@ def test_ausencias_de_tipo_viram_nulo(ausencia):
 
 @pytest.mark.parametrize(
     'bruto,esperado',
-    [(125.5, '125.50'), (7, '7.00'), ('1,005', '1.01'), (Decimal('2.5'), '2.50')],
+    [
+        (125.5, '125.50'),
+        (7, '7.00'),
+        ('1,005', '1.01'),
+        (Decimal('2.5'), '2.50'),
+        (1.234, '1.23'),
+        ('0.125', '0.13'),
+        ('1500', '1500.00'),
+    ],
 )
 def test_kwh(bruto, esperado):
     lida = planilha.normalizar(2, celulas(resultado='CONFIRMADA', tipo='BY-PASS', kwh=bruto))
@@ -105,6 +113,12 @@ def test_kwh(bruto, esperado):
 def test_kwh_invalido(bruto):
     lida = planilha.normalizar(2, celulas(resultado='CONFIRMADA', tipo='BY-PASS', kwh=bruto))
     assert 'kWh' in lida.motivo
+
+
+@pytest.mark.parametrize('bruto', ['1.500', '15.609', '1.234.567'])
+def test_kwh_em_texto_com_ponto_de_milhar_e_ambiguo(bruto):
+    lida = planilha.normalizar(2, celulas(resultado='CONFIRMADA', tipo='BY-PASS', kwh=bruto))
+    assert 'ambíguo' in lida.motivo
 
 
 def test_coerencia_vem_das_regras_do_resultado():
@@ -124,9 +138,13 @@ def test_todos_os_erros_da_linha_aparecem_juntos():
     assert 'Resultado desconhecido' in motivo and 'UC fora' in motivo and 'formato' in motivo
 
 
-def test_linha_sem_preencher_tem_motivo_proprio():
-    lida = planilha.normalizar(2, celulas(data='', resultado='', kwh=''))
-    assert lida.motivo == 'Linha sem resultado preenchido'
+def test_linha_sem_preencher_e_ignorada():
+    assert planilha.normalizar(2, celulas(data='', resultado='', kwh='')) is None
+
+
+def test_linha_parcial_sem_resultado_continua_erro():
+    lida = planilha.normalizar(2, celulas(data='', resultado='', tipo='BY-PASS', kwh=''))
+    assert 'Resultado vazio' in lida.motivo
 
 
 def test_ler_numera_como_o_excel_e_pula_linhas_vazias():
@@ -256,7 +274,7 @@ async def test_planilha_mista_e_confirmacao_unica(client, headers, db):
         linha(por_id, 'UC100001', '01-20-2026', 'insp-001 ', 'confirmada', 'by-pass', '125,50'),
         linha('', 'UC100002', '20/01/2026'),
         linha(str(uuid4()), 'UC100001'),
-        linha('', 'UC100001', data='31/02/2026'),
+        linha('', 'UC100003', data='31/02/2026'),
     )
     previa = await enviar(client, headers, conteudo)
     assert previa.status_code == 201, previa.text
@@ -334,10 +352,11 @@ async def test_ordem_fora_de_campo_e_erro_de_linha(client, headers, preparar, mo
 @integracao
 async def test_uc_sem_ordem_uc_trocada_e_inspetor_trocado(client, headers):
     id_ = await criar_em_campo(client, headers)
+    outra = await criar_em_campo(client, headers, 'UC100003')
     conteudo = xlsx(
         linha('', 'UC100002'),
         linha(id_, 'UC100002'),
-        linha(id_, 'UC100001', inspetor='INSP-009'),
+        linha(outra, 'UC100003', inspetor='INSP-009'),
     )
     erros = (await enviar(client, headers, conteudo)).json()['erros']
     assert erros == [
@@ -353,6 +372,36 @@ async def test_ordem_repetida_invalida_as_duas_linhas(client, headers):
     corpo = (await enviar(client, headers, xlsx(linha(id_), linha('', 'UC100001')))).json()
     assert corpo['validas'] == []
     assert [item['motivo'] for item in corpo['erros']] == ['Ordem repetida nas linhas 2, 3'] * 2
+
+
+@integracao
+@pytest.mark.parametrize(
+    'copia,motivo',
+    [
+        ({'kwh': 'abc'}, 'kWh recuperado inválido'),
+        ({'inspetor': 'INSP-009'}, 'Inspetor diferente'),
+        ({'uc': 'UC100002'}, 'A UC da linha não é a da ordem'),
+        ({'id_ordem': '', 'kwh': 'abc'}, 'kWh recuperado inválido'),
+    ],
+)
+async def test_copia_com_erro_tambem_invalida_a_outra(client, headers, copia, motivo):
+    id_ = await criar_em_campo(client, headers)
+    conteudo = xlsx(linha(**{'id_ordem': id_, **copia}), linha(id_))
+    corpo = (await enviar(client, headers, conteudo)).json()
+    assert corpo['validas'] == []
+    assert corpo['erros'][0]['linha'] == 2 and motivo in corpo['erros'][0]['motivo']
+    repetida = 'Ordem repetida nas linhas 2, 3'
+    assert repetida in corpo['erros'][0]['motivo']
+    assert corpo['erros'][1] == {'linha': 3, 'motivo': repetida}
+
+
+@integracao
+async def test_linha_sem_preencher_nao_vira_erro_nem_repeticao(client, headers):
+    id_ = await criar_em_campo(client, headers)
+    em_branco = ['', 'UC100001', '', 'INSP-001', '', '', '', id_]
+    corpo = (await enviar(client, headers, xlsx(em_branco, linha(id_)))).json()
+    assert corpo['ignoradas'] == 1 and corpo['erros'] == []
+    assert [item['linha'] for item in corpo['validas']] == [3]
 
 
 @integracao
