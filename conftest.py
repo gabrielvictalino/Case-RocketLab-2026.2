@@ -86,7 +86,8 @@ def infrastructure():
 async def db(infrastructure):
     connection = await asyncpg.connect(infrastructure['admin_url'])
     await connection.execute(
-        'TRUNCATE operations.inspecoes, operations.ordem_eventos, operations.ordens_inspecao'
+        'TRUNCATE operations.importacoes, operations.inspecoes, operations.ordem_eventos, '
+        'operations.ordens_inspecao'
     )
     await connection.execute('UPDATE operations.usuarios SET ativo=true')
     yield connection

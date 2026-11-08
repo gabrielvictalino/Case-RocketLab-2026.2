@@ -136,3 +136,34 @@ class PaginaFila(BaseModel):
     page: int
     size: int
     totais: TotaisFila
+
+
+class LinhaValida(BaseModel):
+    linha: int
+    id_ordem: UUID
+    id_uc: str
+    data: date
+    resultado: str
+    tipo_irregularidade: str | None
+    kwh_recuperado: Decimal
+
+
+class ObservacaoLinha(BaseModel):
+    linha: int
+    motivo: str
+
+
+class PreviaImportacao(BaseModel):
+    id: UUID
+    arquivo: str
+    validas: list[LinhaValida]
+    erros: list[ObservacaoLinha]
+    avisos: list[ObservacaoLinha]
+
+
+class ImportacaoConfirmada(BaseModel):
+    id: UUID
+    arquivo: str
+    atualizadas: int
+    rejeitadas: list[ObservacaoLinha]
+    confirmado_em: datetime

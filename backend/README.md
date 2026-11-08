@@ -179,6 +179,11 @@ Rotas implementadas:
 | `POST /ordens-inspecao/{id}/tentativas` | `{observacao: "Imóvel fechado"}` |
 | `POST /ordens-inspecao/{id}/resultado` | `{resultado, tipo_irregularidade, kwh_recuperado, data}` |
 | `POST /ordens-inspecao/{id}/cancelar` | `{motivo: "..."}` |
+| `GET /perdas/fila/export?municipio=&bairro=&classe=` | Excel da fila inteira com os filtros aplicados |
+| `GET /ordens-inspecao/export` | Excel das ordens `EM_CAMPO`, no layout das inspeções históricas mais `id_ordem` |
+| `POST /ordens-inspecao/importacoes` | Upload `arquivo` (`.xlsx`, até 5 MB e 5.000 linhas); normaliza como a Silver e devolve a prévia com válidas, erros e avisos por linha |
+| `POST /ordens-inspecao/importacoes/{id}/confirmar` | Aplica só as linhas válidas pela transição de resultado; 409 se já confirmada |
+| `GET /ordens-inspecao/importacoes/ultima` | Última importação confirmada, ou `null` |
 | `POST /assistente/perguntas` | `{pergunta, conversa_id?, contexto: {tela, periodo, comparacao, recortes}}`; resposta do agente com `id_resposta` e `conversa_id` |
 | `GET /assistente/conversas/{id}` | Perguntas e respostas da conversa, lidas da auditoria; só a dona da conversa |
 | `GET /assistente/respostas/{id}/auditoria` | Pergunta, contexto, SQL gerado e executado, linhas, modelo, tokens e latência; só o autor ou `diretoria` |
