@@ -90,6 +90,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ordens-inspecao/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Exportar Ordens */
+        get: operations["exportar_ordens_api_v1_ordens_inspecao_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ordens-inspecao/importacoes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Importar */
+        post: operations["importar_api_v1_ordens_inspecao_importacoes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ordens-inspecao/importacoes/ultima": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ultima Importacao */
+        get: operations["ultima_importacao_api_v1_ordens_inspecao_importacoes_ultima_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ordens-inspecao/importacoes/{id_}/confirmar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirmar Importacao */
+        post: operations["confirmar_importacao_api_v1_ordens_inspecao_importacoes__id___confirmar_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ordens-inspecao/{id_}/despachar": {
         parameters: {
             query?: never;
@@ -167,6 +235,23 @@ export interface paths {
         };
         /** Fila */
         get: operations["fila_api_v1_perdas_fila_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/perdas/fila/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Exportar Fila */
+        get: operations["exportar_fila_api_v1_perdas_fila_export_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -451,6 +536,11 @@ export interface components {
              * Format: date-time
              */
             criado_em: string;
+        };
+        /** Body_importar_api_v1_ordens_inspecao_importacoes_post */
+        Body_importar_api_v1_ordens_inspecao_importacoes_post: {
+            /** Arquivo */
+            arquivo: string;
         };
         /** Cabecalho */
         Cabecalho: {
@@ -799,6 +889,25 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** ImportacaoConfirmada */
+        ImportacaoConfirmada: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Arquivo */
+            arquivo: string;
+            /** Atualizadas */
+            atualizadas: number;
+            /** Rejeitadas */
+            rejeitadas: components["schemas"]["ObservacaoLinha"][];
+            /**
+             * Confirmado Em
+             * Format: date-time
+             */
+            confirmado_em: string;
+        };
         /** Indicador */
         Indicador: {
             /** Valor */
@@ -911,6 +1020,29 @@ export interface components {
             continuidade: components["schemas"]["Continuidade"];
             taxa_acerto: components["schemas"]["Indicador"];
         };
+        /** LinhaValida */
+        LinhaValida: {
+            /** Linha */
+            linha: number;
+            /**
+             * Id Ordem
+             * Format: uuid
+             */
+            id_ordem: string;
+            /** Id Uc */
+            id_uc: string;
+            /**
+             * Data
+             * Format: date
+             */
+            data: string;
+            /** Resultado */
+            resultado: string;
+            /** Tipo Irregularidade */
+            tipo_irregularidade: string | null;
+            /** Kwh Recuperado */
+            kwh_recuperado: string;
+        };
         /** Locais */
         Locais: {
             /** Periodo */
@@ -1018,6 +1150,13 @@ export interface components {
             texto: string;
             /** Valores */
             valores: components["schemas"]["ValorCitado"][];
+        };
+        /** ObservacaoLinha */
+        ObservacaoLinha: {
+            /** Linha */
+            linha: number;
+            /** Motivo */
+            motivo: string;
         };
         /** OcorrenciaUC */
         OcorrenciaUC: {
@@ -1179,6 +1318,22 @@ export interface components {
             receita: string | null;
             /** Volume Faturado Kwh */
             volume_faturado_kwh: string | null;
+        };
+        /** PreviaImportacao */
+        PreviaImportacao: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Arquivo */
+            arquivo: string;
+            /** Validas */
+            validas: components["schemas"]["LinhaValida"][];
+            /** Erros */
+            erros: components["schemas"]["ObservacaoLinha"][];
+            /** Avisos */
+            avisos: components["schemas"]["ObservacaoLinha"][];
         };
         /** Ranking */
         Ranking: {
@@ -1587,6 +1742,110 @@ export interface operations {
             };
         };
     };
+    exportar_ordens_api_v1_ordens_inspecao_export_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Planilha Excel */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                };
+            };
+        };
+    };
+    importar_api_v1_ordens_inspecao_importacoes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_importar_api_v1_ordens_inspecao_importacoes_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviaImportacao"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ultima_importacao_api_v1_ordens_inspecao_importacoes_ultima_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportacaoConfirmada"] | null;
+                };
+            };
+        };
+    };
+    confirmar_importacao_api_v1_ordens_inspecao_importacoes__id___confirmar_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id_: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportacaoConfirmada"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     despachar_api_v1_ordens_inspecao__id___despachar_post: {
         parameters: {
             query?: never;
@@ -1749,6 +2008,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PaginaFila"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    exportar_fila_api_v1_perdas_fila_export_get: {
+        parameters: {
+            query?: {
+                municipio?: string | null;
+                bairro?: string | null;
+                classe?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Planilha Excel */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
                 };
             };
             /** @description Validation Error */

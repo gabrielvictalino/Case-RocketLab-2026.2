@@ -1458,6 +1458,8 @@
 .ve-motivos { display: inline-block; max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
 .ve-acoes-ordem { display: flex; flex-wrap: wrap; gap: .3rem; }
 .ve-lote-resumo { padding: .5rem 1rem; }
+.ve-planilha-campo { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; }
+.ve-planilha-lista { max-height: 12rem; overflow: auto; margin: .25rem 0 0; padding-left: 1.25rem; }
 
 /* Tabelas de receita: colunas compactas para comparação lado a lado. */
 .ve-receita-tabela .ve-table th,
