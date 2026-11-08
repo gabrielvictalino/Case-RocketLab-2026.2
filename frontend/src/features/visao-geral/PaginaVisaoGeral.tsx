@@ -14,12 +14,14 @@ import {
   SEM_DADOS_PERIODO,
   temPontosExibiveis,
 } from '@/features/visao-geral/indicadores'
+import { linhasCsvVisaoGeral } from '@/features/visao-geral/exportacao'
 import { useKpis, useSerieKpis } from '@/features/visao-geral/useKpis'
+import { baixarCsv, nomeCsv } from '@/lib/exportacao'
 import { formatarIntervaloPeriodo, formatarMoedaCompacta, formatarNumero } from '@/lib/formatacao'
 import { caminhoComPeriodo } from '@/lib/navegacao'
 
 export function PaginaVisaoGeral() {
-  const { periodo, comparacao, parametros, carregando, erro } = usePeriodo()
+  const { periodo, comparacao, carga, parametros, carregando, erro } = usePeriodo()
   const cargaQuery = useCarga()
   const kpis = useKpis(parametros)
   const serie = useSerieKpis(parametros?.periodo ?? null)
@@ -117,13 +119,35 @@ export function PaginaVisaoGeral() {
     )
   }
 
+  const dadosParaExportar =
+    !!parametros && !!kpis.data && !!serie.data && !(parametros.comparacao && anterior.isPending)
+  const exportar = () => {
+    if (!parametros || !kpis.data) return
+    baixarCsv(
+      nomeCsv('visao-geral', parametros.periodo),
+      linhasCsvVisaoGeral({
+        kpis: kpis.data,
+        serie: dados,
+        serieComparacao: mostrarComparacao ? anterior.data?.serie : undefined,
+        periodo: rotuloPeriodo,
+        comparacao: mostrarComparacao ? rotuloComparacao : null,
+        carga: carga?.batch_id,
+      }),
+    )
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <CabecalhoPagina
         titulo="Visão Geral"
         subtitulo={`${resumoPeriodo} · todas as UCs · competência`}
         acoes={
-          <button type="button" disabled className="ve-btn">
+          <button
+            type="button"
+            className="ve-btn"
+            disabled={!dadosParaExportar}
+            onClick={exportar}
+          >
             <Download size={15} className="ve-icon" aria-hidden="true" />
             <span>Exportar</span>
           </button>

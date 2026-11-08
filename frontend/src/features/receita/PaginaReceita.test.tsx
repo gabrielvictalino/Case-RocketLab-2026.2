@@ -26,6 +26,13 @@ class RequestCompativel extends RequestNativo {
 globalThis.Request = RequestCompativel
 window.Request = RequestCompativel
 
+const lerBlob = (arquivo: Blob) =>
+  new Promise<string>((resolver) => {
+    const leitor = new FileReader()
+    leitor.onload = () => resolver(String(leitor.result))
+    leitor.readAsText(arquivo)
+  })
+
 const carga = {
   id: '1',
   batch_id: 'teste',
@@ -226,7 +233,15 @@ it('mostra legenda, grupos ordenados, cabeçalho e exportação indisponível', 
   expect(screen.getByText('O eixo não começa em zero para tornar os efeitos legíveis.')).toBeVisible()
   expect(screen.getByText(/Receita faturada ·.*\+R\$/)).toBeVisible()
   expect(screen.getByRole('columnheader', { name: /Da alta total/ })).toBeVisible()
-  expect(screen.getByRole('button', { name: 'Exportar' })).toBeDisabled()
+  const criarUrl = vi.fn<(arquivo: Blob) => string>(() => 'blob:csv')
+  URL.createObjectURL = criarUrl
+  URL.revokeObjectURL = vi.fn()
+  fireEvent.click(screen.getByRole('button', { name: 'Exportar' }))
+  const csv = await lerBlob(criarUrl.mock.calls[0]![0])
+  expect(csv).toContain('Tela;Receita')
+  expect(csv).toContain('Versão da carga;teste')
+  expect(csv).toContain('Efeito volume;-10')
+  expect(csv).toContain('Receita no período;120')
 })
 it('isola resposta malformada e mostra locais vazios', async () => {
   iniciar('invalido')

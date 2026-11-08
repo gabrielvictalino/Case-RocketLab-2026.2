@@ -32,7 +32,9 @@ import {
   nivelLocais,
   recorteReceita,
 } from './receita'
+import { linhasCsvReceita } from './exportacao'
 import { useDecomposicao, useGrupos, useLocais } from './useReceita'
+import { baixarCsv, nomeCsv } from '@/lib/exportacao'
 import { Painel } from '@/components/Painel'
 import { Selecao } from '@/components/Selecao'
 import { InsightDaTela } from '@/features/insights/InsightDaTela'
@@ -234,6 +236,22 @@ export function PaginaReceita() {
   }
 
   const classes = filtros.data?.classes ?? []
+  const exportar = () => {
+    if (!parametros || !decomposicao.data || !locais.data || !grupos.data) return
+    baixarCsv(
+      nomeCsv('receita', parametros.periodo),
+      linhasCsvReceita({
+        decomposicao: decomposicao.data,
+        locais: locais.data,
+        grupos: grupos.data,
+        nivel,
+        periodo: rotuloPeriodo,
+        comparacao: rotuloComparacao,
+        recortes: `${recortes.municipio || 'todos os municípios'} · ${rotuloClasse}`,
+        carga: carga?.batch_id,
+      }),
+    )
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -241,7 +259,12 @@ export function PaginaReceita() {
         titulo="Receita"
         subtitulo={subtituloReceita}
         acoes={
-          <button type="button" disabled className="ve-btn">
+          <button
+            type="button"
+            className="ve-btn"
+            disabled={!parametros || !decomposicao.data || !locais.data || !grupos.data}
+            onClick={exportar}
+          >
             <Download size={15} className="ve-icon" aria-hidden="true" />
             <span>Exportar</span>
           </button>
