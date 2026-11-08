@@ -26,6 +26,7 @@ import {
   type Valores,
 } from './ordens'
 import { FormularioAcaoOrdem } from './FormularioAcaoOrdem'
+import { PlanilhaCampo } from './PlanilhaCampo'
 import { rotulosOrdem } from './rotulosOrdem'
 
 type Ordem = components['schemas']['Ordem']
@@ -254,6 +255,7 @@ export function AbaOrdens(props: Props) {
           Somente leitura: só o cargo Perdas gera e atualiza ordens de inspeção.
         </p>
       )}
+      <PlanilhaCampo podeEscrever={props.podeEscrever} />
       <Painel
         titulo={
           <span id="titulo-ordens" tabIndex={-1}>

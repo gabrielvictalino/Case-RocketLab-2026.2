@@ -105,7 +105,8 @@ beforeEach(() => {
       requests.push({ url: req.url, method: req.method, body })
       let resposta: unknown = {}
       let status = 200
-      if (url.pathname.endsWith('/meta/filtros'))
+      if (url.pathname.endsWith('/importacoes/ultima')) resposta = null
+      else if (url.pathname.endsWith('/meta/filtros'))
         resposta = {
           municipios: ['Recife'],
           bairros: { Recife: ['Pina'] },
@@ -216,6 +217,18 @@ describe('Página Perdas', () => {
           .length,
       ).toBeGreaterThan(1),
     )
+  })
+  it('exporta a fila em Excel com os filtros da tela', async () => {
+    URL.createObjectURL = vi.fn(() => 'blob:fila')
+    URL.revokeObjectURL = vi.fn()
+    abrir('/perdas?municipio=Recife')
+    await screen.findByText('Irregular · 10/01/2025')
+    fireEvent.click(screen.getByRole('button', { name: 'Exportar Excel' }))
+    await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled())
+    expect(
+      requests.find((requisicao) => requisicao.url.includes('/fila/export'))
+        ?.url,
+    ).toContain('municipio=Recife')
   })
   it('exibe ações por status, despacha e devolve foco', async () => {
     abrir('/perdas?aba=ordens')

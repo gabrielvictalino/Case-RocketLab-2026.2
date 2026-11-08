@@ -166,6 +166,12 @@ Ida a campo em que a vistoria não pôde ser feita (ex.: imóvel fechado). A ord
 Percentual das inspeções do período que confirmaram irregularidade.
 _Evitar_: precisão, assertividade
 
+**Planilha de campo**:
+Excel com as ordens de inspeção em campo, no layout das inspeções históricas mais o `id_ordem`, que a equipe preenche e devolve ao portal com o resultado de cada vistoria.
+
+**Prévia da importação**:
+Conferência da planilha de campo antes de gravar qualquer coisa: mostra as linhas válidas, as com erro e o motivo, os avisos e quantas linhas vieram sem preencher. Nada muda até a confirmação.
+
 ### Atendimento
 
 **Atendimento**:

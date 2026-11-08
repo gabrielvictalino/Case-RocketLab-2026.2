@@ -3,6 +3,17 @@ from uuid import uuid4
 
 from sqlalchemy import text
 
+SEM_ORDEM_ATIVA = """NOT EXISTS (
+    SELECT 1 FROM operations.ordens_inspecao o
+    WHERE o.id_uc = f.id_uc AND o.status IN ('ABERTA', 'EM_CAMPO')
+)"""
+
+
+def _condicoes_fila(filtro) -> tuple[str, dict]:
+    campos = filtro.model_dump()
+    condicoes = [f'u.{campo} = :{campo}' for campo, valor in campos.items() if valor is not None]
+    return (' AND '.join(condicoes) if condicoes else 'TRUE'), campos
+
 
 async def candidata(db, id_uc):
     return (
@@ -132,9 +143,7 @@ async def listar(db, status, page, size):
 
 
 async def fila(db, filtro, page: int, size: int) -> dict:
-    campos = filtro.model_dump()
-    condicoes = [f'u.{campo} = :{campo}' for campo, valor in campos.items() if valor is not None]
-    where = ' AND '.join(condicoes) if condicoes else 'TRUE'
+    where, campos = _condicoes_fila(filtro)
     params = {**campos, 'limit': size, 'offset': (page - 1) * size}
     linhas = (
         (
@@ -145,10 +154,7 @@ async def fila(db, filtro, page: int, size: int) -> dict:
                        f.energia_recuperar_kwh, f.energia_recuperar_reais
                 FROM analytics.fila_inspecao f
                 JOIN analytics.dim_uc u USING (id_uc)
-                WHERE {where} AND NOT EXISTS (
-                    SELECT 1 FROM operations.ordens_inspecao o
-                    WHERE o.id_uc = f.id_uc AND o.status IN ('ABERTA', 'EM_CAMPO')
-                )
+                WHERE {where} AND {SEM_ORDEM_ATIVA}
             )
             SELECT agg.*, p.*, i.id_inspecao, i.data AS inspecao_data,
                    i.inspetor, i.resultado, i.tipo_irregularidade, i.kwh_recuperado, i.origem
@@ -215,3 +221,116 @@ async def fila(db, filtro, page: int, size: int) -> dict:
         'filtro_kwh': linhas[0]['filtro_kwh'],
         'filtro_reais': linhas[0]['filtro_reais'],
     }
+
+
+async def fila_completa(db, filtro):
+    """A fila inteira numa consulta só: a lateral da paginada faria uma busca por UC."""
+    where, campos = _condicoes_fila(filtro)
+    return (
+        (
+            await db.execute(
+                text(f"""
+            SELECT f.id_uc, u.municipio, u.bairro, u.classe, f.score, f.motivos,
+                   f.energia_recuperar_kwh, f.energia_recuperar_reais,
+                   i.data AS inspecao_data, i.resultado AS inspecao_resultado
+            FROM analytics.fila_inspecao f
+            JOIN analytics.dim_uc u USING (id_uc)
+            LEFT JOIN (
+                SELECT DISTINCT ON (id_uc) id_uc, data, resultado
+                FROM portal_read.inspecoes
+                ORDER BY id_uc, data DESC, (origem = 'portal') DESC, id_inspecao DESC
+            ) i USING (id_uc)
+            WHERE {where} AND {SEM_ORDEM_ATIVA}
+            ORDER BY f.score DESC, f.id_uc ASC
+            """),
+                campos,
+            )
+        )
+        .mappings()
+        .all()
+    )
+
+
+async def ordens_em_campo(db):
+    return (
+        (
+            await db.execute(
+                text("""SELECT id, id_uc, inspetor FROM operations.ordens_inspecao
+                WHERE status = 'EM_CAMPO' ORDER BY criado_em, id""")
+            )
+        )
+        .mappings()
+        .all()
+    )
+
+
+async def ordens_da_planilha(db, ids, ucs):
+    return (
+        (
+            await db.execute(
+                text("""SELECT id, id_uc, status, inspetor FROM operations.ordens_inspecao
+                WHERE id = ANY(CAST(:ids AS uuid[]))
+                   OR (id_uc = ANY(CAST(:ucs AS text[])) AND status IN ('ABERTA', 'EM_CAMPO'))"""),
+                {'ids': ids, 'ucs': ucs},
+            )
+        )
+        .mappings()
+        .all()
+    )
+
+
+async def criar_importacao(db, id_, arquivo, autor, validas, erros, avisos):
+    await db.execute(
+        text("""INSERT INTO operations.importacoes (id, arquivo, autor, validas, erros, avisos)
+        VALUES (:id, :arquivo, :autor, CAST(:validas AS jsonb), CAST(:erros AS jsonb),
+                CAST(:avisos AS jsonb))"""),
+        {
+            'id': id_,
+            'arquivo': arquivo,
+            'autor': autor,
+            'validas': json.dumps(validas, default=str),
+            'erros': json.dumps(erros),
+            'avisos': json.dumps(avisos),
+        },
+    )
+
+
+async def importacao_bloqueada(db, id_):
+    return (
+        (
+            await db.execute(
+                text('SELECT * FROM operations.importacoes WHERE id=:id FOR UPDATE'), {'id': id_}
+            )
+        )
+        .mappings()
+        .first()
+    )
+
+
+async def fechar_importacao(db, id_, atualizadas, rejeitadas):
+    return (
+        (
+            await db.execute(
+                text("""UPDATE operations.importacoes
+                SET status = 'CONFIRMADA', atualizadas = :atualizadas,
+                    rejeitadas = CAST(:rejeitadas AS jsonb), confirmado_em = now()
+                WHERE id = :id RETURNING *"""),
+                {'id': id_, 'atualizadas': atualizadas, 'rejeitadas': json.dumps(rejeitadas)},
+            )
+        )
+        .mappings()
+        .one()
+    )
+
+
+async def ultima_importacao(db):
+    return (
+        (
+            await db.execute(
+                text("""SELECT * FROM operations.importacoes WHERE status = 'CONFIRMADA'
+                ORDER BY confirmado_em DESC LIMIT 1""")
+            )
+        )
+        .mappings()
+        .first()
+    )

@@ -15,6 +15,7 @@ import {
   formatarNumero,
 } from '@/lib/formatacao'
 import { mensagemErro, paginaValida, somarEnergia, TAMANHO_PAGINA } from './ordens'
+import { exportarFila, FALHA_AO_EXPORTAR } from './planilhas'
 
 type Item = components['schemas']['ItemFila']
 type Pagina = components['schemas']['PaginaFila']
@@ -55,6 +56,11 @@ export function AbaFila(props: Props) {
     setSelecao({ chave, ids: new Set() })
     setErro(null)
   }
+  const exportacao = useMutation({
+    mutationFn: () => exportarFila(props.recortes),
+    onMutate: () => setErro(null),
+    onError: () => setErro(FALHA_AO_EXPORTAR),
+  })
   const cabecalho = useRef<HTMLInputElement>(null)
   const itens = props.dados?.items ?? []
   useEffect(() => {
@@ -263,10 +269,10 @@ export function AbaFila(props: Props) {
           <>
             <button
               className="ve-btn"
-              disabled
-              title="Disponível na próxima leva"
+              disabled={exportacao.isPending}
+              onClick={() => exportacao.mutate()}
             >
-              Exportar Excel
+              {exportacao.isPending ? 'Exportando…' : 'Exportar Excel'}
             </button>
             <button
               className="ve-btn ve-btn-primary"

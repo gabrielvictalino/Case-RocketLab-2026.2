@@ -202,7 +202,7 @@ Decisões de backend da Visão 360:
 
 ### 4.4 Perdas (F4, F5, D1)
 
-Na fila de inspeção, a seleção é restrita à página; após gerar ordens em lote, a pessoa permanece na fila e pode abrir as ordens abertas. A exportação Excel e a planilha de campo permanecem para a leva 2 (D1).
+Na fila de inspeção, a seleção é restrita à página; após gerar ordens em lote, a pessoa permanece na fila e pode abrir as ordens abertas. A exportação Excel leva a fila inteira com os filtros aplicados, não só a página (D1).
 
 Duas abas.
 
@@ -293,6 +293,20 @@ A view `inspecoes` une `analytics.inspecoes_historicas` e
      correção.
 - A linha é ligada à ordem pelo `id_ordem`; se ele estiver vazio, pela ordem
   ativa da UC.
+- A prévia fica em `operations.importacoes`. A confirmação vale uma vez só e
+  repete a checagem de estado de cada ordem: a que mudou depois da prévia é
+  devolvida como rejeitada e as outras seguem.
+- O inspetor gravado é sempre o despachado na ordem. Uma linha com outro
+  inspetor é erro de linha, porque o portal só troca o inspetor por um novo
+  despacho.
+- Uma mesma ordem em mais de uma linha preenchida invalida todas elas, mesmo
+  que uma das cópias já tenha outro erro, como o `id_inspecao` repetido na
+  Silver.
+- A linha exportada e não preenchida (sem resultado, data, tipo e kWh) é
+  ignorada: só aparece na contagem da prévia.
+- Em célula de texto, um kWh como `1.500` é recusado por ser ambíguo. A base
+  histórica não tem separador de milhar, mas uma planilha preenchida à mão pode
+  ter.
 
 ## 6. Backend
 
