@@ -1,5 +1,13 @@
-import { describe, expect, it } from 'vitest'
-import { BOM, cabecalhoCsv, decimalCsv, fixoCsv, montarCsv, nomeCsv } from './exportacao'
+import { describe, expect, it, vi } from 'vitest'
+import {
+  baixarArquivo,
+  BOM,
+  cabecalhoCsv,
+  decimalCsv,
+  fixoCsv,
+  montarCsv,
+  nomeCsv,
+} from './exportacao'
 
 describe('montarCsv', () => {
   it('usa ponto e vírgula, BOM e CRLF', () => {
@@ -41,6 +49,17 @@ describe('auxiliares', () => {
       ['Recortes', 'todos'],
       ['Versão da carga', 'b1'],
     ])
+  })
+
+  it('só revoga a URL do arquivo depois do clique', () => {
+    vi.useFakeTimers()
+    URL.createObjectURL = vi.fn(() => 'blob:arquivo')
+    URL.revokeObjectURL = vi.fn()
+    baixarArquivo(new Blob(['x']), 'a.csv')
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled()
+    vi.runAllTimers()
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:arquivo')
+    vi.useRealTimers()
   })
 
   it('tira os pontos do período no nome do arquivo', () => {

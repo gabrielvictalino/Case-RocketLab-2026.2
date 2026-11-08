@@ -128,6 +128,8 @@ export function PlanilhaCampo({ podeEscrever }: { podeEscrever: boolean }) {
               <strong>{previa.arquivo}</strong>:{' '}
               {contagem(previa.validas.length, 'linha válida', 'linhas válidas')} ·{' '}
               {contagem(previa.erros.length, 'linha com erro', 'linhas com erro')}
+              {previa.ignoradas > 0 &&
+                ` · ${contagem(previa.ignoradas, 'linha sem resultado, ignorada', 'linhas sem resultado, ignoradas')}`}
             </p>
             {previa.erros.length > 0 && (
               <ListaLinhas

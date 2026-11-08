@@ -25,6 +25,7 @@ const previa = {
   validas: [{ linha: 2 }, { linha: 3 }],
   erros: [{ linha: 4, motivo: 'Ordem já concluída' }],
   avisos: [{ linha: 3, motivo: 'Tipo fora dos 5 tipos da base: BYPASS' }],
+  ignoradas: 0,
 }
 const confirmada = {
   id: 'imp-1',
@@ -92,6 +93,15 @@ it('mostra a prévia com contagens, erros e avisos antes de confirmar', async ()
   expect(screen.getByText('Linha 4: Ordem já concluída')).toBeVisible()
   expect(screen.getByText('Linha 3: Tipo fora dos 5 tipos da base: BYPASS')).toBeVisible()
   expect(chamadas.filter((chamada) => chamada.endsWith('/confirmar'))).toEqual([])
+})
+
+it('conta à parte as linhas não preenchidas', async () => {
+  respostaEnvio = { status: 201, corpo: { ...previa, ignoradas: 190 } }
+  montar()
+  escolherArquivo()
+  expect(await screen.findByRole('dialog')).toHaveTextContent(
+    'junho.xlsx: 2 linhas válidas · 1 linha com erro · 190 linhas sem resultado, ignoradas',
+  )
 })
 
 it('confirma, atualiza as telas e mostra o resumo', async () => {

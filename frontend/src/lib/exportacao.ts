@@ -56,7 +56,8 @@ export function baixarArquivo(conteudo: Blob, nome: string): void {
   document.body.append(link)
   link.click()
   link.remove()
-  URL.revokeObjectURL(url)
+  // Revogar no mesmo tick do clique pode cancelar o download em alguns navegadores.
+  setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
 export function baixarCsv(nome: string, linhas: LinhaCsv[]): void {

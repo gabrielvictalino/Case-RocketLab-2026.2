@@ -1334,6 +1334,8 @@ export interface components {
             erros: components["schemas"]["ObservacaoLinha"][];
             /** Avisos */
             avisos: components["schemas"]["ObservacaoLinha"][];
+            /** Ignoradas */
+            ignoradas: number;
         };
         /** Ranking */
         Ranking: {
