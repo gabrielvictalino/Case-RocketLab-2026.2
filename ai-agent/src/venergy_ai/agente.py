@@ -12,7 +12,7 @@ from typing import Literal
 
 import pydantic_ai
 from pydantic import BaseModel, Field, model_validator
-from pydantic_ai import Agent, ModelAPIError, ModelSettings, UnexpectedModelBehavior
+from pydantic_ai import Agent, AgentRunResult, ModelSettings, UnexpectedModelBehavior
 from pydantic_ai.models import Model
 
 from venergy_ai.executor import ConsultaFalhou, ExecutorSQL
@@ -31,9 +31,9 @@ from venergy_ai.interface import (
     Consulta,
     Contexto,
     PeriodoUsado,
-    ProvedorIndisponivel,
     RespostaAgente,
 )
+from venergy_ai.modelo import FALHAS_DO_PROVEDOR, modelo_que_respondeu, provedor_indisponivel
 from venergy_ai.numeros import numeros_citados, numeros_da_pergunta, numeros_sem_lastro
 from venergy_ai.semantica import VISOES_POR_NOME, Periodo, periodo_padrao
 
@@ -103,14 +103,14 @@ class AgenteTextoSQL:
         andamento.modelo = self.modelo.model_name
         try:
             campos = await self._responder(pergunta, contexto, andamento)
-        except ModelAPIError as erro:
-            raise ProvedorIndisponivel(str(erro)) from erro
+        except FALHAS_DO_PROVEDOR as erro:
+            raise provedor_indisponivel(erro) from erro
         except UnexpectedModelBehavior:
             campos = _nao_sei('O modelo não devolveu a resposta no formato esperado.')
         return RespostaAgente(
             **campos,
             consultas=andamento.consultas,
-            modelo=self.modelo.model_name,
+            modelo=andamento.modelo,
             tokens_entrada=andamento.tokens_entrada,
             tokens_saida=andamento.tokens_saida,
             latencia_ms=round((time.monotonic() - inicio) * 1000),
@@ -123,6 +123,7 @@ class AgenteTextoSQL:
         execucao = await self.planejador.run(
             pergunta_delimitada(pergunta), instructions=instrucoes, usage=uso
         )
+        self._anotar_modelo(andamento, execucao)
         # Sem consulta, o "não sei" só pode citar os anos (da pergunta, do período e da base)
         # e os números que a pergunta usa como limiar, seleção ou período, no mesmo papel.
         anos = [*_anos_citados(pergunta), *_anos(padrao, padrao, contexto)]
@@ -150,6 +151,7 @@ class AgenteTextoSQL:
                 instructions=instrucoes,
                 usage=uso,
             )
+            self._anotar_modelo(andamento, execucao)
         periodo = _periodo(plano, padrao, views)
         # A métrica e os filtros também são texto do modelo e vão para a tela: um número
         # deles precisa estar no SQL que rodou, ou ser um ano, um número da pergunta, os
@@ -180,6 +182,7 @@ class AgenteTextoSQL:
             return _nao_sei(
                 'O modelo não redigiu a resposta no formato esperado.', alternativa, **usados
             )
+        self._anotar_modelo(andamento, redacao)
         texto = redacao.output.strip()
         if not texto:
             return _nao_sei('O modelo não redigiu a resposta.', alternativa, **usados)
@@ -191,6 +194,15 @@ class AgenteTextoSQL:
                 **usados,
             )
         return dict(tipo='resposta', texto=texto, **usados)
+
+    def _anotar_modelo(self, andamento: Andamento, execucao: AgentRunResult) -> None:
+        """Troca o nome da configuração pelo do modelo que respondeu. Com reserva, o plano e a
+        redação podem vir de modelos diferentes: a auditoria guarda os dois, em ordem."""
+        nome = modelo_que_respondeu(execucao, self.modelo)
+        if andamento.modelo in (None, self.modelo.model_name):
+            andamento.modelo = nome
+        elif nome not in andamento.modelo.split(', '):
+            andamento.modelo = f'{andamento.modelo}, {nome}'
 
     async def _executar(self, sql: str, andamento: Andamento) -> tuple[Consulta, frozenset[str]]:
         """Roda o SQL e devolve a consulta e as views que ela lê.

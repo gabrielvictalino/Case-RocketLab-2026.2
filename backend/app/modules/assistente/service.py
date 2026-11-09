@@ -15,7 +15,7 @@ from venergy_ai.interface import (
     RespostaAgente,
     Troca,
 )
-from venergy_ai.modelo import criar_modelo
+from venergy_ai.modelo import com_reserva, criar_modelo
 from venergy_ai.semantica import Periodo
 
 from app.core import limites
@@ -36,14 +36,21 @@ from app.modules.meta import repository as meta
 RESERVA_TOKENS = 20_000
 
 
-def modelo_configurado(settings) -> Model | None:
-    """O modelo do provedor escolhido. Sem a chave dele, não há modelo e a IA responde 503."""
-    chave = {'google': settings.gemini_api_key, 'openrouter': settings.openrouter_api_key}[
-        settings.ai_provedor
-    ]
+def _modelo(settings, provedor: str, nome: str) -> Model | None:
+    chave = {'google': settings.gemini_api_key, 'openrouter': settings.openrouter_api_key}[provedor]
     if chave is None or not chave.get_secret_value():
         return None
-    return criar_modelo(settings.ai_provedor, settings.ai_modelo, chave.get_secret_value())
+    return criar_modelo(provedor, nome, chave.get_secret_value())
+
+
+def modelo_configurado(settings) -> Model | None:
+    """O modelo principal, com a reserva atrás dele quando ela está configurada. Um modelo
+    sem a chave do provedor fica de fora; sem nenhum, não há modelo e a IA responde 503."""
+    modelos = [_modelo(settings, settings.ai_provedor, settings.ai_modelo)]
+    if settings.ai_provedor_reserva is not None:
+        modelos.append(_modelo(settings, settings.ai_provedor_reserva, settings.ai_modelo_reserva))
+    modelos = [modelo for modelo in modelos if modelo is not None]
+    return com_reserva(*modelos) if modelos else None
 
 
 def criar_assistente(settings, ai_engine) -> Assistente | None:

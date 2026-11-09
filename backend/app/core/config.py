@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     # Agente: sem a chave do provedor escolhido, o assistente responde 503.
     ai_provedor: Literal['google', 'openrouter'] = 'google'
     ai_modelo: str = 'gemini-3.1-flash-lite'
+    # Modelo de reserva, opcional: recebe a chamada quando a API do principal falha.
+    ai_provedor_reserva: Literal['google', 'openrouter'] | None = None
+    ai_modelo_reserva: str | None = None
     gemini_api_key: SecretStr | None = None
     openrouter_api_key: SecretStr | None = None
     assistente_timeout_s: float = Field(default=30, gt=0, le=120)
@@ -27,6 +30,18 @@ class Settings(BaseSettings):
     assistente_cota_tokens_dia: int = Field(default=500_000, ge=1)
     # Insights: só os que vão ao modelo contam; um insight do cache não gasta o limite.
     insights_por_minuto: int = Field(default=30, ge=1)
+
+    @field_validator('ai_provedor_reserva', 'ai_modelo_reserva', mode='before')
+    @classmethod
+    def vazio_e_nenhum(cls, valor):
+        # O Compose repassa a variável ausente como texto vazio.
+        return valor or None
+
+    @model_validator(mode='after')
+    def validate_reserva(self):
+        if (self.ai_provedor_reserva is None) != (self.ai_modelo_reserva is None):
+            raise ValueError('Defina AI_PROVEDOR_RESERVA e AI_MODELO_RESERVA juntos')
+        return self
 
     @model_validator(mode='after')
     def validate_secret(self):

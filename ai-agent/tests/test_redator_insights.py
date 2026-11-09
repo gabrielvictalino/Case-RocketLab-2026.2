@@ -3,6 +3,7 @@ from decimal import Decimal
 
 import pytest
 from pydantic_ai import ModelHTTPError, ModelResponse, RunUsage, ToolCallPart
+from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.models.function import FunctionModel
 
 from venergy_ai import insights
@@ -48,7 +49,7 @@ DEC = 'O DEC do período foi de 9,87 h por UC.'
 VALIDAS = [('receita', RECEITA), ('inadimplencia', INADIMPLENCIA), ('dec', DEC)]
 
 
-def modelo_simulado(*respostas):
+def modelo_simulado(*respostas, nome='simulado'):
     """Cada resposta é a lista de observações de uma chamada, ou uma exceção."""
     chamadas = []
 
@@ -62,7 +63,7 @@ def modelo_simulado(*respostas):
             parts=[ToolCallPart(info.output_tools[0].name, {'observacoes': observacoes})]
         )
 
-    return FunctionModel(responder, model_name='simulado'), chamadas
+    return FunctionModel(responder, model_name=nome), chamadas
 
 
 async def redigir(*respostas, pedido=PEDIDO, uso=None):
@@ -445,3 +446,24 @@ def test_local_com_municipio_entre_parenteses_e_reconhecido():
     apelidos = insights._apelidos(fatos)
     chaves = insights._metrica_antes(texto, texto.index('100'), apelidos, set())
     assert chaves == {'local:Boa Viagem (Recife)'}
+
+
+async def test_reserva_redige_quando_o_principal_cai():
+    principal, _ = modelo_simulado(ModelHTTPError(429, 'principal', 'cota'), nome='principal')
+    reserva, _ = modelo_simulado(VALIDAS, nome='reserva')
+    insight = await RedatorDeInsights(FallbackModel(principal, reserva)).redigir(PEDIDO)
+    assert len(insight.observacoes) == 3 and insight.modelo == 'reserva'
+
+
+async def test_principal_e_reserva_fora_do_ar():
+    principal, _ = modelo_simulado(ModelHTTPError(503, 'principal', 'fora'), nome='principal')
+    reserva, _ = modelo_simulado(ModelHTTPError(401, 'reserva', 'chave'), nome='reserva')
+    with pytest.raises(ProvedorIndisponivel, match='principal.*reserva'):
+        await RedatorDeInsights(FallbackModel(principal, reserva)).redigir(PEDIDO)
+
+
+def test_versao_muda_com_a_reserva():
+    principal, _ = modelo_simulado(nome='principal')
+    reserva, _ = modelo_simulado(nome='reserva')
+    sozinho = RedatorDeInsights(principal).versao
+    assert RedatorDeInsights(FallbackModel(principal, reserva)).versao != sozinho

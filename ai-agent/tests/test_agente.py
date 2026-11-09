@@ -4,6 +4,7 @@ from datetime import date
 import pytest
 from pydantic_ai import ModelHTTPError, ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.exceptions import ModelConnectionError, ModelTimeoutError
+from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.models.function import FunctionModel
 from sqlalchemy.exc import InterfaceError
 
@@ -37,7 +38,7 @@ RESULTADO = ResultadoSQL(['receita_reais'], [[1234567.89]], 12)
 TEXTO = 'A receita faturada de Recife de jul/2025 a jun/2026 foi de R$ 1.234.567,89.'
 
 
-def modelo_simulado(*respostas):
+def modelo_simulado(*respostas, nome='simulado'):
     """Devolve as respostas em ordem: dict vira plano, str vira texto, exceção é levantada."""
     chamadas = []
 
@@ -50,7 +51,7 @@ def modelo_simulado(*respostas):
             return ModelResponse(parts=[ToolCallPart(info.output_tools[0].name, resposta)])
         return ModelResponse(parts=[TextPart(resposta)])
 
-    return FunctionModel(responder, model_name='simulado'), chamadas
+    return FunctionModel(responder, model_name=nome), chamadas
 
 
 class ExecutorFalso:
@@ -718,3 +719,42 @@ async def test_sem_conversa_nao_ha_bloco_de_conversa():
     await AgenteTextoSQL(modelo, ExecutorFalso(RESULTADO)).responder('Receita?', CONTEXTO)
     assert '<conversa>' not in chamadas[0][1].instructions.split('## Segurança')[1].split('\n')[-1]
     assert '## Conversa até aqui' not in chamadas[0][1].instructions
+
+
+FORA_DO_AR = ModelHTTPError(503, 'principal', 'indisponível')
+
+
+async def test_reserva_responde_quando_o_principal_cai():
+    principal, _ = modelo_simulado(FORA_DO_AR, FORA_DO_AR, nome='principal')
+    reserva, chamadas = modelo_simulado(PLANO, TEXTO, nome='reserva')
+    resposta = await AgenteTextoSQL(
+        FallbackModel(principal, reserva), ExecutorFalso(RESULTADO)
+    ).responder('Qual a receita de Recife?', CONTEXTO)
+    assert resposta.tipo == 'resposta' and resposta.texto == TEXTO
+    assert len(chamadas) == 2
+    # A auditoria fica com o modelo que respondeu, não com o nome composto da configuração.
+    assert resposta.modelo == 'reserva'
+
+
+async def test_plano_e_redacao_de_modelos_diferentes_ficam_os_dois():
+    principal, _ = modelo_simulado(PLANO, FORA_DO_AR, nome='principal')
+    reserva, _ = modelo_simulado(TEXTO, nome='reserva')
+    andamento = Andamento()
+    resposta = await AgenteTextoSQL(
+        FallbackModel(principal, reserva), ExecutorFalso(RESULTADO)
+    ).responder('Qual a receita de Recife?', CONTEXTO, andamento)
+    assert resposta.tipo == 'resposta'
+    assert resposta.modelo == andamento.modelo == 'principal, reserva'
+
+
+async def test_principal_e_reserva_fora_do_ar():
+    principal, _ = modelo_simulado(FORA_DO_AR, nome='principal')
+    reserva, _ = modelo_simulado(ModelTimeoutError('reserva', 'ReadTimeout'), nome='reserva')
+    andamento = Andamento()
+    with pytest.raises(ProvedorIndisponivel) as erro:
+        await AgenteTextoSQL(FallbackModel(principal, reserva), ExecutorFalso()).responder(
+            'Qual a receita?', CONTEXTO, andamento
+        )
+    # A mensagem traz a falha de cada modelo; sem resposta, fica o nome da configuração.
+    assert 'principal' in str(erro.value) and 'reserva' in str(erro.value)
+    assert andamento.modelo == 'fallback:principal,reserva'

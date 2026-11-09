@@ -17,7 +17,7 @@ from typing import NamedTuple
 
 import pydantic_ai
 from pydantic import BaseModel, Field
-from pydantic_ai import Agent, ModelAPIError, ModelSettings, RunUsage, UnexpectedModelBehavior
+from pydantic_ai import Agent, ModelSettings, RunUsage, UnexpectedModelBehavior
 from pydantic_ai.models import Model
 
 from venergy_ai.instrucoes import INSTRUCOES_INSIGHT, pedido_de_insight
@@ -28,9 +28,9 @@ from venergy_ai.interface import (
     InsightIndisponivel,
     Observacao,
     PedidoInsight,
-    ProvedorIndisponivel,
     ValorCitado,
 )
+from venergy_ai.modelo import FALHAS_DO_PROVEDOR, modelo_que_respondeu, provedor_indisponivel
 from venergy_ai.numeros import Citacao, citacoes
 
 pydantic_ai.BANNER_ENABLED = False
@@ -85,8 +85,8 @@ class RedatorDeInsights:
         uso = RunUsage() if uso is None else uso
         try:
             execucao = await self.agente.run(pedido_de_insight(pedido), usage=uso)
-        except ModelAPIError as erro:
-            raise ProvedorIndisponivel(str(erro)) from erro
+        except FALHAS_DO_PROVEDOR as erro:
+            raise provedor_indisponivel(erro) from erro
         except UnexpectedModelBehavior as erro:
             raise InsightIndisponivel(
                 'O modelo não devolveu as observações no formato esperado.'
@@ -101,7 +101,7 @@ class RedatorDeInsights:
         return Insight(
             observacoes=observacoes[:OBSERVACOES],
             descartadas=descartadas,
-            modelo=self.modelo.model_name,
+            modelo=modelo_que_respondeu(execucao, self.modelo),
             tokens_entrada=uso.input_tokens,
             tokens_saida=uso.output_tokens,
             latencia_ms=round((time.monotonic() - inicio) * 1000),
