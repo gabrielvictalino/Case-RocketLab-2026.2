@@ -12,7 +12,7 @@ from typing import Literal
 
 import pydantic_ai
 from pydantic import BaseModel, Field, model_validator
-from pydantic_ai import Agent, AgentRunResult, ModelSettings, UnexpectedModelBehavior
+from pydantic_ai import Agent, ModelSettings, UnexpectedModelBehavior
 from pydantic_ai.models import Model
 
 from venergy_ai.executor import ConsultaFalhou, ExecutorSQL
@@ -33,7 +33,13 @@ from venergy_ai.interface import (
     PeriodoUsado,
     RespostaAgente,
 )
-from venergy_ai.modelo import FALHAS_DO_PROVEDOR, modelo_que_respondeu, provedor_indisponivel
+from venergy_ai.modelo import (
+    FALHAS_DO_PROVEDOR,
+    Rodada,
+    modelo_que_respondeu,
+    provedor_indisponivel,
+    rodada,
+)
 from venergy_ai.numeros import numeros_citados, numeros_da_pergunta, numeros_sem_lastro
 from venergy_ai.semantica import VISOES_POR_NOME, Periodo, periodo_padrao
 
@@ -83,11 +89,16 @@ class Plano(BaseModel):
 
 
 class AgenteTextoSQL:
-    """Implementa `Assistente`. Só recebe o modelo e o executor da role `ai_read`."""
+    """Implementa `Assistente`. Só recebe o modelo e o executor da role `ai_read`.
 
-    def __init__(self, modelo: Model, executor: ExecutorSQL):
+    `teto_s` é o teto de tempo da pergunta: com reserva, ele é dividido entre os modelos
+    que faltam tentar, para que um principal travado não gaste o tempo da reserva. O teto
+    em si é aplicado por quem chama."""
+
+    def __init__(self, modelo: Model, executor: ExecutorSQL, teto_s: float | None = None):
         self.modelo = modelo
         self.executor = executor
+        self.teto_s = teto_s
         self.planejador = Agent(modelo, output_type=Plano, model_settings=CONFIGURACAO, retries=1)
         self.redator = Agent(
             modelo, instructions=INSTRUCOES_REDACAO, model_settings=CONFIGURACAO, retries=1
@@ -102,7 +113,8 @@ class AgenteTextoSQL:
         andamento = Andamento() if andamento is None else andamento
         andamento.modelo = self.modelo.model_name
         try:
-            campos = await self._responder(pergunta, contexto, andamento)
+            with rodada(self.teto_s) as atual:
+                campos = await self._responder(pergunta, contexto, andamento, atual)
         except FALHAS_DO_PROVEDOR as erro:
             raise provedor_indisponivel(erro) from erro
         except UnexpectedModelBehavior:
@@ -116,14 +128,16 @@ class AgenteTextoSQL:
             latencia_ms=round((time.monotonic() - inicio) * 1000),
         )
 
-    async def _responder(self, pergunta: str, contexto: Contexto, andamento: Andamento) -> dict:
+    async def _responder(
+        self, pergunta: str, contexto: Contexto, andamento: Andamento, atual: Rodada
+    ) -> dict:
         uso = andamento.uso
         padrao = _periodo_padrao(contexto)
         instrucoes = instrucoes_do_plano(contexto, padrao)
         execucao = await self.planejador.run(
             pergunta_delimitada(pergunta), instructions=instrucoes, usage=uso
         )
-        self._anotar_modelo(andamento, execucao)
+        self._anotar_modelo(andamento, atual)
         # Sem consulta, o "não sei" só pode citar os anos (da pergunta, do período e da base)
         # e os números que a pergunta usa como limiar, seleção ou período, no mesmo papel.
         anos = [*_anos_citados(pergunta), *_anos(padrao, padrao, contexto)]
@@ -151,7 +165,7 @@ class AgenteTextoSQL:
                 instructions=instrucoes,
                 usage=uso,
             )
-            self._anotar_modelo(andamento, execucao)
+            self._anotar_modelo(andamento, atual)
         periodo = _periodo(plano, padrao, views)
         # A métrica e os filtros também são texto do modelo e vão para a tela: um número
         # deles precisa estar no SQL que rodou, ou ser um ano, um número da pergunta, os
@@ -182,7 +196,7 @@ class AgenteTextoSQL:
             return _nao_sei(
                 'O modelo não redigiu a resposta no formato esperado.', alternativa, **usados
             )
-        self._anotar_modelo(andamento, redacao)
+        self._anotar_modelo(andamento, atual)
         texto = redacao.output.strip()
         if not texto:
             return _nao_sei('O modelo não redigiu a resposta.', alternativa, **usados)
@@ -195,14 +209,10 @@ class AgenteTextoSQL:
             )
         return dict(tipo='resposta', texto=texto, **usados)
 
-    def _anotar_modelo(self, andamento: Andamento, execucao: AgentRunResult) -> None:
-        """Troca o nome da configuração pelo do modelo que respondeu. Com reserva, o plano e a
-        redação podem vir de modelos diferentes: a auditoria guarda os dois, em ordem."""
-        nome = modelo_que_respondeu(execucao, self.modelo)
-        if andamento.modelo in (None, self.modelo.model_name):
-            andamento.modelo = nome
-        elif nome not in andamento.modelo.split(', '):
-            andamento.modelo = f'{andamento.modelo}, {nome}'
+    def _anotar_modelo(self, andamento: Andamento, atual: Rodada) -> None:
+        """Troca o nome da configuração pelo dos modelos que responderam. Com reserva, o plano
+        e a redação podem vir de modelos diferentes: a auditoria guarda os dois, em ordem."""
+        andamento.modelo = modelo_que_respondeu(atual, self.modelo)
 
     async def _executar(self, sql: str, andamento: Andamento) -> tuple[Consulta, frozenset[str]]:
         """Roda o SQL e devolve a consulta e as views que ela lê.

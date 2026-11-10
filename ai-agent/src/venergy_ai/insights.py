@@ -30,7 +30,12 @@ from venergy_ai.interface import (
     PedidoInsight,
     ValorCitado,
 )
-from venergy_ai.modelo import FALHAS_DO_PROVEDOR, modelo_que_respondeu, provedor_indisponivel
+from venergy_ai.modelo import (
+    FALHAS_DO_PROVEDOR,
+    modelo_que_respondeu,
+    provedor_indisponivel,
+    rodada,
+)
 from venergy_ai.numeros import Citacao, citacoes
 
 pydantic_ai.BANNER_ENABLED = False
@@ -84,7 +89,8 @@ class RedatorDeInsights:
         inicio = time.monotonic()
         uso = RunUsage() if uso is None else uso
         try:
-            execucao = await self.agente.run(pedido_de_insight(pedido), usage=uso)
+            with rodada() as atual:
+                execucao = await self.agente.run(pedido_de_insight(pedido), usage=uso)
         except FALHAS_DO_PROVEDOR as erro:
             raise provedor_indisponivel(erro) from erro
         except UnexpectedModelBehavior as erro:
@@ -101,7 +107,7 @@ class RedatorDeInsights:
         return Insight(
             observacoes=observacoes[:OBSERVACOES],
             descartadas=descartadas,
-            modelo=modelo_que_respondeu(execucao, self.modelo),
+            modelo=modelo_que_respondeu(atual, self.modelo),
             tokens_entrada=uso.input_tokens,
             tokens_saida=uso.output_tokens,
             latencia_ms=round((time.monotonic() - inicio) * 1000),

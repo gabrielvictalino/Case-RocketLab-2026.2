@@ -3,10 +3,13 @@
 FastAPI modular, Python 3.12, SQLAlchemy assíncrono e PostgreSQL 17. O workspace
 uv compartilha o lockfile entre `backend`, `importador` e `ai-agent`. O agente
 (`venergy_ai`) roda dentro do backend e chama o provedor configurado em
-`AI_PROVEDOR` e `AI_MODELO`. Com `AI_PROVEDOR_RESERVA` e `AI_MODELO_RESERVA`, uma
-falha de API do principal (HTTP, cota, timeout ou chave recusada) passa a chamada para
-o modelo de reserva, e a auditoria registra o modelo que respondeu. Sem a chave de
-nenhum dos dois, o assistente e os insights respondem 503.
+`AI_PROVEDOR` e `AI_MODELO`. Com `AI_MODELOS_RESERVA` (`provedor:modelo,...`, em
+ordem), uma falha de API do principal (HTTP, cota, timeout ou chave recusada) passa a
+chamada para a próxima reserva, e a auditoria registra os modelos que responderam.
+Depois que uma reserva responde, o resto da pergunta segue com ela, e cada modelo que
+falta tentar recebe uma parte igual do tempo que sobra até `ASSISTENTE_TIMEOUT_S`. Um
+modelo sem a chave do provedor fica de fora, com um aviso no log; sem nenhuma chave, o
+assistente e os insights respondem 503.
 
 Esta entrega inclui **amostras sintéticas** e contrato
 `0.2.0-provisional`, não aprovado pelo time de dados. O importador também aceita

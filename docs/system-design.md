@@ -50,9 +50,10 @@ estão em [adr/](adr/).
 
 - Stack do case: React + TypeScript (Vite), FastAPI, PostgreSQL, agente em
   Python integrado ao backend, Gemini 3.1 Flash-Lite (ou outro via OpenRouter).
-  Um modelo de reserva opcional (`AI_PROVEDOR_RESERVA`, `AI_MODELO_RESERVA`) recebe a
-  chamada quando a API do principal falha; a auditoria e o insight registram o modelo
-  que respondeu.
+  Reservas opcionais, em ordem (`AI_MODELOS_RESERVA`), recebem a chamada quando a API
+  do modelo anterior falha; a auditoria e o insight registram os modelos que
+  responderam. Numa pergunta, a cadeia segue pela reserva que respondeu, e o teto
+  `ASSISTENTE_TIMEOUT_S` é dividido entre os modelos que faltam tentar.
 - Runtime Python fixado em **3.12** (`>=3.12,<3.13`) no workspace uv, imagem e CI.
   FastAPI exige pelo menos **0.121.0** pelo uso de `Depends(..., scope='function')`.
   O lockfile registra as versões resolvidas. A proposta anterior de Python 3.14

@@ -3,7 +3,6 @@ from decimal import Decimal
 
 import pytest
 from pydantic_ai import ModelHTTPError, ModelResponse, RunUsage, ToolCallPart
-from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.models.function import FunctionModel
 
 from venergy_ai import insights
@@ -14,6 +13,7 @@ from venergy_ai.interface import (
     PedidoInsight,
     ProvedorIndisponivel,
 )
+from venergy_ai.modelo import com_reserva
 from venergy_ai.numeros import citacoes
 from venergy_ai.semantica import Periodo
 
@@ -451,7 +451,7 @@ def test_local_com_municipio_entre_parenteses_e_reconhecido():
 async def test_reserva_redige_quando_o_principal_cai():
     principal, _ = modelo_simulado(ModelHTTPError(429, 'principal', 'cota'), nome='principal')
     reserva, _ = modelo_simulado(VALIDAS, nome='reserva')
-    insight = await RedatorDeInsights(FallbackModel(principal, reserva)).redigir(PEDIDO)
+    insight = await RedatorDeInsights(com_reserva(principal, reserva)).redigir(PEDIDO)
     assert len(insight.observacoes) == 3 and insight.modelo == 'reserva'
 
 
@@ -459,11 +459,11 @@ async def test_principal_e_reserva_fora_do_ar():
     principal, _ = modelo_simulado(ModelHTTPError(503, 'principal', 'fora'), nome='principal')
     reserva, _ = modelo_simulado(ModelHTTPError(401, 'reserva', 'chave'), nome='reserva')
     with pytest.raises(ProvedorIndisponivel, match='principal.*reserva'):
-        await RedatorDeInsights(FallbackModel(principal, reserva)).redigir(PEDIDO)
+        await RedatorDeInsights(com_reserva(principal, reserva)).redigir(PEDIDO)
 
 
 def test_versao_muda_com_a_reserva():
     principal, _ = modelo_simulado(nome='principal')
     reserva, _ = modelo_simulado(nome='reserva')
     sozinho = RedatorDeInsights(principal).versao
-    assert RedatorDeInsights(FallbackModel(principal, reserva)).versao != sozinho
+    assert RedatorDeInsights(com_reserva(principal, reserva)).versao != sozinho

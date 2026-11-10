@@ -1,15 +1,17 @@
-"""Montagem do modelo do agente pela configuração, com e sem o modelo de reserva."""
+"""Montagem do modelo do agente pela configuração, com e sem as reservas."""
+
+import logging
 
 import pytest
 from pydantic import ValidationError
-from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.models.google import GoogleModel
 from pydantic_ai.models.openrouter import OpenRouterModel
+from venergy_ai.modelo import ModeloComReserva
 
 from app.core.config import Settings
 from app.modules.assistente.service import modelo_configurado
 
-RESERVA = dict(ai_provedor_reserva='openrouter', ai_modelo_reserva='google/gemini-3.1-flash-lite')
+RESERVA = dict(ai_modelos_reserva='openrouter:google/gemini-3.1-flash-lite')
 
 
 def configuracao(**campos):
@@ -17,8 +19,7 @@ def configuracao(**campos):
     padrao = dict(
         ai_provedor='google',
         ai_modelo='gemini-3.1-flash-lite',
-        ai_provedor_reserva=None,
-        ai_modelo_reserva=None,
+        ai_modelos_reserva='',
         gemini_api_key=None,
         openrouter_api_key=None,
     )
@@ -36,10 +37,29 @@ def test_com_reserva_e_as_duas_chaves_o_principal_vem_primeiro():
         gemini_api_key='chave-google', openrouter_api_key='chave-openrouter', **RESERVA
     )
     modelo = modelo_configurado(settings)
-    assert isinstance(modelo, FallbackModel)
+    assert isinstance(modelo, ModeloComReserva)
     principal, reserva = modelo.models
     assert isinstance(principal, GoogleModel) and isinstance(reserva, OpenRouterModel)
     assert reserva.model_name == 'google/gemini-3.1-flash-lite'
+
+
+def test_cadeia_com_varias_reservas_em_ordem():
+    settings = configuracao(
+        gemini_api_key='chave-google',
+        openrouter_api_key='chave-openrouter',
+        ai_modelos_reserva=(
+            ' openrouter:google/gemini-3.1-flash-lite , google:gemini-outro,'
+            'openrouter:meta/llama:free'
+        ),
+    )
+    modelo = modelo_configurado(settings)
+    assert [m.model_name for m in modelo.models] == [
+        'gemini-3.1-flash-lite',
+        'google/gemini-3.1-flash-lite',
+        'gemini-outro',
+        # Só o primeiro `:` separa o provedor do modelo.
+        'meta/llama:free',
+    ]
 
 
 @pytest.mark.parametrize(
@@ -55,20 +75,32 @@ def test_modelo_sem_chave_fica_de_fora(chaves, esperado):
     assert isinstance(modelo_configurado(configuracao(**chaves, **RESERVA)), esperado)
 
 
+def test_modelo_sem_chave_deixa_aviso_no_log(caplog):
+    with caplog.at_level(logging.WARNING, logger='venergy.assistente'):
+        modelo_configurado(configuracao(gemini_api_key='chave-google', **RESERVA))
+    assert 'openrouter:google/gemini-3.1-flash-lite' in caplog.text
+    assert 'OPENROUTER_API_KEY' in caplog.text
+
+
 def test_sem_nenhuma_chave_nao_ha_modelo():
     assert modelo_configurado(configuracao(**RESERVA)) is None
 
 
 def test_reserva_vazia_do_compose_e_nenhuma():
-    settings = configuracao(ai_provedor_reserva='', ai_modelo_reserva='')
-    assert settings.ai_provedor_reserva is None and settings.ai_modelo_reserva is None
+    assert configuracao(ai_modelos_reserva='').ai_modelos_reserva == []
 
 
 @pytest.mark.parametrize(
-    'campos',
-    [dict(ai_provedor_reserva='openrouter'), dict(ai_modelo_reserva='google/gemini')],
-    ids=['so-provedor', 'so-modelo'],
+    'reservas, erro',
+    [
+        ('openrouter', 'provedor:modelo'),
+        ('openrouter:', 'provedor:modelo'),
+        ('azure:gpt', 'google'),
+        ('google:gemini-3.1-flash-lite', 'repete'),
+        ('openrouter:x,openrouter:x', 'repete'),
+    ],
+    ids=['sem-modelo', 'modelo-vazio', 'provedor-desconhecido', 'igual-ao-principal', 'repetida'],
 )
-def test_reserva_pela_metade_e_recusada(campos):
-    with pytest.raises(ValidationError, match='juntos'):
-        configuracao(**campos)
+def test_reserva_invalida_e_recusada(reservas, erro):
+    with pytest.raises(ValidationError, match=erro):
+        configuracao(ai_modelos_reserva=reservas)

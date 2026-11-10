@@ -4,7 +4,6 @@ from datetime import date
 import pytest
 from pydantic_ai import ModelHTTPError, ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.exceptions import ModelConnectionError, ModelTimeoutError
-from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.models.function import FunctionModel
 from sqlalchemy.exc import InterfaceError
 
@@ -19,6 +18,7 @@ from venergy_ai.interface import (
     ProvedorIndisponivel,
     Troca,
 )
+from venergy_ai.modelo import com_reserva
 from venergy_ai.semantica import Periodo
 
 CONTEXTO = Contexto(competencia_mais_recente=date(2026, 6, 1), tela='Receita')
@@ -38,13 +38,20 @@ RESULTADO = ResultadoSQL(['receita_reais'], [[1234567.89]], 12)
 TEXTO = 'A receita faturada de Recife de jul/2025 a jun/2026 foi de R$ 1.234.567,89.'
 
 
+# Um modelo que não responde: a chamada espera até o prazo dela acabar.
+TRAVADO = object()
+
+
 def modelo_simulado(*respostas, nome='simulado'):
-    """Devolve as respostas em ordem: dict vira plano, str vira texto, exceção é levantada."""
+    """Devolve as respostas em ordem: dict vira plano, str vira texto, exceção é levantada
+    e `TRAVADO` espera sem responder."""
     chamadas = []
 
-    def responder(mensagens, info):
+    async def responder(mensagens, info):
         chamadas.append((mensagens, info))
         resposta = respostas[len(chamadas) - 1]
+        if resposta is TRAVADO:
+            await asyncio.sleep(60)
         if isinstance(resposta, Exception):
             raise resposta
         if isinstance(resposta, dict):
@@ -725,10 +732,10 @@ FORA_DO_AR = ModelHTTPError(503, 'principal', 'indisponível')
 
 
 async def test_reserva_responde_quando_o_principal_cai():
-    principal, _ = modelo_simulado(FORA_DO_AR, FORA_DO_AR, nome='principal')
+    principal, _ = modelo_simulado(FORA_DO_AR, nome='principal')
     reserva, chamadas = modelo_simulado(PLANO, TEXTO, nome='reserva')
     resposta = await AgenteTextoSQL(
-        FallbackModel(principal, reserva), ExecutorFalso(RESULTADO)
+        com_reserva(principal, reserva), ExecutorFalso(RESULTADO)
     ).responder('Qual a receita de Recife?', CONTEXTO)
     assert resposta.tipo == 'resposta' and resposta.texto == TEXTO
     assert len(chamadas) == 2
@@ -736,12 +743,60 @@ async def test_reserva_responde_quando_o_principal_cai():
     assert resposta.modelo == 'reserva'
 
 
+async def test_depois_da_troca_a_pergunta_segue_com_a_reserva():
+    # Sem isso, a redação voltaria ao principal, que caiu no plano.
+    principal, do_principal = modelo_simulado(FORA_DO_AR, PLANO, TEXTO, nome='principal')
+    reserva, _ = modelo_simulado(PLANO, TEXTO, nome='reserva')
+    agente = AgenteTextoSQL(com_reserva(principal, reserva), ExecutorFalso(RESULTADO, RESULTADO))
+    resposta = await agente.responder('Qual a receita de Recife?', CONTEXTO)
+    assert resposta.modelo == 'reserva' and len(do_principal) == 1
+    # A pergunta seguinte volta a começar pelo principal.
+    resposta = await agente.responder('Qual a receita de Recife?', CONTEXTO)
+    assert resposta.modelo == 'principal' and len(do_principal) == 3
+
+
+async def test_principal_travado_nao_gasta_o_tempo_da_reserva():
+    # O teto é dividido entre os modelos que faltam: o principal tem metade dele, e o
+    # plano e a redação da reserva cabem no resto.
+    principal, do_principal = modelo_simulado(TRAVADO, nome='principal')
+    reserva, da_reserva = modelo_simulado(PLANO, TEXTO, nome='reserva')
+    teto = 0.5
+    agente = AgenteTextoSQL(com_reserva(principal, reserva), ExecutorFalso(RESULTADO), teto)
+    async with asyncio.timeout(teto):
+        resposta = await agente.responder('Qual a receita de Recife?', CONTEXTO)
+    assert resposta.tipo == 'resposta' and resposta.modelo == 'reserva'
+    assert len(do_principal) == 1 and len(da_reserva) == 2
+
+
+async def test_cadeia_com_duas_reservas_sob_o_teto():
+    principal, _ = modelo_simulado(TRAVADO, nome='principal')
+    primeira, _ = modelo_simulado(TRAVADO, nome='primeira')
+    segunda, da_segunda = modelo_simulado(PLANO, TEXTO, nome='segunda')
+    teto = 0.6
+    agente = AgenteTextoSQL(
+        com_reserva(principal, primeira, segunda), ExecutorFalso(RESULTADO), teto
+    )
+    async with asyncio.timeout(teto):
+        resposta = await agente.responder('Qual a receita de Recife?', CONTEXTO)
+    assert resposta.modelo == 'segunda' and len(da_segunda) == 2
+
+
+async def test_troca_deixa_aviso_no_log(caplog):
+    principal, _ = modelo_simulado(FORA_DO_AR, nome='principal')
+    reserva, _ = modelo_simulado(PLANO, TEXTO, nome='reserva')
+    await AgenteTextoSQL(com_reserva(principal, reserva), ExecutorFalso(RESULTADO)).responder(
+        'Qual a receita de Recife?', CONTEXTO
+    )
+    [aviso] = [r for r in caplog.records if r.name == 'venergy_ai.modelo']
+    assert 'principal' in aviso.getMessage() and 'ModelHTTPError' in aviso.getMessage()
+
+
 async def test_plano_e_redacao_de_modelos_diferentes_ficam_os_dois():
     principal, _ = modelo_simulado(PLANO, FORA_DO_AR, nome='principal')
     reserva, _ = modelo_simulado(TEXTO, nome='reserva')
     andamento = Andamento()
     resposta = await AgenteTextoSQL(
-        FallbackModel(principal, reserva), ExecutorFalso(RESULTADO)
+        com_reserva(principal, reserva), ExecutorFalso(RESULTADO)
     ).responder('Qual a receita de Recife?', CONTEXTO, andamento)
     assert resposta.tipo == 'resposta'
     assert resposta.modelo == andamento.modelo == 'principal, reserva'
@@ -752,9 +807,26 @@ async def test_principal_e_reserva_fora_do_ar():
     reserva, _ = modelo_simulado(ModelTimeoutError('reserva', 'ReadTimeout'), nome='reserva')
     andamento = Andamento()
     with pytest.raises(ProvedorIndisponivel) as erro:
-        await AgenteTextoSQL(FallbackModel(principal, reserva), ExecutorFalso()).responder(
+        await AgenteTextoSQL(com_reserva(principal, reserva), ExecutorFalso()).responder(
             'Qual a receita?', CONTEXTO, andamento
         )
     # A mensagem traz a falha de cada modelo; sem resposta, fica o nome da configuração.
     assert 'principal' in str(erro.value) and 'reserva' in str(erro.value)
     assert andamento.modelo == 'fallback:principal,reserva'
+
+
+async def test_sem_reserva_a_auditoria_fica_com_o_nome_configurado():
+    # O provedor pode devolver o nome com a versão (`model_version`): sem reserva, a
+    # auditoria continua com o nome da configuração, como antes.
+    async def responder(mensagens, info):
+        if info.output_tools:
+            parte = ToolCallPart(info.output_tools[0].name, PLANO)
+        else:
+            parte = TextPart(TEXTO)
+        return ModelResponse(parts=[parte], model_name='gemini-3.1-flash-lite-001')
+
+    modelo = FunctionModel(responder, model_name='gemini-3.1-flash-lite')
+    resposta = await AgenteTextoSQL(modelo, ExecutorFalso(RESULTADO)).responder(
+        'Qual a receita de Recife?', CONTEXTO
+    )
+    assert resposta.modelo == 'gemini-3.1-flash-lite'
