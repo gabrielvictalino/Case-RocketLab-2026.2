@@ -17,7 +17,7 @@ from typing import NamedTuple
 
 import pydantic_ai
 from pydantic import BaseModel, Field
-from pydantic_ai import Agent, ModelAPIError, ModelSettings, RunUsage, UnexpectedModelBehavior
+from pydantic_ai import Agent, ModelSettings, RunUsage, UnexpectedModelBehavior
 from pydantic_ai.models import Model
 
 from venergy_ai.instrucoes import INSTRUCOES_INSIGHT, pedido_de_insight
@@ -28,8 +28,13 @@ from venergy_ai.interface import (
     InsightIndisponivel,
     Observacao,
     PedidoInsight,
-    ProvedorIndisponivel,
     ValorCitado,
+)
+from venergy_ai.modelo import (
+    FALHAS_DO_PROVEDOR,
+    modelo_que_respondeu,
+    provedor_indisponivel,
+    rodada,
 )
 from venergy_ai.numeros import Citacao, citacoes
 
@@ -61,10 +66,15 @@ VERSAO_DA_CONFERENCIA = 2
 
 
 class RedatorDeInsights:
-    """Implementa `Redator`. Só recebe o modelo: os fatos chegam prontos do backend."""
+    """Implementa `Redator`. Só recebe o modelo: os fatos chegam prontos do backend.
 
-    def __init__(self, modelo: Model):
+    `teto_s` é o teto de tempo do insight: com reserva, uma só chamada pode percorrer a
+    cadeia, e o teto é dividido entre os modelos que faltam tentar, para que um modelo
+    lento não gaste o tempo dos seguintes. O teto em si é aplicado por quem chama."""
+
+    def __init__(self, modelo: Model, teto_s: float | None = None):
         self.modelo = modelo
+        self.teto_s = teto_s
         # Muda com o modelo, com as instruções e com a conferência dos números: entra na
         # chave do cache do backend.
         assinatura = (
@@ -84,9 +94,10 @@ class RedatorDeInsights:
         inicio = time.monotonic()
         uso = RunUsage() if uso is None else uso
         try:
-            execucao = await self.agente.run(pedido_de_insight(pedido), usage=uso)
-        except ModelAPIError as erro:
-            raise ProvedorIndisponivel(str(erro)) from erro
+            with rodada(self.teto_s) as atual:
+                execucao = await self.agente.run(pedido_de_insight(pedido), usage=uso)
+        except FALHAS_DO_PROVEDOR as erro:
+            raise provedor_indisponivel(erro) from erro
         except UnexpectedModelBehavior as erro:
             raise InsightIndisponivel(
                 'O modelo não devolveu as observações no formato esperado.'
@@ -101,7 +112,7 @@ class RedatorDeInsights:
         return Insight(
             observacoes=observacoes[:OBSERVACOES],
             descartadas=descartadas,
-            modelo=self.modelo.model_name,
+            modelo=modelo_que_respondeu(atual, self.modelo),
             tokens_entrada=uso.input_tokens,
             tokens_saida=uso.output_tokens,
             latencia_ms=round((time.monotonic() - inicio) * 1000),

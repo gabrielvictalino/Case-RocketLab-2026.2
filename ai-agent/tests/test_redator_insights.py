@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date
 from decimal import Decimal
 
@@ -13,6 +14,7 @@ from venergy_ai.interface import (
     PedidoInsight,
     ProvedorIndisponivel,
 )
+from venergy_ai.modelo import com_reserva
 from venergy_ai.numeros import citacoes
 from venergy_ai.semantica import Periodo
 
@@ -48,13 +50,19 @@ DEC = 'O DEC do período foi de 9,87 h por UC.'
 VALIDAS = [('receita', RECEITA), ('inadimplencia', INADIMPLENCIA), ('dec', DEC)]
 
 
-def modelo_simulado(*respostas):
-    """Cada resposta é a lista de observações de uma chamada, ou uma exceção."""
+# Um modelo que não responde: a chamada espera até o prazo dela acabar.
+TRAVADO = object()
+
+
+def modelo_simulado(*respostas, nome='simulado'):
+    """Cada resposta é a lista de observações de uma chamada, uma exceção ou `TRAVADO`."""
     chamadas = []
 
-    def responder(mensagens, info):
+    async def responder(mensagens, info):
         chamadas.append((mensagens, info))
         resposta = respostas[len(chamadas) - 1]
+        if resposta is TRAVADO:
+            await asyncio.sleep(60)
         if isinstance(resposta, Exception):
             raise resposta
         observacoes = [{'chave': chave, 'texto': texto} for chave, texto in resposta]
@@ -62,7 +70,7 @@ def modelo_simulado(*respostas):
             parts=[ToolCallPart(info.output_tools[0].name, {'observacoes': observacoes})]
         )
 
-    return FunctionModel(responder, model_name='simulado'), chamadas
+    return FunctionModel(responder, model_name=nome), chamadas
 
 
 async def redigir(*respostas, pedido=PEDIDO, uso=None):
@@ -445,3 +453,42 @@ def test_local_com_municipio_entre_parenteses_e_reconhecido():
     apelidos = insights._apelidos(fatos)
     chaves = insights._metrica_antes(texto, texto.index('100'), apelidos, set())
     assert chaves == {'local:Boa Viagem (Recife)'}
+
+
+async def test_reserva_redige_quando_o_principal_cai():
+    principal, _ = modelo_simulado(ModelHTTPError(429, 'principal', 'cota'), nome='principal')
+    reserva, _ = modelo_simulado(VALIDAS, nome='reserva')
+    insight = await RedatorDeInsights(com_reserva(principal, reserva)).redigir(PEDIDO)
+    assert len(insight.observacoes) == 3 and insight.modelo == 'reserva'
+
+
+async def test_principal_e_reserva_fora_do_ar():
+    principal, _ = modelo_simulado(ModelHTTPError(503, 'principal', 'fora'), nome='principal')
+    reserva, _ = modelo_simulado(ModelHTTPError(401, 'reserva', 'chave'), nome='reserva')
+    with pytest.raises(ProvedorIndisponivel, match='principal.*reserva'):
+        await RedatorDeInsights(com_reserva(principal, reserva)).redigir(PEDIDO)
+
+
+def test_versao_muda_com_a_reserva():
+    principal, _ = modelo_simulado(nome='principal')
+    reserva, _ = modelo_simulado(nome='reserva')
+    sozinho = RedatorDeInsights(principal).versao
+    assert RedatorDeInsights(com_reserva(principal, reserva)).versao != sozinho
+
+
+async def test_reservas_lentas_nao_gastam_o_tempo_da_ultima():
+    # Uma chamada só percorre a cadeia: o teto é dividido entre os modelos que faltam, e a
+    # última reserva ainda responde dentro dele.
+    principal, _ = modelo_simulado(TRAVADO, nome='principal')
+    primeira, _ = modelo_simulado(TRAVADO, nome='primeira')
+    segunda, da_segunda = modelo_simulado(VALIDAS, nome='segunda')
+    teto = 0.6
+    redator = RedatorDeInsights(com_reserva(principal, primeira, segunda), teto)
+    async with asyncio.timeout(teto):
+        insight = await redator.redigir(PEDIDO)
+    assert insight.modelo == 'segunda' and len(da_segunda) == 1
+
+
+def test_teto_nao_muda_a_versao():
+    modelo, _ = modelo_simulado()
+    assert RedatorDeInsights(modelo, 30).versao == RedatorDeInsights(modelo).versao

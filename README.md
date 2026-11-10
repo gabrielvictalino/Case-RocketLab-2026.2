@@ -331,7 +331,8 @@ Copie [`.env.example`](.env.example) para `.env` na raiz. As variáveis principa
 | `GOLD_EXPORT_DIR` | Pasta local do lote real baixado da release, contendo `manifest.json` e os 12 CSVs; montada em `/entrada` no importador |
 | `JWT_SECRET`, `JWT_EXPIRATION_HOURS` | Assinatura e validade da sessão |
 | `AI_PROVEDOR`, `AI_MODELO` | Provedor e modelo; padrões `google` e `gemini-3.1-flash-lite` |
-| `GEMINI_API_KEY`, `OPENROUTER_API_KEY` | Chave do provedor escolhido |
+| `AI_MODELOS_RESERVA` | Reservas opcionais, em ordem (`provedor:modelo,...`), usadas quando a API do modelo anterior falha |
+| `GEMINI_API_KEY`, `OPENROUTER_API_KEY` | Chaves do provedor principal e dos de reserva |
 | `ASSISTENTE_TIMEOUT_S` | Teto de tempo de resposta, padrão 30 segundos |
 | `ASSISTENTE_PERGUNTAS_POR_MINUTO`, `ASSISTENTE_COTA_TOKENS_DIA` | Limites de perguntas e tokens por usuário |
 | `INSIGHTS_POR_MINUTO` | Limite de geração de insights por usuário |

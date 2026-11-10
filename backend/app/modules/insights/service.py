@@ -47,7 +47,8 @@ logger = logging.getLogger('venergy.insights')
 
 def criar_redator(settings) -> Redator | None:
     modelo = modelo_configurado(settings)
-    return None if modelo is None else RedatorDeInsights(modelo)
+    # O mesmo teto que `_redigir` aplica: o redator o divide entre os modelos da cadeia.
+    return None if modelo is None else RedatorDeInsights(modelo, settings.assistente_timeout_s)
 
 
 async def insight(state, tela, periodo, comparacao, recorte, usuario) -> Insight:

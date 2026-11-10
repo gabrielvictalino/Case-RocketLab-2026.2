@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import time
 from uuid import uuid4
 
@@ -15,7 +16,7 @@ from venergy_ai.interface import (
     RespostaAgente,
     Troca,
 )
-from venergy_ai.modelo import criar_modelo
+from venergy_ai.modelo import com_reserva, criar_modelo
 from venergy_ai.semantica import Periodo
 
 from app.core import limites
@@ -34,22 +35,45 @@ from app.modules.meta import repository as meta
 # Reserva da cota diária por pergunta: o plano leva uns 5 mil tokens de prompt, e uma
 # pergunta com a nova tentativa do SQL e a redação chega perto de 15 mil.
 RESERVA_TOKENS = 20_000
+CHAVES = {'google': 'GEMINI_API_KEY', 'openrouter': 'OPENROUTER_API_KEY'}
+logger = logging.getLogger('venergy.assistente')
+
+
+def _modelo(settings, provedor: str, nome: str) -> Model | None:
+    chave = getattr(settings, CHAVES[provedor].lower())
+    if chave is None or not chave.get_secret_value():
+        return None
+    return criar_modelo(provedor, nome, chave.get_secret_value())
 
 
 def modelo_configurado(settings) -> Model | None:
-    """O modelo do provedor escolhido. Sem a chave dele, não há modelo e a IA responde 503."""
-    chave = {'google': settings.gemini_api_key, 'openrouter': settings.openrouter_api_key}[
-        settings.ai_provedor
-    ]
-    if chave is None or not chave.get_secret_value():
-        return None
-    return criar_modelo(settings.ai_provedor, settings.ai_modelo, chave.get_secret_value())
+    """O modelo principal, com as reservas atrás dele, em ordem. Um modelo sem a chave do
+    provedor fica de fora, com um aviso no log; sem nenhum, não há modelo e a IA responde
+    503."""
+    cadeia = [(settings.ai_provedor, settings.ai_modelo), *settings.ai_modelos_reserva]
+    modelos = []
+    for provedor, nome in cadeia:
+        modelo = _modelo(settings, provedor, nome)
+        if modelo is None:
+            # Sem o aviso, a reserva sem chave só apareceria na primeira queda do principal.
+            if len(cadeia) > 1:
+                logger.warning(
+                    'Modelo %s:%s fora da cadeia da IA: %s não está definida.',
+                    provedor,
+                    nome,
+                    CHAVES[provedor],
+                )
+            continue
+        modelos.append(modelo)
+    return com_reserva(*modelos) if modelos else None
 
 
 def criar_assistente(settings, ai_engine) -> Assistente | None:
     """O agente recebe só a engine da role ai_read; a do portal fica com a auditoria."""
     modelo = modelo_configurado(settings)
-    return None if modelo is None else AgenteTextoSQL(modelo, ExecutorAiRead(ai_engine))
+    if modelo is None:
+        return None
+    return AgenteTextoSQL(modelo, ExecutorAiRead(ai_engine), settings.assistente_timeout_s)
 
 
 async def perguntar(state, body: Pergunta, usuario) -> RespostaPergunta:
