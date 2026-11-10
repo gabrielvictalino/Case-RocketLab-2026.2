@@ -9,7 +9,8 @@ from pydantic_ai.models.openrouter import OpenRouterModel
 from venergy_ai.modelo import ModeloComReserva
 
 from app.core.config import Settings
-from app.modules.assistente.service import modelo_configurado
+from app.modules.assistente.service import criar_assistente, modelo_configurado
+from app.modules.insights.service import criar_redator
 
 RESERVA = dict(ai_modelos_reserva='openrouter:google/gemini-3.1-flash-lite')
 
@@ -104,3 +105,15 @@ def test_reserva_vazia_do_compose_e_nenhuma():
 def test_reserva_invalida_e_recusada(reservas, erro):
     with pytest.raises(ValidationError, match=erro):
         configuracao(ai_modelos_reserva=reservas)
+
+
+def test_assistente_e_redator_recebem_o_teto_da_configuracao():
+    # Sem o teto, a cadeia não divide o tempo e o teto global cancela antes da última reserva.
+    settings = configuracao(
+        gemini_api_key='chave-google',
+        openrouter_api_key='chave-openrouter',
+        assistente_timeout_s=12,
+        **RESERVA,
+    )
+    assert criar_assistente(settings, ai_engine=None).teto_s == 12
+    assert criar_redator(settings).teto_s == 12

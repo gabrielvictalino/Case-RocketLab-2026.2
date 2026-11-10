@@ -66,10 +66,15 @@ VERSAO_DA_CONFERENCIA = 2
 
 
 class RedatorDeInsights:
-    """Implementa `Redator`. Só recebe o modelo: os fatos chegam prontos do backend."""
+    """Implementa `Redator`. Só recebe o modelo: os fatos chegam prontos do backend.
 
-    def __init__(self, modelo: Model):
+    `teto_s` é o teto de tempo do insight: com reserva, uma só chamada pode percorrer a
+    cadeia, e o teto é dividido entre os modelos que faltam tentar, para que um modelo
+    lento não gaste o tempo dos seguintes. O teto em si é aplicado por quem chama."""
+
+    def __init__(self, modelo: Model, teto_s: float | None = None):
         self.modelo = modelo
+        self.teto_s = teto_s
         # Muda com o modelo, com as instruções e com a conferência dos números: entra na
         # chave do cache do backend.
         assinatura = (
@@ -89,7 +94,7 @@ class RedatorDeInsights:
         inicio = time.monotonic()
         uso = RunUsage() if uso is None else uso
         try:
-            with rodada() as atual:
+            with rodada(self.teto_s) as atual:
                 execucao = await self.agente.run(pedido_de_insight(pedido), usage=uso)
         except FALHAS_DO_PROVEDOR as erro:
             raise provedor_indisponivel(erro) from erro

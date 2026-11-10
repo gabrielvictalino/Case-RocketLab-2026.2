@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date
 from decimal import Decimal
 
@@ -49,13 +50,19 @@ DEC = 'O DEC do período foi de 9,87 h por UC.'
 VALIDAS = [('receita', RECEITA), ('inadimplencia', INADIMPLENCIA), ('dec', DEC)]
 
 
+# Um modelo que não responde: a chamada espera até o prazo dela acabar.
+TRAVADO = object()
+
+
 def modelo_simulado(*respostas, nome='simulado'):
-    """Cada resposta é a lista de observações de uma chamada, ou uma exceção."""
+    """Cada resposta é a lista de observações de uma chamada, uma exceção ou `TRAVADO`."""
     chamadas = []
 
-    def responder(mensagens, info):
+    async def responder(mensagens, info):
         chamadas.append((mensagens, info))
         resposta = respostas[len(chamadas) - 1]
+        if resposta is TRAVADO:
+            await asyncio.sleep(60)
         if isinstance(resposta, Exception):
             raise resposta
         observacoes = [{'chave': chave, 'texto': texto} for chave, texto in resposta]
@@ -467,3 +474,21 @@ def test_versao_muda_com_a_reserva():
     reserva, _ = modelo_simulado(nome='reserva')
     sozinho = RedatorDeInsights(principal).versao
     assert RedatorDeInsights(com_reserva(principal, reserva)).versao != sozinho
+
+
+async def test_reservas_lentas_nao_gastam_o_tempo_da_ultima():
+    # Uma chamada só percorre a cadeia: o teto é dividido entre os modelos que faltam, e a
+    # última reserva ainda responde dentro dele.
+    principal, _ = modelo_simulado(TRAVADO, nome='principal')
+    primeira, _ = modelo_simulado(TRAVADO, nome='primeira')
+    segunda, da_segunda = modelo_simulado(VALIDAS, nome='segunda')
+    teto = 0.6
+    redator = RedatorDeInsights(com_reserva(principal, primeira, segunda), teto)
+    async with asyncio.timeout(teto):
+        insight = await redator.redigir(PEDIDO)
+    assert insight.modelo == 'segunda' and len(da_segunda) == 1
+
+
+def test_teto_nao_muda_a_versao():
+    modelo, _ = modelo_simulado()
+    assert RedatorDeInsights(modelo, 30).versao == RedatorDeInsights(modelo).versao
